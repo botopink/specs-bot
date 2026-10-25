@@ -13,3 +13,4 @@ export * from "./docs/load.ts";
 export * from "./chat/chat.ts";
 export * from "./store.ts";
 export * from "./check.ts";
+export * from "./search.ts";
