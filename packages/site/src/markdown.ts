@@ -3,8 +3,9 @@
 // plain text, so no page links to a file path.
 import { Marked, type Tokens } from "marked";
 import { anchorOf } from "@specs-bot/core";
+import { isStepTable, renderStepTable, type StepTableContext } from "./step-tables.ts";
 
-export interface LinkContext {
+export interface LinkContext extends StepTableContext {
   /** The ref of the document being rendered; relative links resolve against its directory. */
   from?: string;
   /** Known document refs. */
@@ -46,6 +47,11 @@ function markedFor(ctx: LinkContext): Marked {
         if (target === undefined) return `<span class="unresolved">${inner}</span>`;
         const t = title ? ` title="${escapeHtml(title)}"` : "";
         return `<a href="${escapeHtml(target)}"${t}>${inner}</a>`;
+      },
+      table(t: Tokens.Table) {
+        // A table of steps gains each step's state and place (step-tables.ts); any other table renders as usual.
+        if (!isStepTable(t)) return false;
+        return renderStepTable(t, (tokens) => this.parser.parseInline(tokens), ctx);
       },
       image({ href, text }: Tokens.Image) {
         return /^https?:\/\//.test(href) ? `<img src="${escapeHtml(href)}" alt="${escapeHtml(text)}">` : escapeHtml(text);

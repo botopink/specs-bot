@@ -1,4 +1,5 @@
 import type { Child } from "hono/jsx";
+import { STEP_INDEX_SCRIPT } from "../step-tables.ts";
 import type { StepStatus } from "@specs-bot/core";
 
 const NAV: [string, string][] = [
@@ -110,6 +111,7 @@ export function Layout(props:{ title: string; path: string; prose?: boolean; chi
         <main class={props.prose ? "prose" : ""}>{props.children}</main>
         <footer>Read-only view of the botopink specs. Agents write through the specs-bot CLI.</footer>
         <script dangerouslySetInnerHTML={{ __html: LANG_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: STEP_INDEX_SCRIPT }} />
       </body>
     </html>
   );

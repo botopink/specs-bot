@@ -10,7 +10,7 @@ import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, Su
 import { frontsHref, sectionOfFolder } from "./hierarchy.ts";
 import { DocPage, renderDoc } from "./views/docs.tsx";
 import { FrontsPage } from "./views/fronts.tsx";
-import { buildProgress, type FrontProgress } from "./progress.ts";
+import { buildProgress, type FrontProgress, type ProgressItem } from "./progress.ts";
 import { FrontProgressPage, frontNodes } from "./views/progress.tsx";
 import { Home } from "./views/home.tsx";
 import { NotFound, Unavailable } from "./views/layout.tsx";
@@ -160,7 +160,12 @@ export function createSite(opts: SiteOptions) {
     }
     if (doc.ref !== ref) return c.redirect(`/docs/${doc.ref}`);
     let html = rendered.get(doc.ref);
-    if (html === undefined) rendered.set(doc.ref, (html = renderDoc(doc, { refs, from: doc.ref })));
+    if (html === undefined) {
+      // A table of steps reads each step's state from the front's progress (step-tables.ts).
+      const steps = new Map<string, ProgressItem>();
+      for (const p of progressOf(doc.version).values()) for (const s of p.steps) steps.set(s.label, s);
+      rendered.set(doc.ref, (html = renderDoc(doc, { refs, from: doc.ref, steps, ...(doc.front ? { front: doc.front.num } : {}) })));
+    }
     const progress = doc.front ? progressOf(doc.version).get(doc.front.num) : undefined;
     return c.html(<DocPage data={data} doc={doc} html={html} path={c.req.path} progress={progress} ctx={plain} />);
   });
