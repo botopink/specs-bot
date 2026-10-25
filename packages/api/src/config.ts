@@ -6,6 +6,8 @@ export interface ServerConfig {
   dataPath: string;
   /** token → machine name ("machine-1", "maintainer", …) */
   tokens: Map<string, string>;
+  /** Push specs-data after every write (SPECS_DATA_PUSH=1), with this key (SPECS_DATA_PUSH_KEY). */
+  push?: { enabled: boolean; sshKey?: string };
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): ServerConfig {
@@ -22,6 +24,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port,
     dataPath: env.SPECS_DATA_PATH!,
     tokens: parseTokens(env.SPECS_BOT_TOKENS ?? ""),
+    push: { enabled: env.SPECS_DATA_PUSH === "1", ...(env.SPECS_DATA_PUSH_KEY ? { sshKey: env.SPECS_DATA_PUSH_KEY } : {}) },
   };
 }
 

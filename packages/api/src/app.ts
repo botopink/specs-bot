@@ -5,6 +5,7 @@ import { identify, type Vars } from "./auth.ts";
 import type { ServerConfig } from "./config.ts";
 import { dataState } from "./data.ts";
 import { EventBus } from "./events.ts";
+import { Pusher } from "./push.ts";
 import { readRoutes } from "./routes.ts";
 import { writeRoutes } from "./write-routes.ts";
 import { mountRealtime } from "./ws.ts";
@@ -28,11 +29,12 @@ export function createApp(config: ServerConfig, opts: AppOptions = {}) {
   const loaded = loadSiteData(config.dataPath);
 
   api.use("*", identify(config.tokens));
+  const pusher = new Pusher(config.dataPath, config.push ?? { enabled: false });
 
   // Never reveals the data path: the abstraction hides where the specs live (PLAN.md § 3).
   api.get("/health", async (c) => {
     const data = await dataState(config.dataPath);
-    return c.json({ service: "specs-bot", version: VERSION, data }, data.ok ? 200 : 503);
+    return c.json({ service: "specs-bot", version: VERSION, data, push: pusher.state }, data.ok ? 200 : 503);
   });
 
   // The model in force; a write swaps it for the one over the data it left, and the site is rebuilt over it.
@@ -50,6 +52,7 @@ export function createApp(config: ServerConfig, opts: AppOptions = {}) {
           model = next;
           currentSite = site();
           setTimeout(() => void next.index, 0);
+          void pusher.request();
         },
         writer: new Writer(config.dataPath),
         bus,
@@ -63,5 +66,5 @@ export function createApp(config: ServerConfig, opts: AppOptions = {}) {
 
   // The read-only site: "/" and its pages, always the one built over the model in force.
   app.all("*", (c) => currentSite.fetch(c.req.raw));
-  return Object.assign(app, { bus });
+  return Object.assign(app, { bus, pusher });
 }
