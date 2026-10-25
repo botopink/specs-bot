@@ -10,3 +10,4 @@ export * from "./decisions/taken.ts";
 export * from "./decisions/retired.ts";
 export * from "./docs/doc.ts";
 export * from "./docs/load.ts";
+export * from "./chat/chat.ts";
