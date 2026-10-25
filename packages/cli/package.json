@@ -1,0 +1,8 @@
+{
+  "name": "@specs-bot/cli",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": { "@specs-bot/core": "workspace:*" },
+  "bin": { "specs-bot": "src/index.ts" }
+}

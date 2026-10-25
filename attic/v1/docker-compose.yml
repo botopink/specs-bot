@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # API - Backend (Bun + Hono/Elysia)
+  # ============================================
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: specs-bot-api
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATA_PATH=/data
+    volumes:
+      - ./data:/data:rw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # SITE - Frontend (Next.js)
+  # ============================================
+  site:
+    build:
+      context: ./site
+      dockerfile: Dockerfile
+    container_name: specs-bot-site
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api:4000/api
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # CLI - Cliente HTTP (execução sob demanda)
+  # ============================================
+  cli:
+    build:
+      context: ./cli
+      dockerfile: Dockerfile
+    container_name: specs-bot-cli
+    environment:
+      - SPECS_BOT_API=http://api:4000/api
+    volumes:
+      - ./data:/data:rw
+    profiles:
+      - cli
+    # Uso: docker compose run --rm cli search "module"
+
+volumes:
+  data:
+    driver: local

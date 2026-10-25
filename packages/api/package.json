@@ -1,0 +1,11 @@
+{
+  "name": "@specs-bot/api",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": { "start": "bun src/index.ts" },
+  "dependencies": {
+    "@specs-bot/core": "workspace:*",
+    "hono": "4.10.4"
+  }
+}
