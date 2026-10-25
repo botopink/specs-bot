@@ -3,85 +3,97 @@ import type { SiteData } from "../data.ts";
 import { type LinkContext, renderMarkdown } from "../markdown.ts";
 import { Html, Layout } from "./layout.tsx";
 
-interface Bucket {
-  /** directory key: "machine-1", "150-rakun", "04-rakun" */
-  key: string;
+interface Folder {
+  /** The directory's own name, as on disk: "machine-1", "150-rakun", "04-rakun". */
+  name: string;
+  /** Its README, shown as the folder's title and link. */
+  readme?: Doc;
+  /** The other documents directly in it. */
   docs: Doc[];
-  children: Map<string, Bucket>;
+  children: Map<string, Folder>;
 }
 
-function bucket(key: string): Bucket {
-  return { key, docs: [], children: new Map() };
+function folder(name: string): Folder {
+  return { name, docs: [], children: new Map() };
 }
 
-/** version → machine → front → group, each level keeping the docs that stop there. */
-export function docTree(docs: Doc[]): Map<string, Bucket> {
-  const versions = new Map<string, Bucket>();
+/** version → the directories under it, as on disk; each folder keeps its README apart from its other documents. */
+export function docTree(docs: Doc[]): Map<string, Folder> {
+  const versions = new Map<string, Folder>();
   for (const d of docs) {
-    let node = versions.get(d.version) ?? bucket(d.version);
-    versions.set(d.version, node);
-    const keys = [
-      d.machine,
-      d.front ? `${d.front.num}-${d.front.slug}` : undefined,
-      d.group ? `${d.group.num}-${d.group.slug}` : undefined,
-    ].filter((k): k is string => k !== undefined);
-    for (const k of keys) {
-      let next = node.children.get(k);
-      if (!next) node.children.set(k, (next = bucket(k)));
+    const [version, ...rest] = d.ref.split("/");
+    let node = versions.get(version!) ?? folder(version!);
+    versions.set(version!, node);
+    for (const dir of rest.slice(0, -1)) {
+      let next = node.children.get(dir);
+      if (!next) node.children.set(dir, (next = folder(dir)));
       node = next;
     }
-    node.docs.push(d);
+    if (d.name === "README") node.readme = d;
+    else node.docs.push(d);
   }
   return versions;
 }
 
-/** The part of a doc's ref below the deepest directory the tree shows it under. */
-function labelOf(d: Doc, depthKey: string): string {
-  const idx = d.ref.indexOf(`/${depthKey}/`);
-  return idx >= 0 ? d.ref.slice(idx + depthKey.length + 2) : d.ref.split("/").slice(1).join("/");
+/** "98-packaging-tail" before "107-release"; unnumbered names ("machine-1", "examples") after, by name. */
+function compareNames(a: string, b: string): number {
+  const na = /^\d+/.test(a) ? Number.parseInt(a, 10) : Number.POSITIVE_INFINITY;
+  const nb = /^\d+/.test(b) ? Number.parseInt(b, 10) : Number.POSITIVE_INFINITY;
+  return na !== nb ? na - nb : a.localeCompare(b);
 }
 
-function compareKeys(a: string, b: string): number {
-  const na = Number.parseInt(a, 10);
-  const nb = Number.parseInt(b, 10);
-  if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb;
-  return a.localeCompare(b);
+/** The README's title; a former front kept as context only (no README) takes its context's or track's. */
+function titleOf(node: Folder): string | undefined {
+  return node.readme?.title ?? node.docs.find((d) => d.name === "context" || d.name === "track")?.title;
 }
+
+function countDocs(node: Folder): number {
+  let n = node.docs.length + (node.readme ? 1 : 0);
+  for (const c of node.children.values()) n += countDocs(c);
+  return n;
+}
+
+/** A milestone's own documents first in reading order, the rest by name. */
+const MILESTONE_ORDER = ["overview", "status", "fronts", "contracts", "deferred", "language-gaps"];
 
 function sortDocs(docs: Doc[]): Doc[] {
-  // README first, then by ref.
-  return [...docs].sort((a, b) => Number(b.name === "README") - Number(a.name === "README") || a.ref.localeCompare(b.ref));
+  const rank = (d: Doc) => {
+    const i = MILESTONE_ORDER.indexOf(d.name);
+    return i < 0 ? MILESTONE_ORDER.length : i;
+  };
+  return [...docs].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
-function BucketView(props: { node: Bucket; open: boolean; frozen?: boolean; top?: boolean }) {
-  const { node } = props;
-  const children = [...node.children.values()].sort((a, b) => compareKeys(a.key, b.key));
-  const count = countDocs(node);
+function FolderView(props: { node: Folder; depth: number; current: boolean }) {
+  const { node, depth } = props;
+  const children = [...node.children.values()].sort((a, b) => compareNames(a.name, b.name));
+  // The current milestone opens down to its machines; a front opens when clicked.
+  const open = props.current && depth <= 1;
   return (
-    <details class="tree" open={props.open}>
+    <details class="tree" open={open}>
       <summary>
-        {node.key} <span class="frozen">{props.top ? (props.frozen ? "frozen · " : "current · ") : ""}{count} docs</span>
+        {node.readme ? <a href={`/docs/${node.readme.ref}`}>{node.name}</a> : <span>{node.name}</span>}
+        {depth > 0 && titleOf(node) ? <span class="muted"> — {titleOf(node)}</span> : null}
+        <span class="frozen">
+          {" "}
+          {depth === 0 ? (props.current ? "current · " : "frozen · ") : ""}
+          {countDocs(node)} docs
+        </span>
       </summary>
       {node.docs.length ? (
         <ul>
           {sortDocs(node.docs).map((d) => (
             <li>
-              <a href={`/docs/${d.ref}`}>{labelOf(d, node.key)}</a> <span class="muted small">— {d.title}</span>
+              <a href={`/docs/${d.ref}`}>{d.name}</a> <span class="muted small">— {d.title}</span>
             </li>
           ))}
         </ul>
       ) : null}
       {children.map((c) => (
-        <BucketView node={c} open={props.open && !props.frozen && props.top === true} />
+        <FolderView node={c} depth={depth + 1} current={props.current} />
       ))}
     </details>
   );
-}
-
-function countDocs(node: Bucket): number {
-  let n = node.docs.length;
-  for (const c of node.children.values()) n += countDocs(c);
-  return n;
 }
 
 export function DocsPage(props: { data: SiteData; path: string }) {
@@ -95,7 +107,7 @@ export function DocsPage(props: { data: SiteData; path: string }) {
         Every milestone document, by version, machine, front and group. {tree.current} is current; the others are frozen.
       </p>
       {ordered.map((v) => (
-        <BucketView node={versions.get(v)!} open={v === tree.current} frozen={v !== tree.current} top />
+        <FolderView node={versions.get(v)!} depth={0} current={v === tree.current} />
       ))}
     </Layout>
   );

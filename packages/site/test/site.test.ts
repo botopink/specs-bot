@@ -181,8 +181,17 @@ describe("the site over a fixture", () => {
   test("the docs tree holds the current milestone open and the frozen one closed", async () => {
     const { body } = await get("/docs");
     expect(body).toContain('href="/docs/1.0.12-beta/machine-1/150-rakun/README"');
-    expect(body).toMatch(/<details class="tree" open="">\s*<summary>1\.0\.12-beta/);
-    expect(body).toMatch(/<details class="tree">\s*<summary>1\.0\.11-beta/);
+    expect(body).toMatch(/<details class="tree" open="">\s*<summary>(<[^>]+>)?1\.0\.12-beta/);
+    expect(body).toMatch(/<details class="tree">\s*<summary>(<[^>]+>)?1\.0\.11-beta/);
+  });
+
+  test("the docs tree names folders as on disk, titles them by their README, lists files by name", async () => {
+    const { body } = await get("/docs");
+    // The front's folder links to its README and shows its title; the README is not repeated as a file.
+    expect(body).toMatch(/<a href="\/docs\/1\.0\.12-beta\/machine-1\/150-rakun\/README">150-rakun<\/a>/);
+    expect(body).not.toMatch(/>README<\/a>/);
+    // No document is labelled by its path.
+    expect(body).not.toMatch(/>1\.0\.12-beta\/machine-1\/[^<]*<\/a>/);
   });
 
   test("a doc renders with anchors, mapped links and raw HTML escaped", async () => {
