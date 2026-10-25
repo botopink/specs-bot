@@ -9,11 +9,12 @@ const NAV: [string, string][] = [
   ["/review", "Review"],
   ["/subjects", "Subjects"],
   ["/retired", "Retired"],
-  ["/docs", "Docs"],
 ];
 
 export function Layout(props: { title: string; path: string; prose?: boolean; children?: Child }) {
-  const section = "/" + (props.path.split("/")[1] ?? "");
+  // A document page belongs to the Fronts section, where it is listed.
+  const first = props.path.split("/")[1] ?? "";
+  const section = first === "docs" ? "/fronts" : `/${first}`;
   return (
     <html lang="en">
       <head>
@@ -75,6 +76,20 @@ export function NotFound(props: { path: string; what: string; back: string; back
       </p>
     </Layout>
   );
+}
+
+/** A title as written, its `` `code` `` spans shown as code (JSX escapes the rest). */
+export function Title(props: { text: string }) {
+  return (
+    <>
+      {props.text.split(/(`[^`]+`)/).map((part) => (/^`[^`]+`$/.test(part) ? <code>{part.slice(1, -1)}</code> : part))}
+    </>
+  );
+}
+
+/** "1 doc", "3 docs". */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
 
 /**

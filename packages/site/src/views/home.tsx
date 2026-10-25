@@ -1,7 +1,7 @@
-import { anchorOf } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
+import { frontsHref, milestoneOf } from "../hierarchy.ts";
 import type { SiteStatus } from "../status.ts";
-import { Layout } from "./layout.tsx";
+import { Layout, plural, Title } from "./layout.tsx";
 
 export function Home(props: { data: SiteData | undefined; status: SiteStatus; version: string }) {
   const { data, status } = props;
@@ -28,33 +28,87 @@ export function Home(props: { data: SiteData | undefined; status: SiteStatus; ve
   );
 }
 
+/** The kinds a stat card can be; each has its accent colour in the stylesheet. */
+type Kind = "steps" | "force" | "gone" | "pending" | "review" | "subjects" | "retired" | "docs";
+
 function Overview({ data }: { data: SiteData }) {
   const byStatus = { "in-force": 0, overtaken: 0, replaced: 0, reversed: 0 };
   for (const r of data.steps.rows) byStatus[r.status]++;
+  const superseded = byStatus.overtaken + byStatus.replaced + byStatus.reversed;
   const openReview = data.pending.review.filter((r) => !r.reviewed).length;
-  const currentDocs = data.tree.docs.filter((d) => d.version === data.tree.current).length;
+  const ms = milestoneOf(data, data.tree.current);
   const stated = data.statedNextFree;
   const agree = stated.steps === data.nextFree && stated.pending === data.nextFree;
 
   return (
     <>
-      <h2>Milestone {data.tree.current}</h2>
+      <h2>
+        Milestone {data.tree.current} <span class="pill current">current</span>
+      </h2>
+      {ms.docs.length ? (
+        <p class="milestone-docs">
+          {ms.docs.map((d, i) => (
+            <>
+              {i ? " · " : ""}
+              <a href={`/docs/${d.ref}`} title={d.title}>
+                {d.name}
+              </a>
+            </>
+          ))}
+        </p>
+      ) : null}
       <div class="grid">
-        <Card n={data.steps.rows.length} label="steps recorded" href="/steps" />
-        <Card n={byStatus["in-force"]} label="steps in force" href="/steps?status=in-force" />
+        <Card kind="steps" n={data.steps.rows.length} label="Steps" detail={`recorded · next free ${data.nextFree}`} href="/steps" />
+        <Card kind="force" n={byStatus["in-force"]} label="In force" detail="rules that hold today" href="/steps?status=in-force" />
         <Card
-          n={byStatus.overtaken + byStatus.replaced + byStatus.reversed}
-          label={`superseded (${byStatus.overtaken} overtaken · ${byStatus.replaced} replaced · ${byStatus.reversed} reversed)`}
+          kind="gone"
+          n={superseded}
+          label="Superseded"
+          detail={`${byStatus.overtaken} overtaken · ${byStatus.replaced} replaced · ${byStatus.reversed} reversed`}
           href="/steps?status=superseded"
         />
-        <Card n={data.entries.length} label="pending questions" href="/pending" />
-        <Card n={openReview} label={`open review items of ${data.pending.review.length}`} href="/review" />
-        <Card n={data.taken.subjects.length} label="subjects" href="/subjects" />
-        <Card n={data.retired.rows.length} label="retired forms" href="/retired" />
-        <Card n={currentDocs} label={`docs in ${data.tree.current} (${data.tree.docs.length} in all)`} href="/docs" />
+        <Card kind="pending" n={data.entries.length} label="Pending" detail="questions the maintainer owes" href="/pending" />
+        <Card kind="review" n={openReview} label="To review" detail={`of ${data.pending.review.length} delegated decisions`} href="/review" />
+        <Card kind="subjects" n={data.taken.subjects.length} label="Subjects" detail="the rules in force, by subject" href="/subjects" />
+        <Card kind="retired" n={data.retired.rows.length} label="Retired" detail="forms and what replaced them" href="/retired" />
+        <Card
+          kind="docs"
+          n={ms.count}
+          label="Documents"
+          detail={`in ${data.tree.current} · ${data.tree.docs.length} in all`}
+          href={frontsHref(data, data.tree.current)}
+        />
       </div>
+
       <h2>Fronts</h2>
-      <FrontIndex data={data} />
+      {ms.machines.map((m) => (
+        <section class="machine-index">
+          <h3>
+            <a href={frontsHref(data, ms.version, m.anchor)}>{m.name || "Fronts"}</a>
+            <span class="muted small"> · {plural(m.fronts.length, "front")}</span>
+          </h3>
+          <div class="mini-grid">
+            {m.fronts.map((f) => (
+              <a class="mini-card" href={frontsHref(data, ms.version, f.anchor)}>
+                <span class="fnum">{f.num}</span>
+                <span class="mini-body">
+                  <span class="mini-name">{f.slug}</span>
+                  {f.title ? (
+                    <span class="mini-title">
+                      <Title text={f.title} />
+                    </span>
+                  ) : null}
+                  <span class="mini-meta">
+                    {plural(f.count, "doc")}
+                    {f.folders.length ? ` · ${plural(f.folders.length, "folder")}` : ""}
+                  </span>
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ))}
+
       <h2>Next free number</h2>
       <p>
         <strong>{data.nextFree}</strong>{" "}
@@ -70,40 +124,12 @@ function Overview({ data }: { data: SiteData }) {
   );
 }
 
-/** The current milestone's fronts, by machine; each links to its subsection of the Fronts page. */
-function FrontIndex({ data }: { data: SiteData }) {
-  const current = data.fronts.filter((f) => f.version === data.tree.current);
-  const machines = [...new Set(current.map((f) => f.machine ?? ""))].sort();
+function Card(props: { kind: Kind; n: number; label: string; detail: string; href: string }) {
   return (
-    <div class="fronts-index">
-      {machines.map((m) => (
-        <div>
-          <h3>
-            <a href={`/fronts#${m || "fronts"}`}>{m || "Fronts"}</a>
-          </h3>
-          <ul>
-            {current
-              .filter((f) => (f.machine ?? "") === m)
-              .map((f) => (
-                <li>
-                  <a href={`/fronts#${anchorOf(`${m} ${f.ref.split("/").at(-1)}`)}`}>{f.ref.split("/").at(-1)}</a>{" "}
-                  <span class="muted small">— {f.title.replace(/^Front \d+ — /, "")}</span>
-                </li>
-              ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Card(props: { n: number; label: string; href: string }) {
-  return (
-    <div class="card">
-      <a href={props.href}>
-        <div class="n">{props.n}</div>
-        <div class="l">{props.label}</div>
-      </a>
-    </div>
+    <a class={`card k-${props.kind}`} href={props.href}>
+      <span class="n">{props.n}</span>
+      <span class="l">{props.label}</span>
+      <span class="d">{props.detail}</span>
+    </a>
   );
 }
