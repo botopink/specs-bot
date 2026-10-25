@@ -2,8 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createSite } from "../src/index.ts";
+import { shortTitle } from "../src/hierarchy.ts";
+import { createSite, loadSiteData } from "../src/index.ts";
 import { resolveLink } from "../src/markdown.ts";
+
+describe("shortTitle", () => {
+  test("drops the front's own number and name, keeps what more it says", () => {
+    expect(shortTitle("Front 150 — rakun: the 16 members", 150, "rakun")).toBe("the 16 members");
+    expect(shortTitle("Track 04 — rakun", 4, "rakun")).toBe("");
+    expect(shortTitle("Front 98 — packaging tail: the rule checked", 98, "packaging-tail")).toBe("the rule checked");
+    expect(shortTitle("Front 105 — i18n: a shared `i18n`", 105, "i18n")).toBe("a shared `i18n`");
+  });
+
+  test("keeps a prefix naming another number, and a title that does not open with the name", () => {
+    expect(shortTitle("Front 135 — snap: the second layer", 20, "snap")).toBe("Front 135 — snap: the second layer");
+    expect(shortTitle("Front 144 — machine 1: the checker", 144, "checker")).toBe("machine 1: the checker");
+  });
+});
 
 const FILES: Record<string, string> = {
   "decisions-taken-steps.md": `# Decisions taken — the steps
@@ -73,10 +88,17 @@ See [the status](../../status.md#done), [pending](../../../decisions-pending.md)
 
 ### s1 · The \`bpp\` router
 `,
+  "1.0.12-beta/machine-1/README.md": "# Machine 1 — the work queue\n",
+  "1.0.12-beta/machine-1/150-rakun/04-rakun/track.md": "# Track 04 — rakun\n",
+  "1.0.12-beta/machine-1/150-rakun/121-bpp-content/context.md": "# Front 121 — bpp content: posts as `data`\n",
+  "1.0.12-beta/machine-1/150-rakun/121-bpp-content/examples/post.md": "# A sample post\n",
+  "1.0.12-beta/machine-2/163-meta-ci/README.md": "# Front 163 — meta-ci: the meta repository's CI\n",
   "1.0.11-beta/overview.md": `# 1.0.11-beta — closed
 
 Frozen.
 `,
+  "1.0.11-beta/04-rakun/README.md": "# Front 04 — rakun: the old track\n",
+  "1.0.11-beta/closure-audit/notes.md": "# Closure audit notes\n",
 };
 
 function fixture(): string {
@@ -107,8 +129,37 @@ describe("the site over a fixture", () => {
     expect(body).toContain("online");
     expect(body).toContain("abc1234");
     expect(body).toContain("Milestone 1.0.12-beta");
-    expect(body).toContain("pending questions");
     expect(body).toContain("stated the same in the steps record and the pending page");
+  });
+
+  test("each stat card has its kind, a number, a short label and a detail line", async () => {
+    const { body } = await get("/");
+    const cards = [...body.matchAll(/<a class="card k-([a-z]+)" href="([^"]+)"><span class="n">(\d+)<\/span><span class="l">([^<]+)<\/span><span class="d">([^<]+)<\/span><\/a>/g)].map(
+      (m) => [m[1], m[2], Number(m[3]), m[4]],
+    );
+    expect(cards).toEqual([
+      ["steps", "/steps", 3, "Steps"],
+      ["force", "/steps?status=in-force", 2, "In force"],
+      ["gone", "/steps?status=superseded", 1, "Superseded"],
+      ["pending", "/pending", 1, "Pending"],
+      ["review", "/review", 1, "To review"],
+      ["subjects", "/subjects", 1, "Subjects"],
+      ["retired", "/retired", 2, "Retired"],
+      ["docs", "/fronts", 7, "Documents"],
+    ]);
+    // The breakdown sits in the detail line, not in the label.
+    expect(body).toContain('<span class="d">1 overtaken · 0 replaced · 0 reversed</span>');
+    expect(body).toContain('<span class="d">of 2 delegated decisions</span>');
+  });
+
+  test("the overview lists the current fronts by machine, each a card linking to its section", async () => {
+    const { body } = await get("/");
+    expect(body).toMatch(/<h3><a href="\/fronts#machine-1">machine-1<\/a><span class="muted small"> · 1 front<\/span><\/h3>/);
+    expect(body).toContain('<a class="mini-card" href="/fronts#machine-1-150-rakun"><span class="fnum">150</span>');
+    expect(body).toContain('<a class="mini-card" href="/fronts#machine-2-163-meta-ci"><span class="fnum">163</span>');
+    // The title says what the number and the name do not: no "Front 163 — meta-ci" again.
+    expect(body).toContain("the meta repository&#39;s CI");
+    expect(body).not.toContain("Front 163 — meta-ci");
   });
 
   test("the stylesheet is served", async () => {
@@ -178,20 +229,76 @@ describe("the site over a fixture", () => {
     expect(q).not.toContain("Async");
   });
 
-  test("the docs tree holds the current milestone open and the frozen one closed", async () => {
-    const { body } = await get("/docs");
-    expect(body).toContain('href="/docs/1.0.12-beta/machine-1/150-rakun/README"');
-    expect(body).toMatch(/<details class="tree" open="">\s*<summary>(<[^>]+>)?1\.0\.12-beta/);
-    expect(body).toMatch(/<details class="tree">\s*<summary>(<[^>]+>)?1\.0\.11-beta/);
+  test("/fronts is the current milestone in sections: the milestone, then a section per machine", async () => {
+    const { status, body } = await get("/fronts");
+    expect(status).toBe(200);
+    expect(body).toMatch(/<h1>1\.0\.12-beta <span class="pill current">current<\/span><\/h1>/);
+    const h2 = [...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1]);
+    expect(h2).toEqual(["milestone", "machine-1", "machine-2"]);
+    // The machine's README titles its section.
+    expect(body).toContain('<a href="/docs/1.0.12-beta/machine-1/README">Machine 1 — the work queue</a>');
   });
 
-  test("the docs tree names folders as on disk, titles them by their README, lists files by name", async () => {
-    const { body } = await get("/docs");
-    // The front's folder links to its README and shows its title; the README is not repeated as a file.
-    expect(body).toMatch(/<a href="\/docs\/1\.0\.12-beta\/machine-1\/150-rakun\/README">150-rakun<\/a>/);
-    expect(body).not.toMatch(/>README<\/a>/);
-    // No document is labelled by its path.
-    expect(body).not.toMatch(/>1\.0\.12-beta\/machine-1\/[^<]*<\/a>/);
+  test("a front is a card in its machine's section: number, name linking its README, title, counts", async () => {
+    const { body } = await get("/fronts");
+    const card = body.slice(body.indexOf('<section class="front-card" id="machine-1-150-rakun">'));
+    expect(card).toStartWith('<section class="front-card" id="machine-1-150-rakun"><header><span class="fnum">150</span>');
+    expect(card).toContain('<h3><a href="/docs/1.0.12-beta/machine-1/150-rakun/README">rakun</a>');
+    expect(card).toContain('<p class="fmeta">machine-1 · 4 docs · 2 folders</p>');
+    expect(body.indexOf('id="machine-1-150-rakun"')).toBeLessThan(body.indexOf('id="machine-2-163-meta-ci"'));
+  });
+
+  test("the folders inside a front are its sub-subsections, titled without repeating their name", async () => {
+    const { body } = await get("/fronts");
+    const h4 = [...body.matchAll(/<h4 id="([^"]+)">(.*?)<\/h4>/g)].map((m) => [m[1], m[2]!.replace(/<[^>]+>/g, "")]);
+    expect(h4).toEqual([
+      ["machine-1-150-rakun-04-rakun", "04-rakun"],
+      ["machine-1-150-rakun-121-bpp-content", "121-bpp-content posts as data"],
+    ]);
+    // A folder's documents are chips named below the folder, deeper folders included.
+    expect(body).toContain('href="/docs/1.0.12-beta/machine-1/150-rakun/121-bpp-content/examples/post" title="A sample post">examples/post</a>');
+    expect(body).toContain("<code>data</code>");
+  });
+
+  test("an old milestone has no machines: its fronts sit in one Fronts section; the switcher links the others", async () => {
+    const { body } = await get("/fronts?version=1.0.11-beta");
+    expect(body).toMatch(/<h1>1\.0\.11-beta <span class="pill frozen-pill">frozen<\/span><\/h1>/);
+    expect([...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1])).toEqual(["milestone", "fronts"]);
+    expect(body).toContain('<section class="front-card" id="04-rakun">');
+    expect(body).toContain('<a href="/fronts">1.0.12-beta</a>');
+    expect(body).toContain('<span class="on">1.0.11-beta</span>');
+    // An unknown version shows the current one.
+    expect((await get("/fronts?version=9.9.9")).body).toContain('<span class="on">1.0.12-beta</span>');
+  });
+
+  test("/docs leads to the Fronts page, keeping the milestone", async () => {
+    const all = await get("/docs");
+    expect([all.status, all.res.headers.get("location")]).toEqual([302, "/fronts"]);
+    const old = await get("/docs?version=1.0.11-beta");
+    expect(old.res.headers.get("location")).toBe("/fronts?version=1.0.11-beta");
+  });
+
+  test("a folder with no README leads to its section", async () => {
+    const folder = await get("/docs/1.0.12-beta/machine-1/150-rakun/04-rakun");
+    expect([folder.status, folder.res.headers.get("location")]).toEqual([302, "/fronts#machine-1-150-rakun-04-rakun"]);
+    const loose = await get("/docs/1.0.11-beta/closure-audit");
+    expect(loose.res.headers.get("location")).toBe("/fronts?version=1.0.11-beta");
+  });
+
+  test("a document's breadcrumbs lead back to each section it sits in", async () => {
+    const { body } = await get("/docs/1.0.12-beta/machine-1/150-rakun/04-rakun/track");
+    const crumbs = [...body.slice(body.indexOf('<nav class="crumbs"')).matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)]
+      .slice(0, 5)
+      .map((m) => [m[2], m[1]]);
+    expect(crumbs).toEqual([
+      ["Fronts", "/fronts"],
+      ["1.0.12-beta", "/fronts"],
+      ["machine-1", "/fronts#machine-1"],
+      ["150-rakun", "/fronts#machine-1-150-rakun"],
+      ["04-rakun", "/fronts#machine-1-150-rakun-04-rakun"],
+    ]);
+    // A frozen milestone's crumbs name it.
+    expect((await get("/docs/1.0.11-beta/04-rakun/README")).body).toContain('<a href="/fronts?version=1.0.11-beta#04-rakun">04-rakun</a>');
   });
 
   test("a doc renders with anchors, mapped links and raw HTML escaped", async () => {
@@ -265,11 +372,24 @@ if (!(!realRoot || !existsSync(join(realRoot, "specs")))) describe("the site ove
   const site = createSite({ dataPath: realRoot, status, version: "0.0.1" });
 
   test("every page answers 200 and shows no filesystem path", async () => {
-    for (const path of ["/", "/steps", "/steps/814", "/pending", "/review", "/subjects", "/retired", "/docs", "/docs/1.0.12-beta/README"]) {
+    for (const path of ["/", "/steps", "/steps/814", "/pending", "/review", "/subjects", "/retired", "/fronts", "/fronts?version=1.0.5-beta", "/docs/1.0.12-beta/README"]) {
       const res = await site.request(path);
       const body = await res.text();
       expect([path, res.status]).toEqual([path, 200]);
       expect(body).not.toContain(realRoot);
+    }
+  });
+
+  test("every milestone's Fronts page has unique anchors, and every document is listed on it once", async () => {
+    const loaded = loadSiteData(realRoot);
+    if (!loaded.ok) throw new Error(loaded.error);
+    for (const v of loaded.data.tree.versions) {
+      const body = await (await site.request(`/fronts?version=${v}`)).text();
+      const ids = [...body.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+      expect([v, ids.length - new Set(ids).size]).toEqual([v, 0]);
+      const listed = [...body.matchAll(/href="\/docs\/([^"#]+)"/g)].map((m) => m[1]);
+      const docs = loaded.data.tree.docs.filter((d) => d.version === v).map((d) => d.ref);
+      expect([v, docs.filter((r) => !listed.includes(r))]).toEqual([v, []]);
     }
   });
 });
