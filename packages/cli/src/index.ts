@@ -5,6 +5,7 @@ import { ApiError, get, type Query } from "./client.ts";
 import { type ClientConfig, loadClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 import { registerRealtime } from "./watch.ts";
+import { registerExport } from "./export.ts";
 import { registerWrites } from "./write.ts";
 
 const program = new Command()
@@ -138,6 +139,9 @@ registerRealtime(program, config);
 
 // Writes: edit, append, add-section, new-doc (PLAN.md § 5.2).
 registerWrites(program, config);
+
+// For the scripts that still read spec files (botopink/projects' gate): export <set> --to <dir>.
+registerExport(program, config);
 
 program.parseAsync().catch((e: unknown) => {
   if (e instanceof ApiError) {

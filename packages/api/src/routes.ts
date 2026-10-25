@@ -215,6 +215,31 @@ export function readRoutes(current: () => Model) {
     return c.json(rest);
   });
 
+  // The spec files a consumer outside the bot still reads as files (botopink/projects' gate scripts), by set —
+  // never a path the caller chooses. Paths are relative to specs/.
+  api.get("/export/:set", (c) => {
+    const set = c.req.param("set");
+    const current = model.tree.current;
+    const text = (ref: string) => model.docByRef.get(ref)?.lines.join("\n");
+    const files: Record<string, string> = {};
+    if (set === "ledger") {
+      // decisions-split.py: the record, and the current milestone's README with its front READMEs (the aliases).
+      files["decisions-taken-steps.md"] = model.steps.lines.join("\n");
+      for (const d of model.tree.docs) {
+        if (d.version !== current || d.name !== "README") continue;
+        const depth = d.ref.split("/").length;
+        if (depth === 2 || depth === 4) files[`${d.ref}.md`] = d.lines.join("\n");
+      }
+    } else if (set === "language-gaps") {
+      const gaps = text(`${current}/language-gaps`);
+      if (gaps === undefined) return c.json({ error: `${current} has no language-gaps.md` }, 404);
+      files[`${current}/language-gaps.md`] = gaps;
+    } else {
+      return c.json({ error: `no export ${set}`, hint: "ledger | language-gaps" }, 404);
+    }
+    return c.json({ set, version: current, files });
+  });
+
   api.get("/check", (c) => {
     const findings = check(model);
     const severity = c.req.query("severity");

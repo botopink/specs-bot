@@ -145,3 +145,16 @@ describe("the read api", () => {
     expect((await get("/api/check")).body.summary).toEqual({});
   });
 });
+
+describe("export", () => {
+  test("ledger: the record and the current milestone's READMEs, by relative path", async () => {
+    const r = (await get("/api/export/ledger")).body;
+    expect(Object.keys(r.files).sort()).toEqual(["1.0.12-beta/machine-1/150-rakun/README.md", "decisions-taken-steps.md"]);
+    expect(r.files["decisions-taken-steps.md"]).toContain("| 3 | q-3");
+  });
+
+  test("an unknown set is refused; a missing file is a 404", async () => {
+    expect((await get("/api/export/everything")).status).toBe(404);
+    expect((await get("/api/export/language-gaps")).status).toBe(404);
+  });
+});
