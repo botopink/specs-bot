@@ -5,6 +5,7 @@ import type { ServerConfig } from "./config.ts";
 import { dataState } from "./data.ts";
 import { EventBus } from "./events.ts";
 import { readRoutes } from "./routes.ts";
+import { mountRealtime } from "./ws.ts";
 
 export const VERSION = "0.0.1";
 
@@ -18,6 +19,8 @@ export interface AppOptions {
 export function createApp(config: ServerConfig, opts: AppOptions = {}) {
   const bus = opts.bus ?? new EventBus();
   const app = new Hono();
+  // Real-time events between the machines (/api/ws, /api/presence); before the api's routes (PLAN.md § 5.6).
+  mountRealtime(app, config.tokens, bus);
   const api = new Hono<{ Variables: Vars }>();
   // One read model for the api and the site, loaded once (PLAN.md § 2).
   const loaded = loadSiteData(config.dataPath);
