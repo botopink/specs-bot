@@ -2,14 +2,16 @@ import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
 import { crumbsOf } from "../hierarchy.ts";
 import { type LinkContext, renderMarkdown } from "../markdown.ts";
+import type { FrontProgress } from "../progress.ts";
 import { Html, Layout } from "./layout.tsx";
+import { DocProgressPanel } from "./progress.tsx";
 
 /** The document's body as HTML. Rendering a long document takes marked ~0.5 s, so the site caches it. */
 export function renderDoc(doc: Doc, ctx: LinkContext): string {
   return renderMarkdown(doc.lines.join("\n"), ctx);
 }
 
-export function DocPage(props: { data: SiteData; doc: Doc; html: string; path: string }) {
+export function DocPage(props: { data: SiteData; doc: Doc; html: string; path: string; progress?: FrontProgress | undefined; ctx: LinkContext }) {
   const { doc, data } = props;
   const outline = doc.sections.filter((s) => s.level === 2 || s.level === 3);
   const frozen = doc.version !== data.tree.current;
@@ -25,6 +27,7 @@ export function DocPage(props: { data: SiteData; doc: Doc; html: string; path: s
         ))}
         {frozen ? <span class="frozen"> · frozen milestone</span> : null}
       </nav>
+      {props.progress ? <DocProgressPanel data={data} p={props.progress} ctx={props.ctx} /> : null}
       <div class="doc-layout">
         <Html class="markdown" html={props.html} />
         {outline.length ? (

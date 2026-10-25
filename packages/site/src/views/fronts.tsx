@@ -3,7 +3,9 @@
 import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
 import { type FolderNode, type FrontNode, frontsHref, labelBelow, type MachineNode, milestoneOf } from "../hierarchy.ts";
+import type { FrontProgress } from "../progress.ts";
 import { Layout, plural, Title } from "./layout.tsx";
+import { frontProgressHref, ProgressLine } from "./progress.tsx";
 
 /** A document as a chip: its name, its title on hover. */
 function Chips(props: { docs: Doc[]; dir: string }) {
@@ -55,7 +57,8 @@ function FolderRow({ folder }: { folder: FolderNode }) {
   );
 }
 
-export function FrontCard({ front, version }: { front: FrontNode; version: string }) {
+export function FrontCard(props: { front: FrontNode; version: string; progress?: FrontProgress | undefined; href?: string }) {
+  const { front, version, progress, href } = props;
   return (
     <section class="front-card" id={front.anchor}>
       <header>
@@ -79,6 +82,7 @@ export function FrontCard({ front, version }: { front: FrontNode; version: strin
           </p>
         </div>
       </header>
+      {progress && href ? <ProgressLine p={progress} href={href} /> : null}
       <Chips docs={front.docs} dir={front.dir} />
       {front.folders.length ? (
         <div class="folders">
@@ -91,7 +95,8 @@ export function FrontCard({ front, version }: { front: FrontNode; version: strin
   );
 }
 
-function MachineSection({ machine, version }: { machine: MachineNode; version: string }) {
+function MachineSection(props: { machine: MachineNode; version: string; data: SiteData; progress: Map<number, FrontProgress> }) {
+  const { machine, version, data, progress } = props;
   return (
     <section class="machine">
       <h2 id={machine.anchor}>
@@ -121,13 +126,13 @@ function MachineSection({ machine, version }: { machine: MachineNode; version: s
         </p>
       ) : null}
       {machine.fronts.map((f) => (
-        <FrontCard front={f} version={version} />
+        <FrontCard front={f} version={version} progress={progress.get(f.num)} href={frontProgressHref(data, version, f.num)} />
       ))}
     </section>
   );
 }
 
-export function FrontsPage(props: { data: SiteData; version: string; path: string }) {
+export function FrontsPage(props: { data: SiteData; version: string; path: string; progress: Map<number, FrontProgress> }) {
   const { data, version } = props;
   const ms = milestoneOf(data, version);
   const fronts = ms.machines.reduce((n, m) => n + m.fronts.length, 0);
@@ -159,7 +164,7 @@ export function FrontsPage(props: { data: SiteData; version: string; path: strin
             </section>
           ) : null}
           {ms.machines.map((m) => (
-            <MachineSection machine={m} version={version} />
+            <MachineSection machine={m} version={version} data={data} progress={props.progress} />
           ))}
         </div>
         <aside>

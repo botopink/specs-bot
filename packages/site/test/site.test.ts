@@ -113,14 +113,22 @@ function fixture(): string {
 
 const status = async () => ({ ok: true, branch: "main", head: "abc1234" });
 
+/** The page without the translation marks protectHtml adds, so a test of structure reads the markup as written. */
+export function unprotect(html: string): string {
+  return html
+    .replace(/<span class="notranslate" translate="no">([^<]*)<\/span>/g, "$1")
+    .replace(/ class="notranslate" translate="no">/g, ">")
+    .replace(/class="notranslate ([^"]*)"([^>]*) translate="no">/g, 'class="$1"$2>');
+}
+
 describe("the site over a fixture", () => {
   const root = fixture();
   const site = createSite({ dataPath: root, status, version: "0.0.1" });
   const get = async (path: string) => {
     const res = await site.request(path);
-    const body = await res.text();
-    expect(body).not.toContain(root); // never a filesystem path
-    return { status: res.status, body, res };
+    const raw = await res.text();
+    expect(raw).not.toContain(root); // never a filesystem path
+    return { status: res.status, body: unprotect(raw), raw, res };
   };
 
   test("the overview shows the data status, the milestone and the counts", async () => {
@@ -318,6 +326,127 @@ describe("the site over a fixture", () => {
     expect(dir.status).toBe(302);
     expect(dir.res.headers.get("location")).toBe("/docs/1.0.12-beta/machine-1/150-rakun/README");
     expect((await get("/docs/nope")).status).toBe(404);
+  });
+});
+
+describe("a front's progress on the site", () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, "specs/1.0.12-beta/status.md"),
+    "# Status — 1.0.12-beta\n\n## L1 — now\n\n### 150 rakun\n\n- [ ] 150 s2 — the router's tail\n\n## Done — landed\n\n### 150 rakun\n\n- [x] 150 s1 — the `bpp` router\n",
+  );
+  const site = createSite({ dataPath: root, status, version: "0.0.1" });
+  const get = async (path: string) => {
+    const res = await site.request(path);
+    return { status: res.status, body: unprotect(await res.text()) };
+  };
+
+  test("each front card on /fronts carries its progress, linking to the front's page", async () => {
+    const { body } = await get("/fronts");
+    const card = body.slice(body.indexOf('id="machine-1-150-rakun"'), body.indexOf('id="machine-2-163-meta-ci"'));
+    expect(card).toContain('<div class="pbar" role="img" aria-label="0 done, 1 open, 0 waiting">');
+    expect(card).toContain('<a href="/fronts/150">');
+    expect(card).toContain("from the README&#39;s 1 step and their boxes");
+  });
+
+  test("/fronts/<num> lists the README's steps and status.md's items, each linking where it is written", async () => {
+    const { status: code, body } = await get("/fronts/150");
+    expect(code).toBe(200);
+    expect(body).toContain("Steps — from the README");
+    expect(body).toContain('href="/docs/1.0.12-beta/machine-1/150-rakun/README#s1--the-bpp-router"');
+    expect(body).toContain("In status.md");
+    expect(body).toContain('href="/docs/1.0.12-beta/status#150-rakun"');
+    expect(body).toContain('<span class="lane" translate="no">Done</span>');
+    expect((await get("/fronts/999")).status).toBe(404);
+    expect((await get("/fronts/04?version=1.0.11-beta")).status).toBe(200);
+  });
+
+  test("a document inside a front opens with the front's progress; one outside does not", async () => {
+    const inside = (await get("/docs/1.0.12-beta/machine-1/150-rakun/04-rakun/track")).body;
+    expect(inside).toContain('<aside class="doc-progress">');
+    expect(inside).toContain("All of front 150&#39;s steps");
+    expect((await get("/docs/1.0.12-beta/status")).body).not.toContain('class="doc-progress"');
+  });
+});
+
+describe("translation: what the browser may translate and what never", () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, "specs/1.0.12-beta/machine-1/150-rakun/notes.md"),
+    [
+      "# Notes on the router",
+      "",
+      "The return type is the annotation; a fn written bare stays, as does comptime. Step 150 s31 and B-162 landed in 04-rakun; question 810-d asks; machine-1 reads `main.bp`.",
+      "",
+      "```bp",
+      "pub fn main() -> void { }",
+      "```",
+      "",
+      "| Code | What |",
+      "|---|---|",
+      "| `for-await-one-source` | the refusal of an await over two sources |",
+      "",
+      "<!-- notrans -->",
+      "A paragraph kept as written.",
+      "",
+      "A paragraph translated as usual.",
+      "",
+    ].join("\n"),
+  );
+  const site = createSite({ dataPath: root, status, version: "0.0.1" });
+  const page = async (path: string) => (await site.request(path)).text();
+
+  test("code blocks, inline code and a table cell that is code alone are never translated", async () => {
+    const body = await page("/docs/1.0.12-beta/machine-1/150-rakun/notes");
+    expect(body).toMatch(/<pre class="notranslate" translate="no"><code class="notranslate language-bp" translate="no">/);
+    expect(body).toContain('<td class="notranslate" translate="no"><code class="notranslate" translate="no">for-await-one-source</code></td>');
+    expect(body).toContain('<code class="notranslate" translate="no">main.bp</code>');
+  });
+
+  test("labels and the keywords that are no English word are kept; English words are not", async () => {
+    const body = await page("/docs/1.0.12-beta/machine-1/150-rakun/notes");
+    const kept = [...body.matchAll(/<span class="notranslate" translate="no">([^<]+)<\/span>/g)].map((m) => m[1]);
+    for (const label of ["fn", "comptime", "150 s31", "B-162", "04-rakun", "810-d", "machine-1"]) expect(kept).toContain(label);
+    // "return" and "type" are English here: the translator gets them.
+    expect(body).toContain("<p>The return type is the annotation; a ");
+    expect(kept).not.toContain("return");
+    expect(kept).not.toContain("type");
+  });
+
+  test("prose is translatable; a block after <!-- notrans --> is not, and the marker is not shown", async () => {
+    const body = await page("/docs/1.0.12-beta/machine-1/150-rakun/notes");
+    expect(body).toContain('<div class="notranslate" translate="no"><p>A paragraph kept as written.</p>');
+    expect(body).toContain("<p>A paragraph translated as usual.</p>");
+    expect(body).not.toContain("notrans --");
+  });
+
+  test("ids and step numbers in the site's own markup are kept", async () => {
+    const body = await page("/steps/3");
+    expect(body).toContain('<span class="notranslate" translate="no">9-b</span> · (the coordinator †');
+    expect(body).toContain('<code class="notranslate" translate="no">file_is_module</code>');
+    expect(await page("/pending")).toContain('<code class="notranslate" translate="no">9-c</code>');
+  });
+
+  test("the header has the EN | PT toggle and the page says it is English", async () => {
+    const body = await page("/");
+    expect(body).toStartWith('<html lang="en">');
+    expect(body).toContain('<div class="lang notranslate" translate="no" role="group" aria-label="Language">');
+    expect(body).toContain('data-lang="pt"');
+    expect(body).toContain("translate.google.com/translate_a/element.js?cb=specsBotTranslate");
+    expect(body).toContain('includedLanguages: "pt"');
+    // The script itself is untouched by the marks.
+    expect(body).not.toMatch(/<script>[^]*<span class="notranslate"/);
+  });
+});
+
+describe("protectHtml", () => {
+  test("leaves text inside marked elements, script and style alone", async () => {
+    const { protectHtml } = await import("../src/translate.ts");
+    expect(protectHtml('<p translate="no">150 s31 <b>B-9</b></p><p>150 s31</p>')).toBe(
+      '<p translate="no">150 s31 <b>B-9</b></p><p><span class="notranslate" translate="no">150 s31</span></p>',
+    );
+    expect(protectHtml("<script>var fn = 1;</script><style>.fn{}</style>")).toBe("<script>var fn = 1;</script><style>.fn{}</style>");
+    expect(protectHtml('<code class="x">a</code>')).toBe('<code class="notranslate x" translate="no">a</code>');
   });
 });
 

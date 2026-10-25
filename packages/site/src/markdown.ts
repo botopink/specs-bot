@@ -54,8 +54,31 @@ function markedFor(ctx: LinkContext): Marked {
   });
 }
 
+const NOTRANS = /^\s*<!--\s*notrans\s*-->\s*$/;
+
+/**
+ * The document as HTML. A block right after a `<!-- notrans -->` line is wrapped untranslatable (translate.ts);
+ * the marker itself is not shown.
+ */
 export function renderMarkdown(source: string, ctx: LinkContext): string {
-  return markedFor(ctx).parse(source, { async: false }) as string;
+  const marked = markedFor(ctx);
+  const tokens = marked.lexer(source);
+  if (!tokens.some((t) => t.type === "html" && NOTRANS.test(t.raw))) return marked.parser(tokens);
+  let out = "";
+  let hold = false;
+  for (const t of tokens) {
+    if (t.type === "html" && NOTRANS.test(t.raw)) {
+      hold = true;
+      continue;
+    }
+    // Each block alone, with the document's link definitions.
+    const html = marked.parser(Object.assign([t], { links: tokens.links }));
+    if (hold && t.type !== "space") {
+      out += `<div class="notranslate" translate="no">${html}</div>`;
+      hold = false;
+    } else out += html;
+  }
+  return out;
 }
 
 export function renderInline(source: string, ctx: LinkContext): string {
