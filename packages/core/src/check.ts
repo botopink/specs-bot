@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { nextFree, statedNextFree } from "./decisions/steps.ts";
 import { pendingEntries } from "./decisions/pending.ts";
+import { checkGapMarkers } from "./gaps.ts";
 import type { Store } from "./store.ts";
 
 export type Severity = "error" | "warning";
@@ -17,7 +18,15 @@ export interface Finding {
 }
 
 export function check(store: Store): Finding[] {
-  return [...checkSteps(store), ...checkPending(store), ...checkSubjects(store), ...checkRetired(store), ...checkDocs(store), ...checkChat(store)];
+  return [
+    ...checkSteps(store),
+    ...checkPending(store),
+    ...checkSubjects(store),
+    ...checkRetired(store),
+    ...checkDocs(store),
+    ...checkChat(store),
+    ...checkGapMarkers(store),
+  ];
 }
 
 const err = (code: string, about: string, message: string): Finding => ({ code, severity: "error", about, message });
