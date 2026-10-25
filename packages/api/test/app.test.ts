@@ -14,9 +14,10 @@ test("health is 503 when the data path holds no specs", async () => {
   expect(JSON.stringify(body)).not.toContain(tmpdir());
 });
 
-test("unknown routes answer 404 in JSON", async () => {
-  const res = await createApp(config("/nowhere")).request("/api/nope");
-  expect(res.status).toBe(404);
+test("without data every api read answers 503 in JSON", async () => {
+  const res = await createApp(config("/nowhere")).request("/api/steps/1");
+  expect(res.status).toBe(503);
+  expect(((await res.json()) as { error: string }).error).toBe("the specs could not be read");
 });
 
 test("the root serves the status page", async () => {
