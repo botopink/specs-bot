@@ -1,3 +1,4 @@
+import { anchorOf } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
 import type { SiteStatus } from "../status.ts";
 import { Layout } from "./layout.tsx";
@@ -52,6 +53,8 @@ function Overview({ data }: { data: SiteData }) {
         <Card n={data.retired.rows.length} label="retired forms" href="/retired" />
         <Card n={currentDocs} label={`docs in ${data.tree.current} (${data.tree.docs.length} in all)`} href="/docs" />
       </div>
+      <h2>Fronts</h2>
+      <FrontIndex data={data} />
       <h2>Next free number</h2>
       <p>
         <strong>{data.nextFree}</strong>{" "}
@@ -64,6 +67,33 @@ function Overview({ data }: { data: SiteData }) {
         )}
       </p>
     </>
+  );
+}
+
+/** The current milestone's fronts, by machine; each links to its subsection of the Fronts page. */
+function FrontIndex({ data }: { data: SiteData }) {
+  const current = data.fronts.filter((f) => f.version === data.tree.current);
+  const machines = [...new Set(current.map((f) => f.machine ?? ""))].sort();
+  return (
+    <div class="fronts-index">
+      {machines.map((m) => (
+        <div>
+          <h3>
+            <a href={`/fronts#${m || "fronts"}`}>{m || "Fronts"}</a>
+          </h3>
+          <ul>
+            {current
+              .filter((f) => (f.machine ?? "") === m)
+              .map((f) => (
+                <li>
+                  <a href={`/fronts#${anchorOf(`${m} ${f.ref.split("/").at(-1)}`)}`}>{f.ref.split("/").at(-1)}</a>{" "}
+                  <span class="muted small">— {f.title.replace(/^Front \d+ — /, "")}</span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }
 

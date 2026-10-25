@@ -7,6 +7,7 @@ import type { LinkContext } from "./markdown.ts";
 import type { StatusFn } from "./status.ts";
 import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, SubjectsPage } from "./views/decisions.tsx";
 import { DocPage, DocsPage, renderDoc } from "./views/docs.tsx";
+import { FrontsPage } from "./views/fronts.tsx";
 import { Home } from "./views/home.tsx";
 import { NotFound, Unavailable } from "./views/layout.tsx";
 import { StepPage, StepsPage } from "./views/steps.tsx";
@@ -96,6 +97,12 @@ export function createSite(opts: SiteOptions) {
   });
 
   site.get("/retired", (c) => c.html(<RetiredPage data={data} q={(c.req.query("q") ?? "").trim()} ctx={plain} path={c.req.path} />));
+
+  site.get("/fronts", (c) => {
+    const asked = c.req.query("version");
+    const version = asked && data.tree.versions.includes(asked) ? asked : data.tree.current;
+    return c.html(<FrontsPage data={data} version={version} path={c.req.path} />);
+  });
 
   site.get("/docs", (c) => c.html(<DocsPage data={data} path={c.req.path} />));
 

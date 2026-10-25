@@ -44,6 +44,10 @@ h3 { font-size: 17px; margin: 24px 0 8px; }
 .card .n { font-size: 28px; font-weight: 700; line-height: 1.1; }
 .card .l { color: var(--muted); font-size: 14px; }
 .card a { color: inherit; }
+.fronts-index { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 32px; }
+.fronts-index h3 { margin: 8px 0 4px; } .fronts-index ul { margin: 0; padding-left: 18px; } .fronts-index li { margin: 2px 0; }
+ul.doclist { margin: 4px 0 12px; padding-left: 18px; } ul.doclist li { margin: 2px 0; }
+.markdown section > h3 { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
 .s-in-force { color: var(--ok); } .s-overtaken, .s-replaced, .s-reversed { color: var(--gone); }

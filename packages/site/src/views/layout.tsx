@@ -3,6 +3,7 @@ import type { StepStatus } from "@specs-bot/core";
 
 const NAV: [string, string][] = [
   ["/", "Overview"],
+  ["/fronts", "Fronts"],
   ["/steps", "Steps"],
   ["/pending", "Pending"],
   ["/review", "Review"],
