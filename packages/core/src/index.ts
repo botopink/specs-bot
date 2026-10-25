@@ -8,3 +8,5 @@ export * from "./decisions/steps.ts";
 export * from "./decisions/pending.ts";
 export * from "./decisions/taken.ts";
 export * from "./decisions/retired.ts";
+export * from "./docs/doc.ts";
+export * from "./docs/load.ts";
