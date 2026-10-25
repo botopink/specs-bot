@@ -216,6 +216,34 @@ sem hash de commit nem caminho de scratch (regras do `land-check.py`/`scratch-re
 inexistente; link interno resolve; seção alvo existe. Falhou → 422 com o motivo e o que fazer.
 `specs-bot check` roda tudo sobre o repo inteiro.
 
+### 5.6 Eventos em tempo real (WebSocket)
+
+As máquinas se comunicam pelo host: toda escrita publica um evento num barramento interno da API, e o WebSocket
+o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
+
+- **Endpoint**: `ws://<host>:7165/api/ws`.
+  - Token igual ao HTTP: `Authorization: Bearer <token>` ou `?token=` (para navegador).
+  - Token desconhecido: fecha com código **4401**.
+  - Sem token: ouvinte anônimo, só leitura.
+  - Filtro na URL: `?types=write,chat&to=machine-2`.
+- **Servidor → cliente** (JSON, um por mensagem):
+  - `{"type":"hello","party":…}` ao conectar, sempre a primeira mensagem.
+  - `write`: `op, party, commit, refs[], summary, at`. É uma escrita gravada; `refs` usa os nomes da API, nunca caminhos.
+  - `chat`: `id, from, to, purpose, subject, at`. Uma mensagem nova; com `to`, chegam as para a máquina e as para `all`.
+  - `presence`: `party, online, at`. Uma máquina entrou ou saiu; várias conexões da mesma máquina contam como uma.
+- **Cliente → servidor**:
+  - `{"type":"subscribe","types":[…],"to":"…"}` troca o filtro e é respondido com `subscribed`.
+  - `{"type":"ping"}` é respondido com `pong`.
+- **Heartbeat**: ping do protocolo a cada 30 s. Quem não responde até o seguinte é desconectado (4408).
+- **`GET /api/presence`**: as máquinas online agora, com `since` e número de conexões.
+- **CLI**:
+  - `specs-bot watch [--type write,chat,presence] [--to <party> | --all] [--once] [--timeout <s>]`. Por padrão, o
+    chat é filtrado para a própria máquina.
+  - `--once` termina no primeiro evento (exit 0); é como um agente espera a próxima mensagem para ele.
+  - Saídas: `--timeout` estourado → exit 5; token recusado → exit 1; queda com `--once` → exit 3.
+  - Sem `--once`, reconecta com espera crescente de 1 s a 30 s.
+  - `specs-bot online` lista a presença.
+
 ---
 
 ## 6. Migração do botopink-lang
