@@ -1,5 +1,5 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, type Kind, type Model, sectionText, summarize } from "@specs-bot/core";
+import { check, etagOf, type Kind, type Model, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./auth.ts";
 
@@ -10,7 +10,10 @@ const int = (v: string | undefined, fallback: number) => {
   return Number.isNaN(n) ? fallback : n;
 };
 
-export function readRoutes(model: Model) {
+/** `current` answers the model in force: a write swaps it, and every request reads the one in force then. */
+export function readRoutes(current: () => Model) {
+  // Every handler reads `model.…` at request time, so a swap is seen by the next request.
+  const model = new Proxy({} as Model, { get: (_, key) => Reflect.get(current(), key) });
   const api = new Hono<{ Variables: Vars }>();
   const notFound = (what: string, hint?: string) => ({ error: `${what} not found`, ...(hint ? { hint } : {}) });
 
@@ -178,13 +181,14 @@ export function readRoutes(model: Model) {
     const ref = decodeURIComponent(c.req.path.replace(/^\/api\/docs\//, "")).replace(/\.md$/, "").replace(/\/$/, "");
     const doc = model.docByRef.get(ref) ?? model.docByRef.get(`${ref}/README`);
     if (!doc) return c.json(notFound(`doc ${ref}`, "GET /api/search?q=… or /api/fronts to find one"), 404);
-    const outline = doc.sections.map((s) => ({ level: s.level, heading: s.heading, anchor: s.anchor, lines: s.end - s.start }));
+    const outline = doc.sections.map((s) => ({ level: s.level, heading: s.heading, anchor: s.anchor, lines: s.end - s.start, etag: sectionEtag(doc, s.anchor)! }));
     if (c.req.query("outline") !== undefined) return c.json({ ref: doc.ref, title: doc.title, outline });
     const anchor = c.req.query("section");
     if (anchor) {
       const text = sectionText(doc, anchor);
       if (text === undefined) return c.json({ ...notFound(`section ${anchor} of ${doc.ref}`), outline }, 404);
-      return c.json({ ref: doc.ref, title: doc.title, section: anchor, text });
+      // The etag goes back with an edit of this section (specs-bot doc edit), so a stale edit is refused.
+      return c.json({ ref: doc.ref, title: doc.title, section: anchor, etag: etagOf(text), text });
     }
     return c.json({ ref: doc.ref, title: doc.title, version: doc.version, frozen: doc.version !== model.tree.current, outline, text: doc.lines.join("\n") });
   });

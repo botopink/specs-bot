@@ -5,6 +5,7 @@ import { ApiError, get, type Query } from "./client.ts";
 import { type ClientConfig, loadClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 import { registerRealtime } from "./watch.ts";
+import { registerWrites } from "./write.ts";
 
 const program = new Command()
   .name("specs-bot")
@@ -135,10 +136,17 @@ program
 // Real-time: watch, online (PLAN.md § 5.6).
 registerRealtime(program, config);
 
+// Writes: edit, append, add-section, new-doc (PLAN.md § 5.2).
+registerWrites(program, config);
+
 program.parseAsync().catch((e: unknown) => {
   if (e instanceof ApiError) {
     console.error(`✗ ${e.message}${e.hint ? `\n  ${e.hint}` : ""}`);
-    process.exit(e.status === 0 ? 3 : e.status === 404 ? 4 : 1);
+    const body = (e.body ?? {}) as { etag?: string; findings?: { rule?: string; code?: string; match?: string; text?: string; message?: string }[] };
+    if (body.etag) console.error(`  current etag: ${body.etag}`);
+    for (const f of body.findings ?? []) console.error(`  ${f.rule ?? f.code}: ${f.match ?? f.message ?? ""}${f.text ? ` — ${f.text.slice(0, 120)}` : ""}`);
+    // 3 unreachable · 4 not found · 6 conflict (read again, redo) · 1 anything else
+    process.exit(e.status === 0 ? 3 : e.status === 404 ? 4 : e.status === 409 ? 6 : 1);
   }
   console.error(`✗ ${(e as Error).message}`);
   process.exit(2);
