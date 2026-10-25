@@ -6,6 +6,7 @@
   "scripts": { "start": "bun src/index.ts" },
   "dependencies": {
     "@specs-bot/core": "workspace:*",
+    "@specs-bot/site": "workspace:*",
     "hono": "4.10.4"
   }
 }
