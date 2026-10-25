@@ -117,7 +117,7 @@ SPECS_BOT_TOKEN=<token desta máquina>
 | 2. Dono do SO | No servidor, `specs-data` pertence ao usuário `specs-bot` (dir `0700`); a API roda como esse usuário (systemd). Se o servidor for também uma máquina de agente, o agente roda como outro usuário. | `cat`, `python`, `git` do agente no mesmo host. |
 | 3. Permissões do Claude Code | `deny` em `.claude/settings.json` do botopink-lang para Read/Edit/Write no caminho de dados e Bash `git -C *specs-data*`; `allow` para `specs-bot *`. | Defesa extra; sozinha é contornável. |
 | 4. Token por máquina | Cada máquina tem um token (`SPECS_BOT_TOKEN` no `.env.local` do `projects`, fora do git); o servidor sabe quem escreve e preenche o "by" (`machine-1`, `the coordinator †`, `the maintainer`). | Escrita anônima; permite regras por papel (ex.: só o mantenedor marca `review`). |
-| 5. Git do `specs-data` | Push só a partir do servidor; remoto (GitHub) com deploy key de leitura para o CI. | Commit manual nos dados. |
+| 5. Git do `specs-data` | Repos públicos na org (decisão do mantenedor, 2026-10-25): `botopink/specs-bot` e `botopink/specs-data`. Push só do host, com deploy key de escrita; ruleset na `main` bloqueando push de qualquer outro ator (os agentes usam o `gh` da conta do mantenedor, que tem escrita). | Commit manual nos dados. **Não impede leitura**: sendo público, um agente lê as specs pelo GitHub; a leitura direta passa a ser barrada só por regra (`AGENTS.md`, `deny` no Claude Code), não por acesso. |
 
 O site e o mantenedor também passam pela API. Em emergência, o mantenedor edita `specs-data` direto no servidor e
 roda `specs-bot admin reindex`; o `check` aponta o que ficou inconsistente.
@@ -245,6 +245,7 @@ inexistente; link interno resolve; seção alvo existe. Falhou → 422 com o mot
 - [x] `git init`; bun workspaces (`core`, `api`, `cli`); Bun 1.3.14 fixado em `mise.toml`; tsconfig strict; `bun test`
 - [x] `specs-data` de desenvolvimento em `~/develop/specs-data`: `git filter-repo --path specs/` sobre um clone do `projects`, 2380 commits, branch `main`
 - [x] Host = esta máquina, `192.168.1.15:7165`; API Hono com `GET /api/health`; config em `specs-bot/.env` (modelo em `.env.example`)
+- [x] Repos públicos `github.com/botopink/specs-bot` e `github.com/botopink/specs-data` (criados com `gh`)
 - [x] Serviço systemd de usuário `deploy/specs-bot.service` (`systemctl --user status specs-bot`); vira usuário de SO próprio na fase 4
 
 ### Fase 1 — Core: parse + round-trip + índice
@@ -265,6 +266,7 @@ inexistente; link interno resolve; seção alvo existe. Falhou → 422 com o mot
 - [ ] Ensaio: refazer 10 commits reais (incluindo 956/956-a) e comparar
 
 ### Fase 4 — Migração e isolamento
+- [ ] `specs-data`: deploy key de escrita só no host + ruleset na `main` bloqueando os demais
 - [ ] Host: escolher a máquina; usuário `specs-bot`, unit systemd (sobe no boot, reinicia sozinho), backup/push do `specs-data`
 - [ ] Rede: API só na interface privada (LAN/Tailscale), TLS se sair da LAN; `specs-bot ping` em cada máquina
 - [ ] `export ledgers`; adaptar `gate.sh`/CI; tirar a parte de specs do `land-check.py`
