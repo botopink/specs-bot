@@ -226,7 +226,8 @@ inexistente; link interno resolve; seção alvo existe. Falhou → 422 com o mot
 
    | Consumidor | Destino |
    |---|---|
-   | `scripts/decisions-split.py` (gera `repository/<repo>/decisions-taken.md`) | `specs-bot export ledgers <repo>` escreve o ledger no repo de código; o script vira wrapper ou é removido |
+   | `scripts/decisions-split.py` (gera `repository/<repo>/decisions-taken.md`) | `specs-bot export ledgers <repo>` escreve o ledger no repo de código; o script Python continua sendo quem gera (sobre o export) até valer a pena portar |
+   | `scripts/language-gap-markers.sh` e outra lógica em shell | portar para TS ou Python ao mexer nela (nenhuma lógica nova em shell) |
    | `scripts/decision-cells.py` | continua lendo os ledgers gerados (não mexe) |
    | `scripts/land-check.py` / `scratch-refs.py` (checks em `specs/`) | regras viram validação do servidor (5.5); remover a parte de specs |
    | `scripts/language-gap-markers.sh` (lê `specs/<v>/language-gaps.md`) | `specs-bot doc <ref> --raw` |
@@ -249,15 +250,18 @@ inexistente; link interno resolve; seção alvo existe. Falhou → 422 com o mot
 - [x] Serviço systemd de usuário `deploy/specs-bot.service` (`systemctl --user status specs-bot`); vira usuário de SO próprio na fase 4
 
 ### Fase 1 — Core: parse + round-trip + índice
-- [ ] Parsers: steps, pending, review, taken, retired, docs (seções por heading), chat
-- [ ] Round-trip byte a byte em 100% dos arquivos
+- [x] Parsers: steps, pending, review, taken, retired, docs (seções por heading), chat (`conversation-chat` entrou no `specs-data` como subtree, com histórico)
+- [x] Round-trip byte a byte em 100% dos arquivos (os 6 de decisão, 591 docs, 118 mensagens)
 - [x] Índice MiniSearch por seção (9277 unidades, ~1,2 s no boot, <10 ms por busca); atualização incremental após escrita fica para a fase 3
-- [ ] Regras da 5.5 como funções puras + `check`
+- [x] `check`: 0 erros e 75 avisos nos dados reais (22 `|` sem escape, 2 assuntos sem lead, 5 links quebrados na 1.0.5, 46 `in-reply-to` com caminho antigo)
+- [x] Modelo de leitura único em `core` (`loadModel`), compartilhado pela API e pelo site
 
 ### Fase 2 — API + CLI de leitura
-- [ ] Hono com tokens por máquina; endpoints da 5.1
-- [ ] CLI com saída toon/json/text; medir tokens vs ler arquivos
-- [ ] **Saída**: o Claude responde "o que diz a 814 e quem a supera" e "o que bloqueia a máquina 1" sem arquivo nenhum
+- [x] Hono com tokens por máquina (`Authorization: Bearer`, `whoami`); endpoints da 5.1: overview, next, search, steps, pending, review, subjects, retired, fronts, docs (inteiro, `outline`, `section`), chat, check
+- [x] CLI `specs-bot` (TS, commander): config do `.env`/`.env.local` do `projects` subindo diretórios; toon/json/text; binário único com `bun build --compile`
+- [x] Medido: `step 814` = 1,5 KB contra 1,2 MB do arquivo de steps; TOON 7–40% menor que JSON (mais em listas)
+- [x] **Saída**: "o que diz a 814 e quem a supera" = `specs-bot step 814`; "o que bloqueia a máquina 1" = `specs-bot pending --section "machine 1"`
+- [ ] Instalar o binário nas máquinas + `.env` no `projects` (depende da fase 4)
 
 ### Fase 3 — Escrita
 - [ ] Na ordem de uso real: `doc edit/append` (status, READMEs) → `pending add/edit/withdraw` → `answer` → `supersede`, `retired add`, `review` → `chat send/read`
@@ -289,4 +293,4 @@ inexistente; link interno resolve; seção alvo existe. Falhou → 422 com o mot
 | Round-trip | Tabelas com `\|` escapado, linhas enormes | Fase 1 não termina sem 100% |
 | `status.md` sem estrutura fixa | `status set` pode não ser mecânico | Começar com `doc edit` por seção; `status set` só se o formato permitir |
 | Agentes criativos | Tentam ler os arquivos por outro caminho | Camadas 1 e 2 da seção 3 tornam isso impossível, não só proibido |
-| Ledger dos repos | `decisions-split.py` é Python e o CI depende dele | Na fase 4, primeiro chamar o script existente sobre o export; reescrever só se valer a pena |
+| Ledger dos repos | `decisions-split.py` é Python e o CI depende dele | TS ou Python, nunca lógica em shell (decisão do mantenedor, 2026-10-25): na fase 4 o script Python roda sobre o export; portar para TS só se valer a pena, conferindo byte a byte |
