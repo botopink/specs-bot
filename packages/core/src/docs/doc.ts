@@ -17,8 +17,9 @@ export interface DocMeta {
   ref: string;
   version: string;
   machine?: string;
-  front?: { num: number; slug: string };
-  group?: { num: number; slug: string };
+  /** The first numbered directory, its name as written in `dir` ("04-rakun"). */
+  front?: { num: number; slug: string; dir: string };
+  group?: { num: number; slug: string; dir: string };
   /** The file name without `.md`: "README", "status", "track", "context", … */
   name: string;
 }
@@ -44,8 +45,8 @@ export function docMeta(path: string): DocMeta {
   const meta: DocMeta = { ref, version, name };
   if (dirs[0]?.startsWith("machine-")) meta.machine = dirs.shift()!;
   const numbered = dirs.map((d) => d.match(NUMBERED)).filter((m) => m !== null);
-  if (numbered[0]) meta.front = { num: Number(numbered[0][1]), slug: numbered[0][2]! };
-  if (numbered[1]) meta.group = { num: Number(numbered[1][1]), slug: numbered[1][2]! };
+  if (numbered[0]) meta.front = { num: Number(numbered[0][1]), slug: numbered[0][2]!, dir: numbered[0][0] };
+  if (numbered[1]) meta.group = { num: Number(numbered[1][1]), slug: numbered[1][2]!, dir: numbered[1][0] };
   return meta;
 }
 

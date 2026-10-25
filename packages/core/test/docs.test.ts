@@ -9,15 +9,15 @@ describe("docMeta", () => {
       ref: "1.0.12-beta/machine-1/150-rakun/04-rakun/track",
       version: "1.0.12-beta",
       machine: "machine-1",
-      front: { num: 150, slug: "rakun" },
-      group: { num: 4, slug: "rakun" },
+      front: { num: 150, slug: "rakun", dir: "150-rakun" },
+      group: { num: 4, slug: "rakun", dir: "04-rakun" },
       name: "track",
     });
   });
 
   test("an old milestone has a front and no machine", () => {
     const m = docMeta("1.0.5-beta/01-checker/README.md");
-    expect([m.machine, m.front, m.name]).toEqual([undefined, { num: 1, slug: "checker" }, "README"]);
+    expect([m.machine, m.front, m.name]).toEqual([undefined, { num: 1, slug: "checker", dir: "01-checker" }, "README"]);
   });
 
   test("a milestone's own file has neither", () => {
