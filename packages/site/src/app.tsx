@@ -6,7 +6,8 @@ import { type Loaded, loadSiteData } from "./data.ts";
 import type { LinkContext } from "./markdown.ts";
 import type { StatusFn } from "./status.ts";
 import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, SubjectsPage } from "./views/decisions.tsx";
-import { DocPage, DocsPage, renderDoc } from "./views/docs.tsx";
+import { frontsHref, sectionOfFolder } from "./hierarchy.ts";
+import { DocPage, renderDoc } from "./views/docs.tsx";
 import { FrontsPage } from "./views/fronts.tsx";
 import { Home } from "./views/home.tsx";
 import { NotFound, Unavailable } from "./views/layout.tsx";
@@ -104,7 +105,11 @@ export function createSite(opts: SiteOptions) {
     return c.html(<FrontsPage data={data} version={version} path={c.req.path} />);
   });
 
-  site.get("/docs", (c) => c.html(<DocsPage data={data} path={c.req.path} />));
+  // The documents are listed where they sit, in the Fronts page's sections; /docs stays a way in.
+  site.get("/docs", (c) => {
+    const asked = c.req.query("version");
+    return c.redirect(frontsHref(data, asked && data.tree.versions.includes(asked) ? asked : data.tree.current));
+  });
 
   // The data never changes while the process runs, so each document is rendered once.
   const rendered = new Map<string, string>();
@@ -119,7 +124,10 @@ export function createSite(opts: SiteOptions) {
     ref = ref.replace(/\.md$/, "").replace(/\/$/, "");
     const doc = data.docByRef.get(ref) ?? data.docByRef.get(`${ref}/README`);
     if (!doc) {
-      return c.html(<NotFound path={c.req.path} what={`No document ${ref}.`} back="/docs" backLabel="All documents" />, 404);
+      // A folder with no README of its own (a former front, a track) is a section of the Fronts page.
+      const section = sectionOfFolder(data, ref);
+      if (section) return c.redirect(section);
+      return c.html(<NotFound path={c.req.path} what={`No document ${ref}.`} back="/fronts" backLabel="All fronts" />, 404);
     }
     if (doc.ref !== ref) return c.redirect(`/docs/${doc.ref}`);
     let html = rendered.get(doc.ref);

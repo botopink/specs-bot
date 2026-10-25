@@ -1,174 +1,187 @@
-// The fronts of a milestone as a document: a section per machine, a subsection per front, a sub-subsection per
-// folder inside the front (a former front or a track), each listing its documents. Headings, not collapsed lists.
-import { anchorOf, type Doc } from "@specs-bot/core";
+// The fronts of one milestone, as sections: the milestone (h1) → a machine (h2) → a front (h3, one card each) →
+// the folders inside the front (h4: former fronts, tracks) → their documents. A sticky index beside it.
+import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
-import { Layout } from "./layout.tsx";
+import { type FolderNode, type FrontNode, frontsHref, labelBelow, type MachineNode, milestoneOf } from "../hierarchy.ts";
+import { Layout, plural, Title } from "./layout.tsx";
 
-interface Part {
-  dir: string;
-  title?: string;
-  docs: Doc[];
-}
-
-interface FrontView {
-  dir: string;
-  readme?: Doc;
-  docs: Doc[];
-  parts: Map<string, Part>;
-}
-
-interface MachineView {
-  name: string;
-  readme?: Doc;
-  docs: Doc[];
-  fronts: Map<string, FrontView>;
-}
-
-/** "98-…" before "107-…"; unnumbered names after, by name. */
-function byNumber(a: string, b: string): number {
-  const na = /^\d+/.test(a) ? Number.parseInt(a, 10) : Number.POSITIVE_INFINITY;
-  const nb = /^\d+/.test(b) ? Number.parseInt(b, 10) : Number.POSITIVE_INFINITY;
-  return na !== nb ? na - nb : a.localeCompare(b);
-}
-
-export function frontsOf(docs: Doc[]): { top: Doc[]; machines: MachineView[] } {
-  const top: Doc[] = [];
-  const machines = new Map<string, MachineView>();
-  for (const d of docs) {
-    // An old milestone has no machine folder: its fronts sit directly under it.
-    const key = d.machine ?? "";
-    if (!d.front) {
-      if (!d.machine) top.push(d);
-      else {
-        const m = machineOf(machines, key);
-        if (d.name === "README") m.readme = d;
-        else m.docs.push(d);
-      }
-      continue;
-    }
-    const m = machineOf(machines, key);
-    let f = m.fronts.get(d.front.dir);
-    if (!f) m.fronts.set(d.front.dir, (f = { dir: d.front.dir, docs: [], parts: new Map() }));
-    if (!d.group) {
-      if (d.ref.endsWith(`/${d.front.dir}/README`)) f.readme = d;
-      else f.docs.push(d);
-      continue;
-    }
-    let p = f.parts.get(d.group.dir);
-    if (!p) f.parts.set(d.group.dir, (p = { dir: d.group.dir, docs: [] }));
-    p.docs.push(d);
-    if (d.ref.endsWith(`/${d.group.dir}/README`) || (!p.title && (d.name === "context" || d.name === "track"))) p.title = d.title;
-  }
-  return { top, machines: [...machines.values()].sort((a, b) => byNumber(a.name, b.name)) };
-}
-
-function machineOf(machines: Map<string, MachineView>, name: string): MachineView {
-  let m = machines.get(name);
-  if (!m) machines.set(name, (m = { name, docs: [], fronts: new Map() }));
-  return m;
-}
-
-/** The part of a document's ref below `dir`: "context", "examples/decorator-arguments-280". */
-function below(d: Doc, dir: string): string {
-  const i = d.ref.indexOf(`/${dir}/`);
-  return i < 0 ? d.name : d.ref.slice(i + dir.length + 2);
-}
-
-function DocList(props: { docs: Doc[]; dir: string }) {
+/** A document as a chip: its name, its title on hover. */
+function Chips(props: { docs: Doc[]; dir: string }) {
   if (!props.docs.length) return null;
-  const docs = [...props.docs].sort((a, b) => Number(b.name === "README") - Number(a.name === "README") || a.ref.localeCompare(b.ref));
   return (
-    <ul class="doclist">
-      {docs.map((d) => (
+    <ul class="chips">
+      {props.docs.map((d) => (
         <li>
-          <a href={`/docs/${d.ref}`}>{below(d, props.dir)}</a> <span class="muted small">— {d.title}</span>
+          <a class="chip" href={`/docs/${d.ref}`} title={d.title}>
+            {labelBelow(d, props.dir)}
+          </a>
         </li>
       ))}
     </ul>
   );
 }
 
+/** The documents a front or folder holds, each with its title: used where there is room. */
+function DocRows(props: { docs: Doc[]; dir: string }) {
+  if (!props.docs.length) return null;
+  return (
+    <ul class="doclist">
+      {props.docs.map((d) => (
+        <li>
+          <a href={`/docs/${d.ref}`}>{labelBelow(d, props.dir)}</a> <span class="muted small">— {d.title}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FolderRow({ folder }: { folder: FolderNode }) {
+  const docs = folder.readme ? [folder.readme, ...folder.docs] : folder.docs;
+  return (
+    <div class="folder">
+      <h4 id={folder.anchor}>
+        <a class="anchor" href={`#${folder.anchor}`}>
+          <span class="fdir">{folder.dir}</span>
+        </a>
+        {folder.title ? (
+          <span class="ftitle">
+            {" "}
+            <Title text={folder.title} />
+          </span>
+        ) : null}
+      </h4>
+      <Chips docs={docs} dir={folder.dir} />
+    </div>
+  );
+}
+
+export function FrontCard({ front, version }: { front: FrontNode; version: string }) {
+  return (
+    <section class="front-card" id={front.anchor}>
+      <header>
+        <span class="fnum">{front.num}</span>
+        <div class="fhead">
+          <h3>
+            {front.readme ? <a href={`/docs/${front.readme.ref}`}>{front.slug}</a> : front.slug}
+            <a class="anchor-link" href={`#${front.anchor}`} aria-label="Link to this front">
+              #
+            </a>
+          </h3>
+          {front.title ? (
+            <p class="ftitle">
+              <Title text={front.title} />
+            </p>
+          ) : null}
+          <p class="fmeta">
+            {[front.machine || version, plural(front.count, "doc"), front.folders.length ? plural(front.folders.length, "folder") : ""]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+      </header>
+      <Chips docs={front.docs} dir={front.dir} />
+      {front.folders.length ? (
+        <div class="folders">
+          {front.folders.map((g) => (
+            <FolderRow folder={g} />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function MachineSection({ machine, version }: { machine: MachineNode; version: string }) {
+  return (
+    <section class="machine">
+      <h2 id={machine.anchor}>
+        <a class="anchor" href={`#${machine.anchor}`}>
+          {machine.name || "Fronts"}
+        </a>
+        <span class="muted small">
+          {" "}
+          · {plural(machine.fronts.length, "front")} · {plural(machine.count, "doc")}
+        </span>
+      </h2>
+      {machine.readme || machine.docs.length ? (
+        <p class="machine-docs">
+          {machine.readme ? (
+            <>
+              <a href={`/docs/${machine.readme.ref}`}>{machine.readme.title}</a>
+            </>
+          ) : null}
+          {machine.docs.map((d) => (
+            <>
+              {" · "}
+              <a href={`/docs/${d.ref}`} title={d.title}>
+                {labelBelow(d, machine.name)}
+              </a>
+            </>
+          ))}
+        </p>
+      ) : null}
+      {machine.fronts.map((f) => (
+        <FrontCard front={f} version={version} />
+      ))}
+    </section>
+  );
+}
+
 export function FrontsPage(props: { data: SiteData; version: string; path: string }) {
   const { data, version } = props;
-  const { top, machines } = frontsOf(data.tree.docs.filter((d) => d.version === version));
-  const frozen = version !== data.tree.current;
-  const id = (...parts: string[]) => anchorOf(parts.filter(Boolean).join(" "));
+  const ms = milestoneOf(data, version);
+  const fronts = ms.machines.reduce((n, m) => n + m.fronts.length, 0);
 
   return (
     <Layout title={`Fronts — ${version}`} path={props.path}>
       <div class="doc-layout">
-        <div class="markdown">
+        <div>
           <h1>
-            Fronts — {version}
-            {frozen ? <span class="frozen"> · frozen milestone</span> : null}
+            {version} <span class={ms.current ? "pill current" : "pill frozen-pill"}>{ms.current ? "current" : "frozen"}</span>
           </h1>
           <p class="muted">
-            Other milestones:{" "}
-            {[...data.tree.versions].reverse().map((v, i) => (
-              <>
-                {i ? " · " : ""}
-                {v === version ? <strong>{v}</strong> : <a href={`/fronts?version=${v}`}>{v}</a>}
-              </>
-            ))}
+            {plural(fronts, "front")} · {plural(ms.count, "document")}
+            {ms.machines.some((m) => m.name) ? ` · ${plural(ms.machines.filter((m) => m.name).length, "machine")}` : ""}
           </p>
-          {top.length ? (
-            <>
-              <h2 id="milestone">The milestone</h2>
-              <DocList docs={top} dir={version} />
-            </>
-          ) : null}
-          {machines.map((m) => (
+          <nav class="versions" aria-label="Milestones">
+            {[...data.tree.versions].reverse().map((v) =>
+              v === version ? <span class="on">{v}</span> : <a href={frontsHref(data, v)}>{v}</a>,
+            )}
+          </nav>
+          {ms.docs.length ? (
             <section>
-              <h2 id={id(m.name || "fronts")}>
-                {m.readme ? <a href={`/docs/${m.readme.ref}`}>{m.name}</a> : m.name || "Fronts"}
-                {m.readme ? <span class="muted"> — {m.readme.title}</span> : null}
+              <h2 id="milestone">
+                <a class="anchor" href="#milestone">
+                  The milestone
+                </a>
               </h2>
-              <DocList docs={m.docs} dir={m.name} />
-              {[...m.fronts.values()]
-                .sort((a, b) => byNumber(a.dir, b.dir))
-                .map((f) => (
-                  <section>
-                    <h3 id={id(m.name, f.dir)}>
-                      {f.readme ? <a href={`/docs/${f.readme.ref}`}>{f.dir}</a> : f.dir}
-                      {f.readme ? <span class="muted"> — {f.readme.title}</span> : null}
-                    </h3>
-                    <DocList docs={f.docs} dir={f.dir} />
-                    {[...f.parts.values()]
-                      .sort((a, b) => byNumber(a.dir, b.dir))
-                      .map((p) => (
-                        <>
-                          <h4 id={id(m.name, f.dir, p.dir)}>
-                            {p.dir}
-                            {p.title ? <span class="muted"> — {p.title}</span> : null}
-                          </h4>
-                          <DocList docs={p.docs} dir={p.dir} />
-                        </>
-                      ))}
-                  </section>
-                ))}
+              <DocRows docs={ms.docs} dir={version} />
             </section>
+          ) : null}
+          {ms.machines.map((m) => (
+            <MachineSection machine={m} version={version} />
           ))}
         </div>
         <aside>
           <strong>Sections</strong>
           <ul>
-            {top.length ? (
+            {ms.docs.length ? (
               <li>
                 <a href="#milestone">The milestone</a>
               </li>
             ) : null}
-            {machines.map((m) => (
+            {ms.machines.map((m) => (
               <>
                 <li>
-                  <a href={`#${id(m.name || "fronts")}`}>{m.name || "Fronts"}</a>
+                  <a href={`#${m.anchor}`}>{m.name || "Fronts"}</a>
                 </li>
-                {[...m.fronts.values()]
-                  .sort((a, b) => byNumber(a.dir, b.dir))
-                  .map((f) => (
-                    <li class="l3">
-                      <a href={`#${id(m.name, f.dir)}`}>{f.dir}</a>
-                    </li>
-                  ))}
+                {m.fronts.map((f) => (
+                  <li class="l3">
+                    <a href={`#${f.anchor}`}>
+                      <span class="inum">{f.num}</span> {f.slug}
+                    </a>
+                  </li>
+                ))}
               </>
             ))}
           </ul>
