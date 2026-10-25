@@ -38,7 +38,7 @@ Intro.
 
 ### s1 · The \`bpp\` router (B-12)
 
-Text with a [link](../README.md).
+Text with a [link](../README.md) and \`xs[i](9)\` in code.
 
 \`\`\`md
 ## not a heading

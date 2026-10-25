@@ -58,7 +58,7 @@ export function parseDoc(path: string, text: string): Doc {
     title: h1?.heading ?? docMeta(path).name,
     lines,
     sections,
-    links: linksOf(text),
+    links: linksOf(lines),
   };
 }
 
@@ -102,9 +102,21 @@ function uniqueAnchor(base: string, used: Map<string, number>): string {
   return n === 0 ? base : `${base}-${n}`;
 }
 
-function linksOf(text: string): string[] {
+/** Link targets outside fenced blocks and inline code: `xs[i](n)` in code is no link. */
+function linksOf(lines: string[]): string[] {
   const out = new Set<string>();
-  for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) out.add(m[1]!);
+  let fence: string | undefined;
+  for (const line of lines) {
+    const f = line.match(FENCE);
+    if (f) {
+      if (!fence) fence = f[1]![0]!.repeat(f[1]!.length);
+      else if (line.trimStart().startsWith(fence)) fence = undefined;
+      continue;
+    }
+    if (fence) continue;
+    const prose = line.replace(/(`+)[^`]*?\1/g, "");
+    for (const m of prose.matchAll(/\]\(([^)\s]+)\)/g)) out.add(m[1]!);
+  }
   return [...out];
 }
 
