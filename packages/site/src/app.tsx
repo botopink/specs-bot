@@ -5,10 +5,13 @@ import { CSS } from "./css.ts";
 import { type Loaded, loadSiteData } from "./data.ts";
 import type { LinkContext } from "./markdown.ts";
 import type { StatusFn } from "./status.ts";
+import { protectHtml } from "./translate.ts";
 import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, SubjectsPage } from "./views/decisions.tsx";
 import { frontsHref, sectionOfFolder } from "./hierarchy.ts";
 import { DocPage, renderDoc } from "./views/docs.tsx";
 import { FrontsPage } from "./views/fronts.tsx";
+import { buildProgress, type FrontProgress } from "./progress.ts";
+import { FrontProgressPage, frontNodes } from "./views/progress.tsx";
 import { Home } from "./views/home.tsx";
 import { NotFound, Unavailable } from "./views/layout.tsx";
 import { StepPage, StepsPage } from "./views/steps.tsx";
@@ -32,6 +35,14 @@ export function createSite(opts: SiteOptions) {
     c.header("Content-Type", "text/css; charset=utf-8");
     c.header("Cache-Control", "public, max-age=300");
     return c.body(CSS);
+  });
+
+  // Every page leaves code, identifiers and labels to the browser's translator untouched (translate.ts).
+  site.use("*", async (c, next) => {
+    await next();
+    if (!c.res.headers.get("content-type")?.startsWith("text/html")) return;
+    const html = protectHtml(await c.res.text());
+    c.res = new Response(html, { status: c.res.status, headers: c.res.headers });
   });
 
   site.get("/", async (c) => c.html(<Home data={data} status={await opts.status()} version={opts.version} />));
@@ -99,10 +110,28 @@ export function createSite(opts: SiteOptions) {
 
   site.get("/retired", (c) => c.html(<RetiredPage data={data} q={(c.req.query("q") ?? "").trim()} ctx={plain} path={c.req.path} />));
 
+  // A front's progress is gathered once per milestone (the site is rebuilt over the model after every write).
+  const progressCache = new Map<string, Map<number, FrontProgress>>();
+  const progressOf = (version: string) => {
+    let p = progressCache.get(version);
+    if (!p) progressCache.set(version, (p = buildProgress(data, version)));
+    return p;
+  };
+  const versionOf = (asked: string | undefined) => (asked && data.tree.versions.includes(asked) ? asked : data.tree.current);
+
   site.get("/fronts", (c) => {
-    const asked = c.req.query("version");
-    const version = asked && data.tree.versions.includes(asked) ? asked : data.tree.current;
-    return c.html(<FrontsPage data={data} version={version} path={c.req.path} />);
+    const version = versionOf(c.req.query("version"));
+    return c.html(<FrontsPage data={data} version={version} path={c.req.path} progress={progressOf(version)} />);
+  });
+
+  site.get("/fronts/:num", (c) => {
+    const version = versionOf(c.req.query("version"));
+    const num = /^\d+$/.test(c.req.param("num")) ? Number(c.req.param("num")) : Number.NaN;
+    const p = progressOf(version).get(num);
+    if (!p || !frontNodes(data, version, num).length) {
+      return c.html(<NotFound path={c.req.path} what={`No front ${c.req.param("num")} in ${version}.`} back={frontsHref(data, version)} backLabel="All fronts" />, 404);
+    }
+    return c.html(<FrontProgressPage data={data} p={p} path={c.req.path} ctx={plain} />);
   });
 
   // The documents are listed where they sit, in the Fronts page's sections; /docs stays a way in.
@@ -132,7 +161,8 @@ export function createSite(opts: SiteOptions) {
     if (doc.ref !== ref) return c.redirect(`/docs/${doc.ref}`);
     let html = rendered.get(doc.ref);
     if (html === undefined) rendered.set(doc.ref, (html = renderDoc(doc, { refs, from: doc.ref })));
-    return c.html(<DocPage data={data} doc={doc} html={html} path={c.req.path} />);
+    const progress = doc.front ? progressOf(doc.version).get(doc.front.num) : undefined;
+    return c.html(<DocPage data={data} doc={doc} html={html} path={c.req.path} progress={progress} ctx={plain} />);
   });
 
   return site;

@@ -11,7 +11,69 @@ const NAV: [string, string][] = [
   ["/retired", "Retired"],
 ];
 
-export function Layout(props: { title: string; path: string; prose?: boolean; children?: Child }) {
+/**
+ * EN | PT. PT sets Google's `googtrans` cookie and loads its website translator (English → Portuguese only); the
+ * choice is remembered in localStorage. EN clears the cookie and reloads the page as written. When the script
+ * cannot load (offline, blocked) PT is shown unavailable and the page stays in English.
+ */
+export const LANG_SCRIPT = `(function () {
+  var KEY = "specs-bot-lang";
+  var group = document.querySelector(".lang");
+  if (!group) return;
+  var en = group.querySelector('[data-lang="en"]');
+  var pt = group.querySelector('[data-lang="pt"]');
+  function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function store(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+  function cookie(on) {
+    var value = on ? "/en/pt" : "";
+    var tail = on ? "" : "; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    try {
+      document.cookie = "googtrans=" + value + "; path=/" + tail;
+      document.cookie = "googtrans=" + value + "; path=/; domain=" + location.hostname + tail;
+    } catch (e) {}
+  }
+  function show(lang) {
+    document.documentElement.setAttribute("data-lang", lang);
+    en.setAttribute("aria-pressed", String(lang === "en"));
+    pt.setAttribute("aria-pressed", String(lang === "pt"));
+  }
+  function unavailable() {
+    pt.disabled = true;
+    pt.title = "Google Translate could not load (offline or blocked): the page stays in English";
+    show("en");
+  }
+  var loading = false;
+  function load() {
+    if (loading) return;
+    loading = true;
+    window.specsBotTranslate = function () {
+      try {
+        new google.translate.TranslateElement({ pageLanguage: "en", includedLanguages: "pt", autoDisplay: false }, "gt-el");
+      } catch (e) { unavailable(); }
+    };
+    var s = document.createElement("script");
+    s.src = "https://translate.google.com/translate_a/element.js?cb=specsBotTranslate";
+    s.async = true;
+    s.onerror = unavailable;
+    document.head.appendChild(s);
+    setTimeout(function () { if (!(window.google && google.translate)) unavailable(); }, 8000);
+  }
+  en.addEventListener("click", function () {
+    store("en");
+    cookie(false);
+    if (document.documentElement.getAttribute("data-lang") === "pt") location.reload();
+  });
+  pt.addEventListener("click", function () {
+    if (pt.disabled) return;
+    store("pt");
+    cookie(true);
+    show("pt");
+    load();
+  });
+  if (stored() === "pt") { cookie(true); show("pt"); load(); } else { show("en"); }
+})();`;
+
+export function Layout(props:{ title: string; path: string; prose?: boolean; children?: Child }) {
   // A document page belongs to the Fronts section, where it is listed.
   const first = props.path.split("/")[1] ?? "";
   const section = first === "docs" ? "/fronts" : `/${first}`;
@@ -34,10 +96,20 @@ export function Layout(props: { title: string; path: string; prose?: boolean; ch
                 </a>
               ))}
             </nav>
+            <div class="lang notranslate" translate="no" role="group" aria-label="Language">
+              <button type="button" data-lang="en" aria-pressed="true" title="The specs as written (English)">
+                EN
+              </button>
+              <button type="button" data-lang="pt" aria-pressed="false" title="Portuguese, translated in the browser by Google Translate; code and identifiers stay as written">
+                PT
+              </button>
+            </div>
           </div>
         </header>
+        <div id="gt-el" hidden />
         <main class={props.prose ? "prose" : ""}>{props.children}</main>
         <footer>Read-only view of the botopink specs. Agents write through the specs-bot CLI.</footer>
+        <script dangerouslySetInnerHTML={{ __html: LANG_SCRIPT }} />
       </body>
     </html>
   );
