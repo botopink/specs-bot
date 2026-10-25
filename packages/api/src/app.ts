@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { identify, type Vars } from "./auth.ts";
 import type { ServerConfig } from "./config.ts";
 import { dataState } from "./data.ts";
+import { EventBus } from "./events.ts";
 import { readRoutes } from "./routes.ts";
 
 export const VERSION = "0.0.1";
@@ -10,9 +11,12 @@ export const VERSION = "0.0.1";
 export interface AppOptions {
   /** Build the search index right after startup instead of on the first search (about a second on real data). */
   warm?: boolean;
+  /** Where writes publish their events; the websocket relays them. One is made when absent. */
+  bus?: EventBus;
 }
 
 export function createApp(config: ServerConfig, opts: AppOptions = {}) {
+  const bus = opts.bus ?? new EventBus();
   const app = new Hono();
   const api = new Hono<{ Variables: Vars }>();
   // One read model for the api and the site, loaded once (PLAN.md § 2).
@@ -37,5 +41,5 @@ export function createApp(config: ServerConfig, opts: AppOptions = {}) {
 
   // The read-only site: "/" and its pages; its overview shows the data status.
   app.route("/", createSite({ dataPath: config.dataPath, status: () => dataState(config.dataPath), version: VERSION, loaded }));
-  return app;
+  return Object.assign(app, { bus });
 }
