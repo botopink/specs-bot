@@ -289,7 +289,7 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [x] CLI `specs-bot` (TS, commander): config do `.env`/`.env.local` do `projects` subindo diretórios; toon/json/text; binário único com `bun build --compile`
 - [x] Medido: `step 814` = 1,5 KB contra 1,2 MB do arquivo de steps; TOON 7–40% menor que JSON (mais em listas)
 - [x] **Saída**: "o que diz a 814 e quem a supera" = `specs-bot step 814`; "o que bloqueia a máquina 1" = `specs-bot pending --section "machine 1"`
-- [ ] Instalar o binário nas máquinas + `.env` no `projects` (depende da fase 4)
+- [x] Binário instalado no host; `.env` no `projects`; a machine-2 compilou o seu
 
 ### Fase 3 — Escrita
 - [x] Motor: plano de mudança (texto esperado antes/depois), diff LCS, regras do `land-check` (hash de commit, scratch), etags; `Writer` com fila, recusa se o arquivo mudou, gravação atômica, desfaz se o `check` ganhar erro, 1 commit por operação (autor = máquina, trailers `Op`/`Party`/`Landed`)
@@ -302,13 +302,16 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [ ] `status.md` do `conversation-chat` (gerado por `scripts/status.sh`) — gerar pelo specs-bot
 
 ### Fase 4 — Migração e isolamento
-- [ ] `specs-data`: deploy key de escrita só no host + ruleset na `main` bloqueando os demais
-- [ ] Host: escolher a máquina; usuário `specs-bot`, unit systemd (sobe no boot, reinicia sozinho), backup/push do `specs-data`
-- [ ] Rede: API só na interface privada (LAN/Tailscale), TLS se sair da LAN; `specs-bot ping` em cada máquina
-- [ ] `export ledgers`; adaptar `gate.sh`/CI; tirar a parte de specs do `land-check.py`
-- [ ] `.env` no `projects` com `SPECS_BOT_API_URL`; `.env.local` no `.gitignore`; token de cada máquina no seu `.env.local`
-- [ ] Atualizar `AGENTS.md`; `deny` no `.claude/settings.json`
-- [ ] Corte (seção 6.3); uma semana com os dois lados lado a lado, `specs/` somente leitura
+- [x] **Corte feito (2026-10-25)**: `feat` do `projects` em `700099f0` — `specs/` e `repository/conversation-chat` removidos; `specs-data` conferido idêntico byte a byte antes; gate com os 7 checks verdes e CI verde no commit do corte; aviso às máquinas por `specs-bot send` (mt-0057)
+- [x] `export ledger` / `export language-gaps` (API + CLI); `decisions-split.py` lê de `$SPECS_ROOT`, `specs/` local ou `specs-bot export` (mesma saída nos três); `language-gap-markers.sh` → `.py` (mesma saída; marcadores dos exemplos de spec contados pelo `check` do specs-bot); `scratch-refs.py` sem `specs/` não faz nada; CI faz checkout do `specs-data`
+- [x] `.env` no `projects` com `SPECS_BOT_API_URL`; `.env.local` no `.gitignore`; tokens de maintainer e machine-2
+- [x] `AGENTS.md` com § Specs — through specs-bot; `.claude/settings.json` libera `specs-bot`, bloqueia clonar/ler o `specs-data`
+- [x] `conversation-chat` arquivado no GitHub (README aponta para o `specs-data`)
+- [x] Push do `specs-data` depois de cada escrita (fila em segundo plano, estado no `/api/health`) — hoje com a chave SSH do usuário do host
+- [ ] **Deploy key** de escrita só do host + ruleset na `main` do `specs-data` bloqueando os demais — bloqueado: a org `botopink` está com deploy keys desativadas (o mantenedor liga em Settings → Member privileges)
+- [ ] **Usuário de SO `specs-bot`** dono do `specs-data`, serviço do sistema (precisa de `sudo` do mantenedor)
+- [ ] Rede: TLS se a API sair da LAN
+- [ ] Ledgers: o `HEADER` gerado ainda diz "Generated from botopink/projects · specs/…" — trocar exige regenerar os 14 ledgers dos repositórios
 
 ### Fase 5 — Site e extras
 - [ ] UI do mantenedor: busca, pendentes, review, status, chat, histórico com vínculos `Landed`
