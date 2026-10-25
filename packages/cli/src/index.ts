@@ -4,6 +4,7 @@ import { Command, Option } from "commander";
 import { ApiError, get, type Query } from "./client.ts";
 import { type ClientConfig, loadClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
+import { registerRealtime } from "./watch.ts";
 
 const program = new Command()
   .name("specs-bot")
@@ -130,6 +131,9 @@ program
   .description("the conventions' rules over the whole repository")
   .option("--severity <s>", "error | warning")
   .action((o) => read("check", () => ({ severity: o.severity }))());
+
+// Real-time: watch, online (PLAN.md § 5.6).
+registerRealtime(program, config);
 
 program.parseAsync().catch((e: unknown) => {
   if (e instanceof ApiError) {
