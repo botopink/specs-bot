@@ -7,7 +7,12 @@ import { readRoutes } from "./routes.ts";
 
 export const VERSION = "0.0.1";
 
-export function createApp(config: ServerConfig) {
+export interface AppOptions {
+  /** Build the search index right after startup instead of on the first search (about a second on real data). */
+  warm?: boolean;
+}
+
+export function createApp(config: ServerConfig, opts: AppOptions = {}) {
   const app = new Hono();
   const api = new Hono<{ Variables: Vars }>();
   // One read model for the api and the site, loaded once (PLAN.md § 2).
@@ -21,7 +26,10 @@ export function createApp(config: ServerConfig) {
     return c.json({ service: "specs-bot", version: VERSION, data }, data.ok ? 200 : 503);
   });
 
-  if (loaded.ok) api.route("/", readRoutes(loaded.data));
+  if (loaded.ok) {
+    api.route("/", readRoutes(loaded.data));
+    if (opts.warm) setTimeout(() => void loaded.data.index, 0);
+  }
   else api.all("*", (c) => c.json({ error: "the specs could not be read", hint: "see the server's log" }, 503));
 
   app.route("/api", api);
