@@ -58,6 +58,8 @@ export function loadClientConfig(cwd: string, env: Record<string, string | undef
     api: api.replace(/\/+$/, ""),
     ...(token ? { token } : {}),
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 10000,
-    source: env.SPECS_BOT_API_URL ? "environment" : join(root!, ".env"),
+    // Bun loads the working directory's .env into the environment by itself, so a value equal to the file's
+    // came from the file.
+    source: env.SPECS_BOT_API_URL && env.SPECS_BOT_API_URL !== file.SPECS_BOT_API_URL ? "environment" : join(root!, ".env"),
   };
 }
