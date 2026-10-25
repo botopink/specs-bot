@@ -5,3 +5,4 @@ export const SPECS_DIR = "specs";
 
 export * from "./md/table.ts";
 export * from "./decisions/steps.ts";
+export * from "./decisions/pending.ts";
