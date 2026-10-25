@@ -74,7 +74,8 @@ describe("statedNextFree", () => {
 // Against the real record when the data repository is on this machine (SPECS_DATA_PATH, as the server reads it).
 const real = join(process.env.SPECS_DATA_PATH ?? "", "specs/decisions-taken-steps.md");
 
-describe.skipIf(!process.env.SPECS_DATA_PATH || !existsSync(real))("the real decisions-taken-steps.md", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!process.env.SPECS_DATA_PATH || !existsSync(real))) describe("the real decisions-taken-steps.md", () => {
   const text = readFileSync(real, "utf8");
   const doc = parseSteps(text);
 

@@ -1,0 +1,11 @@
+{
+  "name": "@specs-bot/site",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@specs-bot/core": "workspace:*",
+    "hono": "4.10.4",
+    "marked": "15.0.12"
+  }
+}

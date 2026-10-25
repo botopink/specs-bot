@@ -84,7 +84,8 @@ const en = join(root, "specs/decisions-pending.md");
 const pt = join(root, "specs/decisoes-pendentes.md");
 const steps = join(root, "specs/decisions-taken-steps.md");
 
-describe.skipIf(!root || !existsSync(en))("the real pending files", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(en))) describe("the real pending files", () => {
   const enText = readFileSync(en, "utf8");
   const enDoc = parsePending(enText);
   const stepsDoc = parseSteps(readFileSync(steps, "utf8"));

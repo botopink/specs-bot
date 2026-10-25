@@ -115,7 +115,8 @@ describe("check", () => {
 
 const root = process.env.SPECS_DATA_PATH ?? "";
 
-describe.skipIf(!root || !existsSync(root))("check over the real repository", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(root))) describe("check over the real repository", () => {
   const findings = check(loadStore(root));
 
   test("finds no error", () => {

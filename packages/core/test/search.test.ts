@@ -91,7 +91,8 @@ describe("snippet", () => {
 
 const root = process.env.SPECS_DATA_PATH ?? "";
 
-describe.skipIf(!root || !existsSync(root))("search over the real repository", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(root))) describe("search over the real repository", () => {
   const start = performance.now();
   const index = buildIndex(loadStore(root));
   const ms = performance.now() - start;

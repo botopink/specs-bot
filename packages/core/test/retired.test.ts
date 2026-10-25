@@ -41,7 +41,8 @@ describe("stepNumbers", () => {
 const root = process.env.SPECS_DATA_PATH ?? "";
 const file = join(root, "specs/retired.md");
 
-describe.skipIf(!root || !existsSync(file))("the real retired.md", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(file))) describe("the real retired.md", () => {
   const text = readFileSync(file, "utf8");
   const doc = parseRetired(text);
 

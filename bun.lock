@@ -13,6 +13,7 @@
       "name": "@specs-bot/api",
       "dependencies": {
         "@specs-bot/core": "workspace:*",
+        "@specs-bot/site": "workspace:*",
         "hono": "4.10.4",
       },
     },
@@ -31,6 +32,14 @@
         "minisearch": "7.1.2",
       },
     },
+    "packages/site": {
+      "name": "@specs-bot/site",
+      "dependencies": {
+        "@specs-bot/core": "workspace:*",
+        "hono": "4.10.4",
+        "marked": "15.0.12",
+      },
+    },
   },
   "packages": {
     "@specs-bot/api": ["@specs-bot/api@workspace:packages/api"],
@@ -39,6 +48,8 @@
 
     "@specs-bot/core": ["@specs-bot/core@workspace:packages/core"],
 
+    "@specs-bot/site": ["@specs-bot/site@workspace:packages/site"],
+
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
     "@types/node": ["@types/node@26.6.5", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg=="],
@@ -46,6 +57,8 @@
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
     "hono": ["hono@4.10.4", "", {}, "sha512-YG/fo7zlU3KwrBL5vDpWKisLYiM+nVstBQqfr7gCPbSYURnNEP9BDxEMz8KfsDR9JX0lJWDRNc6nXX31v7ZEyg=="],
+
+    "marked": ["marked@15.0.12", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA=="],
 
     "minisearch": ["minisearch@7.1.2", "", {}, "sha512-R1Pd9eF+MD5JYDDSPAp/q1ougKglm14uEkPMvQ/05RGmx6G9wvmLTrTI/Q5iPNJLYqNdsDQ7qTGIcNWR+FrHmA=="],
 

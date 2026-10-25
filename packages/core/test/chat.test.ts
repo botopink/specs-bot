@@ -86,7 +86,8 @@ describe("unreadBy", () => {
 const root = process.env.SPECS_DATA_PATH ?? "";
 const chat = join(root, "conversation-chat");
 
-describe.skipIf(!root || !existsSync(chat))("the real conversation", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(chat))) describe("the real conversation", () => {
   const messages = loadChat(chat);
 
   test("reads every message", () => {

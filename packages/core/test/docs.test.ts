@@ -103,7 +103,8 @@ describe("compareVersions", () => {
 const root = process.env.SPECS_DATA_PATH ?? "";
 const specs = join(root, "specs");
 
-describe.skipIf(!root || !existsSync(specs))("the real milestone tree", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(specs))) describe("the real milestone tree", () => {
   const tree = loadDocs(specs);
 
   test("reads every milestone document, 1.0.12-beta current", () => {

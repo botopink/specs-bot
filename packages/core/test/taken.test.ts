@@ -73,7 +73,8 @@ describe("parseNumberList", () => {
 const root = process.env.SPECS_DATA_PATH ?? "";
 const taken = join(root, "specs/decisions-taken.md");
 
-describe.skipIf(!root || !existsSync(taken))("the real decisions-taken.md", () => {
+// Only declared when the real data is here: a skipped describe still runs its body to collect tests.
+if (!(!root || !existsSync(taken))) describe("the real decisions-taken.md", () => {
   const text = readFileSync(taken, "utf8");
   const doc = parseTaken(text);
   const steps = parseSteps(readFileSync(join(root, "specs/decisions-taken-steps.md"), "utf8"));
