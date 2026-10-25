@@ -3,6 +3,12 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
-  "dependencies": { "@specs-bot/core": "workspace:*" },
-  "bin": { "specs-bot": "src/index.ts" }
+  "dependencies": {
+    "@specs-bot/core": "workspace:*",
+    "@toon-format/toon": "4.4.0",
+    "commander": "15.0.0"
+  },
+  "bin": {
+    "specs-bot": "src/index.ts"
+  }
 }
