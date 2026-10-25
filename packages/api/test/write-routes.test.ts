@@ -94,3 +94,31 @@ describe("POST /api/write/<op>", () => {
     expect((await call("POST", "/api/write/doc.append", { ref: "1.0.12-beta/status" })).body.error).toBe("section is required (a string)");
   });
 });
+
+describe("decision and chat writes over HTTP", () => {
+  const FIELDS = { Measured: "Built.", Options: "(a); (b).", Recommendation: "(a).", Blocks: "Nothing." };
+
+  test("open a question, answer it: the row, the number, the review mark", async () => {
+    const opened = await call("POST", "/api/write/pending.add", { id: "q-9", section: "Machine 1", title: "Narrow?", fields: FIELDS, apply: true });
+    expect(opened.body.applied).toBe(true);
+    const read = await call("GET", "/api/pending/q-9");
+    expect(read.body.etag).toHaveLength(12);
+    const answered = await call("POST", "/api/write/answer", { id: "q-9", rule: "**It narrows.**", binds: "x", apply: true });
+    expect(answered.body.refs).toEqual(["step 2", "pending q-9"]);
+    expect((await call("GET", "/api/next")).body).toMatchObject({ nextFree: 3, agree: true });
+    expect((await call("GET", "/api/steps/2")).body).toMatchObject({ id: expect.stringContaining("q-9 · (the coordinator †"), rule: "**It narrows.**" });
+    expect((await call("GET", "/api/pending/q-9")).body.hint).toBe("answered by step 2");
+  });
+
+  test("a message is filed and heard as a chat event", async () => {
+    const sent = await call("POST", "/api/write/chat.send", { to: "maintainer", purpose: "report", subject: "Landed the thing", text: "Done.", apply: true });
+    expect(sent.body.applied).toBe(true);
+    expect(events.map((e) => e.type)).toEqual(["write", "chat"]);
+    expect(events[1]).toMatchObject({ type: "chat", from: "machine-2", to: "maintainer", subject: "Landed the thing" });
+    expect((await call("GET", "/api/chat?to=maintainer")).body.messages[0]).toMatchObject({ from: "machine-2", subject: "Landed the thing" });
+  });
+
+  test("the maintainer's review is refused to a machine", async () => {
+    expect((await call("POST", "/api/write/review", { num: 1, apply: true })).status).toBe(403);
+  });
+});

@@ -26,6 +26,7 @@ export interface ApplyResult {
   commit?: string;
   /** The model over the data as it is after the write (absent on a dry run). */
   model?: Model;
+  chat?: Plan["chat"];
 }
 
 const key = (f: Finding) => `${f.code}\u0000${f.about}\u0000${f.message}`;
@@ -61,7 +62,7 @@ export class Writer {
 
     const files = plan.changes.map((c) => c.path);
     const diff = plan.changes.map((c) => unifiedDiff(c.path, c.before, c.after)).filter(Boolean).join("\n");
-    const base = { op: plan.op, refs: plan.refs, summary: plan.summary, files, diff };
+    const base = { op: plan.op, refs: plan.refs, summary: plan.summary, files, diff, ...(plan.chat ? { chat: plan.chat } : {}) };
     if (opts.dryRun) return base;
 
     const written: { abs: string; before: string | null }[] = [];

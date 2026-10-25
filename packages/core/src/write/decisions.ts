@@ -32,16 +32,28 @@ function today(at = new Date()): string {
   return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}`;
 }
 
-/** A section of the pending page by its heading: exact, else the one heading that contains the words. */
+/**
+ * A section of the pending page by its heading: exact; else the one whose name (before " — ") is the words;
+ * else the one heading that contains them. "machine 1" is "Machine 1 — maximum priority …", not
+ * "Blocking now — machine 1 and front 165".
+ */
 function pendingSection(model: Model, name: string): PendingSection {
   const sections = model.pending.sections.filter((s) => !s.heading.startsWith("To review"));
-  const exact = sections.find((s) => s.heading === name);
-  if (exact) return exact;
-  const words = name.toLowerCase();
-  const found = sections.filter((s) => s.heading.toLowerCase().includes(words));
-  if (found.length === 1) return found[0]!;
-  const list = sections.map((s) => s.heading.split(" — ")[0]).join(" · ");
-  throw new WriteError("invalid", found.length ? `"${name}" names ${found.length} sections` : `no pending section "${name}"`, `one of: ${list}`);
+  const words = name.trim().toLowerCase();
+  const tiers = [
+    (s: PendingSection) => s.heading === name,
+    (s: PendingSection) => s.heading.split(" — ")[0]!.toLowerCase() === words,
+    (s: PendingSection) => s.heading.toLowerCase().startsWith(words),
+    (s: PendingSection) => s.heading.toLowerCase().includes(words),
+  ];
+  for (const tier of tiers) {
+    const found = sections.filter(tier);
+    if (found.length === 1) return found[0]!;
+    if (found.length > 1) {
+      throw new WriteError("invalid", `"${name}" names ${found.length} sections`, `one of: ${found.map((s) => s.heading).join(" · ")}`);
+    }
+  }
+  throw new WriteError("invalid", `no pending section "${name}"`, `one of: ${sections.map((s) => s.heading.split(" — ")[0]).join(" · ")}`);
 }
 
 function entryFor(model: Model, id: string): PendingEntry {

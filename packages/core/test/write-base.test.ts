@@ -59,3 +59,16 @@ test("an etag is a short stable hash", () => {
   expect(etagOf("abc")).not.toBe(etagOf("abd"));
   expect(etagOf("abc")).toHaveLength(12);
 });
+
+describe("two far changes", () => {
+  const before = ["head 5", ...Array.from({ length: 40 }, (_, i) => `row ${i} 1a2b3c4d`), "last"].join("\n");
+  const after = before.replace("head 5", "head 6").replace("\nlast", "\nnew row\nlast");
+
+  test("add only their own lines", () => {
+    expect(addedLines(before, after)).toEqual(["head 6", "new row"]);
+  });
+
+  test("show two hunks", () => {
+    expect(unifiedDiff("f", before, after, 1).match(/^@@/gm)).toHaveLength(2);
+  });
+});

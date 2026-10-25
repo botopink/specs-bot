@@ -1,5 +1,5 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, etagOf, type Kind, type Model, sectionEtag, sectionText, summarize } from "@specs-bot/core";
+import { check, etagOf, type Kind, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./auth.ts";
 
@@ -125,7 +125,8 @@ export function readRoutes(current: () => Model) {
       const step = model.answeredBy.get(id);
       return c.json(notFound(`pending ${id}`, step ? `answered by step ${step}` : "GET /api/pending lists the open ones"), 404);
     }
-    return c.json({ id: e.id, title: e.title, section: e.section, fields: e.fields });
+    // The etag goes back with `specs-bot pending-edit`, so a stale edit is refused.
+    return c.json({ id: e.id, title: e.title, section: e.section, etag: pendingEtag(e), fields: e.fields });
   });
 
   api.get("/review", (c) => {

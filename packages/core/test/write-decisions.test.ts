@@ -140,7 +140,14 @@ describe("pendingAdd", () => {
     expect(refused(() => pendingAdd(model(), { id: "q-9", section: "Machine 2", title: "T", fields: FIELDS })).message).toContain("already open");
     expect(refused(() => pendingAdd(model(), { id: "q-10", section: "Machine 2", title: "T", fields: { Measured: "x" } })).message).toContain("missing: Options");
     expect(refused(() => pendingAdd(model(), { id: "q-10", section: "Machine", title: "T", fields: FIELDS })).message).toContain("names 2 sections");
+    expect(refused(() => pendingAdd(model(), { id: "q-10", section: "Machine 7", title: "T", fields: FIELDS })).message).toContain("no pending section");
   });
+});
+
+test("a section is found by its name before a heading that only mentions it", () => {
+  const pending = PENDING.replace("## Machine 2", "## Blocking now — machine 1 and front 165\n\nNone open.\n\n## Machine 2");
+  const p = pendingAdd(model({ pending }), { id: "q-10", section: "machine 1", title: "T", fields: FIELDS });
+  expect(p.summary).toBe("open question q-10 in § Machine 1");
 });
 
 describe("pendingEdit and pendingWithdraw", () => {

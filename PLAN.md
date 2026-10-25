@@ -292,10 +292,14 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [ ] Instalar o binário nas máquinas + `.env` no `projects` (depende da fase 4)
 
 ### Fase 3 — Escrita
-- [ ] Na ordem de uso real: `doc edit/append` (status, READMEs) → `pending add/edit/withdraw` → `answer` → `supersede`, `retired add`, `review` → `chat send/read`
-- [ ] ETag/409, fila de escrita, commit por operação, `--landed`
-- [ ] Testes: snapshot do diff por operação + `check` verde
-- [ ] Ensaio: refazer 10 commits reais (incluindo 956/956-a) e comparar
+- [x] Motor: plano de mudança (texto esperado antes/depois), diff LCS, regras do `land-check` (hash de commit, scratch), etags; `Writer` com fila, recusa se o arquivo mudou, gravação atômica, desfaz se o `check` ganhar erro, 1 commit por operação (autor = máquina, trailers `Op`/`Party`/`Landed`)
+- [x] Documentos: `edit` (com etag), `append`, `add-section`, `new-doc`
+- [x] Decisões: `pending-add/edit/withdraw`, `answer` (próximo número nos dois arquivos, pergunta sai, decisão de máquina vai para "To review", `--subject`), `supersede`, `reviewed` (só o mantenedor), `retire`
+- [x] Conversa: `send` (arquivo pela convenção do `conversation-chat`, id por autor), `mark-read`
+- [x] API `POST /api/write/<op>` (token obrigatório, dry-run por padrão, troca o modelo da API e do site, publica `write`/`chat` no WebSocket)
+- [x] Ensaio sobre clone real: 956-b aberta e respondida como 957, mensagem enviada; `check` sem erro novo; achou 2 bugs (seção ambígua, diff de duas regiões) — corrigidos
+- [ ] Atualizar o índice de busca de forma incremental (hoje reconstrói ~1 s depois de cada escrita, em segundo plano)
+- [ ] `status.md` do `conversation-chat` (gerado por `scripts/status.sh`) — gerar pelo specs-bot
 
 ### Fase 4 — Migração e isolamento
 - [ ] `specs-data`: deploy key de escrita só no host + ruleset na `main` bloqueando os demais

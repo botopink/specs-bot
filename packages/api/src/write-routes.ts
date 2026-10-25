@@ -3,7 +3,16 @@
 // a `write` event for the machines (§ 5.6).
 import {
   addSection,
+  answer,
   appendToSection,
+  chatRead,
+  chatSend,
+  markReviewed,
+  pendingAdd,
+  pendingEdit,
+  pendingWithdraw,
+  retiredAdd,
+  supersede,
   type ApplyResult,
   type Model,
   newDoc,
@@ -25,8 +34,25 @@ const str = (b: Body, k: string, required = true): string => {
   throw new WriteError("invalid", `${k} is required (a string)`);
 };
 
-/** op → the plan it makes from the request body. */
-const OPS: Record<string, (m: Model, b: Body) => Plan> = {
+const num = (b: Body, k: string): number => {
+  const v = typeof b[k] === "string" ? Number(b[k]) : b[k];
+  if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+  throw new WriteError("invalid", `${k} is required (a decision number)`);
+};
+
+const fieldsOf = (b: Body): Record<string, string> => {
+  const f = b.fields;
+  if (f === undefined) return {};
+  if (typeof f !== "object" || f === null || Object.values(f).some((v) => typeof v !== "string")) {
+    throw new WriteError("invalid", "fields is an object of strings: { Measured, Options, Recommendation, Blocks }");
+  }
+  return f as Record<string, string>;
+};
+
+const opt = (b: Body, k: string) => (typeof b[k] === "string" ? { [k]: b[k] as string } : {});
+
+/** op → the plan it makes from the request body and the party writing. */
+const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
   "doc.replace": (m, b) => replaceSection(m, { ref: str(b, "ref"), anchor: str(b, "section"), text: str(b, "text"), etag: str(b, "etag") }),
   "doc.append": (m, b) => appendToSection(m, { ref: str(b, "ref"), anchor: str(b, "section"), text: str(b, "text") }),
   "doc.add-section": (m, b) =>
@@ -38,6 +64,35 @@ const OPS: Record<string, (m: Model, b: Body) => Plan> = {
       ...(typeof b.level === "number" ? { level: b.level } : {}),
     }),
   "doc.new": (m, b) => newDoc(m, { ref: str(b, "ref"), text: str(b, "text") }),
+  "pending.add": (m, b) => pendingAdd(m, { id: str(b, "id"), section: str(b, "section"), title: str(b, "title"), fields: fieldsOf(b) }),
+  "pending.edit": (m, b) => pendingEdit(m, { id: str(b, "id"), etag: str(b, "etag"), ...opt(b, "title"), fields: fieldsOf(b) }),
+  "pending.withdraw": (m, b) => pendingWithdraw(m, { id: str(b, "id"), reason: str(b, "reason") }),
+  answer: (m, b, party) =>
+    answer(
+      m,
+      {
+        id: str(b, "id"),
+        rule: str(b, "rule"),
+        binds: str(b, "binds"),
+        ...opt(b, "cell"),
+        ...opt(b, "by"),
+        ...opt(b, "subject"),
+        ...opt(b, "subjectText"),
+        process: b.process === true,
+      },
+      party,
+    ),
+  supersede: (m, b) => {
+    const kind = str(b, "kind");
+    if (kind !== "overtaken" && kind !== "replaced" && kind !== "reversed") throw new WriteError("invalid", "kind is overtaken, replaced or reversed");
+    return supersede(m, { num: num(b, "num"), by: num(b, "by"), kind });
+  },
+  review: (m, b, party) => markReviewed(m, { num: num(b, "num") }, party),
+  "retired.add": (m, b) =>
+    retiredAdd(m, { area: str(b, "area"), retired: str(b, "retired"), replacedBy: str(b, "replacedBy"), decisions: str(b, "decisions"), ...opt(b, "note") }),
+  "chat.send": (m, b, party) =>
+    chatSend(m, { to: str(b, "to"), purpose: str(b, "purpose"), subject: str(b, "subject"), text: str(b, "text"), ...opt(b, "inReplyTo") }, party),
+  "chat.read": (m, b, party) => chatRead(m, { id: str(b, "id") }, party),
 };
 
 export interface WriteDeps {
@@ -64,14 +119,15 @@ export function writeRoutes(deps: WriteDeps) {
 
     try {
       const landed = Array.isArray(body.landed) ? body.landed.filter((x): x is string => typeof x === "string") : [];
-      const plan = make(deps.model(), body);
+      const plan = make(deps.model(), body, party);
       const r: ApplyResult = await deps.writer.apply(deps.model(), plan, party, { dryRun: body.apply !== true, landed });
       if (r.model && r.commit) {
         deps.swap(r.model);
         deps.bus.publish({ type: "write", op: r.op, party, commit: r.commit, refs: r.refs, summary: r.summary, at: now() });
+        if (r.chat) deps.bus.publish({ type: "chat", ...r.chat, at: now() });
       }
-      const { model: _, ...answer } = r;
-      return c.json({ applied: r.commit !== undefined, ...answer });
+      const { model: _, ...result } = r;
+      return c.json({ applied: r.commit !== undefined, ...result });
     } catch (e) {
       if (e instanceof WriteError) {
         return c.json({ error: e.message, code: e.code, ...(e.hint ? { hint: e.hint } : {}), ...(e.detail ?? {}) }, e.status as 409);

@@ -86,4 +86,122 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("-t, --text <text|@file|->", "the document, starting with its title (# …)")
       .description("create a document"),
   ).action(async (ref: string, o) => write("doc.new", { ref, text: await textArg(o.text) }, o));
+
+  // ── decisions ──────────────────────────────────────────────────────────────────────────────────────────
+
+  const fieldOptions = (cmd: Command) =>
+    cmd
+      .option("--measured <text|@file|->", "what was observed, re-runnable")
+      .option("--options <text|@file|->", "(a) … (b) …")
+      .option("--recommendation <text|@file|->", "the most restrictive reading (decision 67)")
+      .option("--blocks <text|@file|->", "what waits on the answer");
+  const fields = async (o: Record<string, string | undefined>) => {
+    const out: Record<string, string> = {};
+    for (const [opt, name] of [["measured", "Measured"], ["options", "Options"], ["recommendation", "Recommendation"], ["blocks", "Blocks"]] as const) {
+      if (o[opt] !== undefined) out[name] = await textArg(o[opt]!);
+    }
+    return out;
+  };
+
+  common(
+    fieldOptions(
+      program
+        .command("pending-add")
+        .requiredOption("--id <id>", "a new id, never used (e.g. 956-b)")
+        .requiredOption("--section <words>", "the pending section: its heading or words only it contains (\"machine 1\")")
+        .requiredOption("--title <text>", "the question in one line")
+        .description("open a question in decisions-pending.md (Measured, Options, Recommendation and Blocks all required)"),
+    ),
+  ).action(async (o) => write("pending.add", { id: o.id, section: o.section, title: o.title, fields: await fields(o) }, o));
+
+  common(
+    fieldOptions(
+      program
+        .command("pending-edit")
+        .argument("<id>", "the open question")
+        .requiredOption("-e, --etag <etag>", "the etag `specs-bot pending <id>` showed")
+        .option("--title <text>", "a new title")
+        .description("revise an open question's title or fields; the others are kept"),
+    ),
+  ).action(async (id: string, o) => write("pending.edit", { id, etag: o.etag, ...(o.title ? { title: o.title } : {}), fields: await fields(o) }, o));
+
+  common(
+    program
+      .command("pending-withdraw")
+      .argument("<id>", "the open question")
+      .requiredOption("--reason <text>", "why it leaves without an answer (kept in the commit)")
+      .description("remove a question nobody will answer"),
+  ).action((id: string, o) => write("pending.withdraw", { id, reason: o.reason }, o));
+
+  common(
+    program
+      .command("answer")
+      .argument("<id>", "the pending id it answers (it leaves the page), or a new id for a ruling no question asked")
+      .requiredOption("--rule <text|@file|->", "the rule as decided, one row (**Bold lead.** then the text)")
+      .requiredOption("--binds <text>", "the fronts and steps it binds (`machine-1/144` B-162 · …)")
+      .option("--cell <slug>", "the conformance cell's slug (decision 647)")
+      .option("--process", "a row that fixes no program behaviour")
+      .option("--by <who>", "who decided, as the Id cell says it (default: the maintainer, or the coordinator †)")
+      .option("--subject <slug>", "the subject of decisions-taken.md the row joins (its Steps and Binds)")
+      .option("--subject-text <text|@file|->", "the sentence the subject gains")
+      .description("record a decision: the next free number, in the record; a machine's decision is marked for review"),
+  ).action(async (id: string, o) =>
+    write(
+      "answer",
+      {
+        id,
+        rule: await textArg(o.rule),
+        binds: o.binds,
+        ...(o.cell ? { cell: o.cell } : {}),
+        ...(o.by ? { by: o.by } : {}),
+        ...(o.subject ? { subject: o.subject } : {}),
+        ...(o.subjectText ? { subjectText: await textArg(o.subjectText) } : {}),
+        process: o.process === true,
+      },
+      o,
+    ),
+  );
+
+  common(
+    program
+      .command("supersede")
+      .argument("<n>", "the row that stops being in force")
+      .requiredOption("--by <m>", "the later row in force")
+      .requiredOption("--kind <kind>", "overtaken | replaced | reversed")
+      .description("mark a row overtaken, replaced or reversed by a later one (its text is kept)"),
+  ).action((n: string, o) => write("supersede", { num: Number(n), by: Number(o.by), kind: o.kind }, o));
+
+  common(program.command("reviewed").argument("<n>", "the step in the To review table").description("mark a delegated decision reviewed (the maintainer)")).action(
+    (n: string, o) => write("review", { num: Number(n) }, o),
+  );
+
+  common(
+    program
+      .command("retire")
+      .requiredOption("--area <words>", "the retired.md area (\"language spellings\", \"process\" …)")
+      .requiredOption("--retired <text>", "the form retired")
+      .requiredOption("--replaced-by <text>", "what replaces it")
+      .requiredOption("--decisions <text>", "the rows it comes from (\"606 (1), 609\")")
+      .option("--note <text>", "since when, or a note")
+      .description("add a retired form"),
+  ).action((o) => write("retired.add", { area: o.area, retired: o.retired, replacedBy: o.replacedBy, decisions: o.decisions, ...(o.note ? { note: o.note } : {}) }, o));
+
+  // ── conversation ───────────────────────────────────────────────────────────────────────────────────────
+
+  common(
+    program
+      .command("send")
+      .requiredOption("--to <party>", "maintainer | machine-1 | machine-2 | machine-3 | all")
+      .requiredOption("--purpose <p>", "report | question | answer | digest | rule")
+      .requiredOption("--subject <text>", "one line saying what the message is for")
+      .requiredOption("-t, --text <text|@file|->", "the message (a report: Done, Running, Next, Blocking)")
+      .option("--reply-to <id>", "the message it answers (m1-0024)")
+      .description("write a message in the conversation; the machines hear it at once (specs-bot watch)"),
+  ).action(async (o) =>
+    write("chat.send", { to: o.to, purpose: o.purpose, subject: o.subject, text: await textArg(o.text), ...(o.replyTo ? { inReplyTo: o.replyTo } : {}) }, o),
+  );
+
+  common(program.command("mark-read").argument("<id>", "a message to this machine").description("mark a message read")).action((id: string, o) =>
+    write("chat.read", { id }, o),
+  );
 }

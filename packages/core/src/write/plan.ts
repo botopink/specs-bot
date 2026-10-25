@@ -20,6 +20,8 @@ export interface Plan {
   /** One line for people: what the write does. */
   summary: string;
   changes: Change[];
+  /** A message the write sends: the api publishes it as a `chat` event to the machines. */
+  chat?: { id: string; from: string; to: string; purpose: string; subject: string };
 }
 
 export class WriteError extends Error {
