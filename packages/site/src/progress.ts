@@ -130,10 +130,19 @@ function readmeSteps(d: Doc, front: number, blockedLabels: Set<string>): Progres
       total++;
       if (b[1] !== " ") done++;
     }
-    const label = `${front} ${m[2]}`;
-    const rest = s.heading.slice(m[0].length).replace(/^\s*[—–:·-]\s*/, "");
-    const state: ItemState = blockedLabels.has(label) && done < total ? "blocked" : total > 0 && done === total ? "done" : total === 0 && /\b(done|landed)\b/i.test(s.heading) ? "done" : "open";
-    items.push({ state, label, text: rest || s.heading, source: "readme", href: `/docs/${d.ref}#${s.anchor}`, ...(total ? { boxes: { done, total } } : {}) });
+    // A heading may name a range of steps — "B-82 … B-85 — moved to front 164": one item per step it names.
+    const range = s.heading.slice(m[0].length).match(/^\s*(?:…|\.\.\.|–|to)\s*B-(\d+)\b/);
+    const first = m[2]!.match(/^B-(\d+)$/);
+    const labels =
+      range && first && Number(range[1]) > Number(first[1])
+        ? Array.from({ length: Number(range[1]) - Number(first[1]) + 1 }, (_, k) => `B-${Number(first[1]) + k}`)
+        : [m[2]!];
+    const rest = s.heading.slice(m[0].length + (range ? range[0].length : 0)).replace(/^\s*[—–:·-]\s*/, "");
+    for (const step of labels) {
+      const label = `${front} ${step}`;
+      const state: ItemState = blockedLabels.has(label) && done < total ? "blocked" : total > 0 && done === total ? "done" : total === 0 && /\b(done|landed)\b/i.test(s.heading) ? "done" : "open";
+      items.push({ state, label, text: rest || s.heading, source: "readme", href: `/docs/${d.ref}#${s.anchor}`, ...(total ? { boxes: { done, total } } : {}) });
+    }
   }
   return items;
 }

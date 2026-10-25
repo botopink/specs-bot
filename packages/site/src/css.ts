@@ -228,6 +228,17 @@ footer { color: var(--muted); font-size: 13px; text-align: center; padding: 24px
 .chip.on { border-color: currentColor; font-weight: 600; }
 .step-filter { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: inherit; min-width: 200px; flex: 1; }
 table.step-table td:first-child { white-space: nowrap; }
+.markdown table.step-table { display: table; }
+table.step-table tr.group th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--surface); padding-top: 10px; }
+.chip .n { font-weight: 400; color: var(--muted); margin-left: 2px; }
+.step-index { position: relative; }
+.step-index-head { position: sticky; top: 56px; z-index: 1; background: var(--bg); padding: 6px 0; }
+@media (max-width: 640px) {
+  table.step-table .col-machine { display: none; }
+  table.step-table td, table.step-table th { padding: 6px 6px; }
+  .step-filter { min-width: 0; width: 100%; }
+  .step-index-head { position: static; }
+}
 .state { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 6px; margin-left: 4px; vertical-align: middle; }
 .state.done { background: color-mix(in srgb, #1a7f37 18%, transparent); color: #1a7f37; }
 .state.open { background: color-mix(in srgb, #6e6e73 18%, transparent); }

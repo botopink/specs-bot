@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { shortTitle } from "../src/hierarchy.ts";
 import { createSite, loadSiteData } from "../src/index.ts";
 import { resolveLink } from "../src/markdown.ts";
+import { refOfPath } from "../src/short-links.ts";
 
 describe("shortTitle", () => {
   test("drops the front's own number and name, keeps what more it says", () => {
@@ -244,14 +245,14 @@ describe("the site over a fixture", () => {
     const h2 = [...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1]);
     expect(h2).toEqual(["milestone", "machine-1", "machine-2"]);
     // The machine's README titles its section.
-    expect(body).toContain('<a href="/docs/1.0.12-beta/machine-1/README">Machine 1 — the work queue</a>');
+    expect(body).toContain('<a href="/docs/machine-1/README">Machine 1 — the work queue</a>');
   });
 
   test("a front is a card in its machine's section: number, name linking its README, title, counts", async () => {
     const { body } = await get("/fronts");
     const card = body.slice(body.indexOf('<section class="front-card" id="machine-1-150-rakun">'));
     expect(card).toStartWith('<section class="front-card" id="machine-1-150-rakun"><header><span class="fnum">150</span>');
-    expect(card).toContain('<h3><a href="/docs/1.0.12-beta/machine-1/150-rakun/README">rakun</a>');
+    expect(card).toContain('<h3><a href="/docs/machine-1/150-rakun/README">rakun</a>');
     expect(card).toContain('<p class="fmeta">machine-1 · 4 docs · 2 folders</p>');
     expect(body.indexOf('id="machine-1-150-rakun"')).toBeLessThan(body.indexOf('id="machine-2-163-meta-ci"'));
   });
@@ -264,7 +265,7 @@ describe("the site over a fixture", () => {
       ["machine-1-150-rakun-121-bpp-content", "121-bpp-content posts as data"],
     ]);
     // A folder's documents are chips named below the folder, deeper folders included.
-    expect(body).toContain('href="/docs/1.0.12-beta/machine-1/150-rakun/121-bpp-content/examples/post" title="A sample post">examples/post</a>');
+    expect(body).toContain('href="/docs/machine-1/150-rakun/121-bpp-content/examples/post" title="A sample post">examples/post</a>');
     expect(body).toContain("<code>data</code>");
   });
 
@@ -314,7 +315,7 @@ describe("the site over a fixture", () => {
     expect(status).toBe(200);
     expect(body).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(body).not.toContain("<script>alert");
-    expect(body).toContain('href="/docs/1.0.12-beta/status#done"');
+    expect(body).toContain('href="/docs/status#done"');
     expect(body).toContain('href="/pending"');
     expect(body).toContain('<span class="unresolved">the repo</span>');
     expect(body).toContain('id="s1--the-bpp-router"');
@@ -324,7 +325,7 @@ describe("the site over a fixture", () => {
   test("a directory ref redirects to its README; an unknown ref is 404", async () => {
     const dir = await get("/docs/1.0.12-beta/machine-1/150-rakun");
     expect(dir.status).toBe(302);
-    expect(dir.res.headers.get("location")).toBe("/docs/1.0.12-beta/machine-1/150-rakun/README");
+    expect(dir.res.headers.get("location")).toBe("/docs/machine-1/150-rakun/README");
     expect((await get("/docs/nope")).status).toBe(404);
   });
 });
@@ -353,9 +354,9 @@ describe("a front's progress on the site", () => {
     const { status: code, body } = await get("/fronts/150");
     expect(code).toBe(200);
     expect(body).toContain("Steps — from the README");
-    expect(body).toContain('href="/docs/1.0.12-beta/machine-1/150-rakun/README#s1--the-bpp-router"');
+    expect(body).toContain('href="/docs/machine-1/150-rakun/README#s1--the-bpp-router"');
     expect(body).toContain("In status.md");
-    expect(body).toContain('href="/docs/1.0.12-beta/status#150-rakun"');
+    expect(body).toContain('href="/docs/status#150-rakun"');
     expect(body).toContain('<span class="lane" translate="no">Done</span>');
     expect((await get("/fronts/999")).status).toBe(404);
     expect((await get("/fronts/04?version=1.0.11-beta")).status).toBe(200);
@@ -480,6 +481,7 @@ describe("resolveLink", () => {
 
   test("maps a relative .md and a directory to doc routes", () => {
     expect(resolveLink("../../status.md#done", { refs, from })).toBe("/docs/1.0.12-beta/status#done");
+    // resolveLink answers the versioned ref; the page shortens the current milestone's links (short-links.ts).
     expect(resolveLink("../150-rakun/", { refs, from })).toBe("/docs/1.0.12-beta/machine-1/150-rakun/README");
   });
 
@@ -516,7 +518,8 @@ if (!(!realRoot || !existsSync(join(realRoot, "specs")))) describe("the site ove
       const body = await (await site.request(`/fronts?version=${v}`)).text();
       const ids = [...body.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
       expect([v, ids.length - new Set(ids).size]).toEqual([v, 0]);
-      const listed = [...body.matchAll(/href="\/docs\/([^"#]+)"/g)].map((m) => m[1]);
+      // The current milestone's documents are linked without their version.
+      const listed = [...body.matchAll(/href="\/docs\/([^"#]+)"/g)].map((m) => refOfPath(m[1]!, loaded.data.tree.current));
       const docs = loaded.data.tree.docs.filter((d) => d.version === v).map((d) => d.ref);
       expect([v, docs.filter((r) => !listed.includes(r))]).toEqual([v, []]);
     }

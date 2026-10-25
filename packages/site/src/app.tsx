@@ -5,6 +5,7 @@ import { CSS } from "./css.ts";
 import { type Loaded, loadSiteData } from "./data.ts";
 import type { LinkContext } from "./markdown.ts";
 import type { StatusFn } from "./status.ts";
+import { docHref, refOfPath, shortenDocLinks } from "./short-links.ts";
 import { protectHtml } from "./translate.ts";
 import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, SubjectsPage } from "./views/decisions.tsx";
 import { frontsHref, sectionOfFolder } from "./hierarchy.ts";
@@ -37,11 +38,13 @@ export function createSite(opts: SiteOptions) {
     return c.body(CSS);
   });
 
-  // Every page leaves code, identifiers and labels to the browser's translator untouched (translate.ts).
+  // Every page leaves code, identifiers and labels to the browser's translator untouched (translate.ts), and
+  // links the current milestone's documents without their version (short-links.ts).
+  const current = data?.tree.current ?? "";
   site.use("*", async (c, next) => {
     await next();
     if (!c.res.headers.get("content-type")?.startsWith("text/html")) return;
-    const html = protectHtml(await c.res.text());
+    const html = shortenDocLinks(protectHtml(await c.res.text()), current);
     c.res = new Response(html, { status: c.res.status, headers: c.res.headers });
   });
 
@@ -150,7 +153,8 @@ export function createSite(opts: SiteOptions) {
     } catch {
       // keep it as written
     }
-    ref = ref.replace(/\.md$/, "").replace(/\/$/, "");
+    // A path without a version is the current milestone's: /docs/machine-1/144-botopink-lang/README.
+    ref = refOfPath(ref.replace(/\.md$/, "").replace(/\/$/, ""), current);
     const doc = data.docByRef.get(ref) ?? data.docByRef.get(`${ref}/README`);
     if (!doc) {
       // A folder with no README of its own (a former front, a track) is a section of the Fronts page.
@@ -158,7 +162,7 @@ export function createSite(opts: SiteOptions) {
       if (section) return c.redirect(section);
       return c.html(<NotFound path={c.req.path} what={`No document ${ref}.`} back="/fronts" backLabel="All fronts" />, 404);
     }
-    if (doc.ref !== ref) return c.redirect(`/docs/${doc.ref}`);
+    if (doc.ref !== ref) return c.redirect(docHref(doc.ref, current));
     let html = rendered.get(doc.ref);
     if (html === undefined) {
       // A table of steps reads each step's state from the front's progress (step-tables.ts).
