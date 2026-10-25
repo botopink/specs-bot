@@ -20,3 +20,4 @@ export * from "./write/diff.ts";
 export * from "./write/rules.ts";
 export * from "./write/doc.ts";
 export * from "./write/apply.ts";
+export * from "./write/decisions.ts";
