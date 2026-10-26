@@ -108,7 +108,7 @@ function ItemList(props: { items: ProgressItem[]; ctx: LinkContext; collapse?: b
 
 /** The fronts of a milestone that carry this number (144 has a folder on each machine and a shared one). */
 export function frontNodes(data: SiteData, version: string, num: number): FrontNode[] {
-  return milestoneOf(data, version).machines.flatMap((m) => m.fronts.filter((f) => f.num === num));
+  return milestoneOf(data, version).fronts.filter((f) => f.num === num);
 }
 
 export function frontProgressHref(data: SiteData, version: string, num: number): string {
@@ -148,7 +148,7 @@ export function FrontProgressPage(props: { data: SiteData; p: FrontProgress; pat
               <>
                 {i ? " · " : ""}
                 <a href={frontsHref(data, p.version, n.anchor)} translate="no">
-                  {n.machine ? `${n.machine}/${n.dir}` : n.dir}
+                  {n.owner ? `${n.dir} (${n.owner})` : n.dir}
                 </a>
                 {n.readme ? (
                   <>

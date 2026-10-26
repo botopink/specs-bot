@@ -81,14 +81,9 @@ function Overview({ data }: { data: SiteData }) {
       </div>
 
       <h2>Fronts</h2>
-      {ms.machines.map((m) => (
-        <section class="machine-index">
-          <h3>
-            <a href={frontsHref(data, ms.version, m.anchor)}>{m.name || "Fronts"}</a>
-            <span class="muted small"> · {plural(m.fronts.length, "front")}</span>
-          </h3>
+      <section class="machine-index">
           <div class="mini-grid">
-            {m.fronts.map((f) => (
+            {ms.fronts.map((f) => (
               <a class="mini-card" href={frontsHref(data, ms.version, f.anchor)}>
                 <span class="fnum">{f.num}</span>
                 <span class="mini-body">
@@ -99,6 +94,7 @@ function Overview({ data }: { data: SiteData }) {
                     </span>
                   ) : null}
                   <span class="mini-meta">
+                    {f.owner ? <span translate="no">{f.owner} · </span> : null}
                     {plural(f.count, "doc")}
                     {f.folders.length ? ` · ${plural(f.folders.length, "folder")}` : ""}
                   </span>
@@ -107,7 +103,6 @@ function Overview({ data }: { data: SiteData }) {
             ))}
           </div>
         </section>
-      ))}
 
       <h2>Next free number</h2>
       <p>

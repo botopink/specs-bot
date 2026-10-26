@@ -1,8 +1,9 @@
-// The fronts of one milestone, as sections: the milestone (h1) → a machine (h2) → a front (h3, one card each) →
-// the folders inside the front (h4: former fronts, tracks) → their documents. A sticky index beside it.
+// The fronts of one milestone: the milestone (h1) → its fronts (h3, one card each, with the machine that owns it)
+// → the folders inside the front (h4: former fronts, tracks) → their documents. /fronts?owner=machine-1 keeps one
+// owner's fronts. A sticky index beside it.
 import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
-import { type FolderNode, type FrontNode, frontsHref, labelBelow, type MachineNode, milestoneOf } from "../hierarchy.ts";
+import { type FolderNode, type FrontNode, frontsHref, labelBelow, milestoneOf } from "../hierarchy.ts";
 import type { FrontProgress } from "../progress.ts";
 import { Layout, plural, Title } from "./layout.tsx";
 import { frontProgressHref, ProgressLine } from "./progress.tsx";
@@ -76,7 +77,15 @@ export function FrontCard(props: { front: FrontNode; version: string; progress?:
             </p>
           ) : null}
           <p class="fmeta">
-            {[front.machine || version, plural(front.count, "doc"), front.folders.length ? plural(front.folders.length, "folder") : ""]
+            {front.owner ? (
+              <>
+                <a class="owner" href={`/fronts?owner=${front.owner}`} title="the machine that works this front" translate="no">
+                  owner: {front.owner}
+                </a>
+                {" · "}
+              </>
+            ) : null}
+            {[front.owner ? "" : version, plural(front.count, "doc"), front.folders.length ? plural(front.folders.length, "folder") : ""]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -95,58 +104,32 @@ export function FrontCard(props: { front: FrontNode; version: string; progress?:
   );
 }
 
-function MachineSection(props: { machine: MachineNode; version: string; data: SiteData; progress: Map<number, FrontProgress> }) {
-  const { machine, version, data, progress } = props;
-  return (
-    <section class="machine">
-      <h2 id={machine.anchor}>
-        <a class="anchor" href={`#${machine.anchor}`}>
-          {machine.name || "Fronts"}
-        </a>
-        <span class="muted small">
-          {" "}
-          · {plural(machine.fronts.length, "front")} · {plural(machine.count, "doc")}
-        </span>
-      </h2>
-      {machine.readme || machine.docs.length ? (
-        <p class="machine-docs">
-          {machine.readme ? (
-            <>
-              <a href={`/docs/${machine.readme.ref}`}>{machine.readme.title}</a>
-            </>
-          ) : null}
-          {machine.docs.map((d) => (
-            <>
-              {" · "}
-              <a href={`/docs/${d.ref}`} title={d.title}>
-                {labelBelow(d, machine.name)}
-              </a>
-            </>
-          ))}
-        </p>
-      ) : null}
-      {machine.fronts.map((f) => (
-        <FrontCard front={f} version={version} progress={progress.get(f.num)} href={frontProgressHref(data, version, f.num)} />
-      ))}
-    </section>
-  );
-}
+/** The old anchors (#machine-1, #machine-1-150-rakun) of the page that grouped fronts by machine. */
+const OLD_ANCHORS = `(function(){var h=location.hash.slice(1),m=h.match(/^(machine-\\d+)(?:-(.+))?$/);if(!m)return;
+if(m[2])location.replace("#"+m[2]);else location.replace("/fronts?owner="+m[1]);})();`;
 
-export function FrontsPage(props: { data: SiteData; version: string; path: string; progress: Map<number, FrontProgress> }) {
-  const { data, version } = props;
+export function FrontsPage(props: { data: SiteData; version: string; path: string; progress: Map<number, FrontProgress>; owner?: string | undefined }) {
+  const { data, version, owner } = props;
   const ms = milestoneOf(data, version);
-  const fronts = ms.machines.reduce((n, m) => n + m.fronts.length, 0);
+  const fronts = owner ? ms.fronts.filter((f) => f.owner === owner) : ms.fronts;
+  const q = (o?: string) => {
+    const params = new URLSearchParams();
+    if (version !== data.tree.current) params.set("version", version);
+    if (o) params.set("owner", o);
+    const s = params.toString();
+    return `/fronts${s ? `?${s}` : ""}`;
+  };
 
   return (
     <Layout title={`Fronts — ${version}`} path={props.path}>
+      <script dangerouslySetInnerHTML={{ __html: OLD_ANCHORS }} />
       <div class="doc-layout">
         <div>
           <h1>
             {version} <span class={ms.current ? "pill current" : "pill frozen-pill"}>{ms.current ? "current" : "frozen"}</span>
           </h1>
           <p class="muted">
-            {plural(fronts, "front")} · {plural(ms.count, "document")}
-            {ms.machines.some((m) => m.name) ? ` · ${plural(ms.machines.filter((m) => m.name).length, "machine")}` : ""}
+            {plural(ms.fronts.length, "front")} · {plural(ms.count, "document")}
           </p>
           <nav class="versions" aria-label="Milestones">
             {[...data.tree.versions].reverse().map((v) =>
@@ -160,12 +143,29 @@ export function FrontsPage(props: { data: SiteData; version: string; path: strin
                   The milestone
                 </a>
               </h2>
-              <DocRows docs={ms.docs} dir={version} />
+              <DocRows docs={ms.docs} dir="milestone" />
             </section>
           ) : null}
-          {ms.machines.map((m) => (
-            <MachineSection machine={m} version={version} data={data} progress={props.progress} />
-          ))}
+          <section>
+            <h2 id="fronts">
+              <a class="anchor" href="#fronts">
+                Fronts
+              </a>
+              <span class="muted small"> · {plural(fronts.length, "front")}</span>
+            </h2>
+            {ms.owners.length ? (
+              <nav class="versions owners" aria-label="Owner" translate="no">
+                {owner ? <a href={q()}>all</a> : <span class="on">all</span>}
+                {ms.owners.map((o) => {
+                  const n = ms.fronts.filter((f) => f.owner === o).length;
+                  return o === owner ? <span class="on">{o} · {n}</span> : <a href={q(o)}>{o} · {n}</a>;
+                })}
+              </nav>
+            ) : null}
+            {fronts.map((f) => (
+              <FrontCard front={f} version={version} progress={props.progress.get(f.num)} href={frontProgressHref(data, version, f.num)} />
+            ))}
+          </section>
         </div>
         <aside>
           <strong>Sections</strong>
@@ -175,19 +175,15 @@ export function FrontsPage(props: { data: SiteData; version: string; path: strin
                 <a href="#milestone">The milestone</a>
               </li>
             ) : null}
-            {ms.machines.map((m) => (
-              <>
-                <li>
-                  <a href={`#${m.anchor}`}>{m.name || "Fronts"}</a>
-                </li>
-                {m.fronts.map((f) => (
-                  <li class="l3">
-                    <a href={`#${f.anchor}`}>
-                      <span class="inum">{f.num}</span> {f.slug}
-                    </a>
-                  </li>
-                ))}
-              </>
+            <li>
+              <a href="#fronts">Fronts</a>
+            </li>
+            {fronts.map((f) => (
+              <li class="l3">
+                <a href={`#${f.anchor}`}>
+                  <span class="inum">{f.num}</span> {f.slug}
+                </a>
+              </li>
             ))}
           </ul>
         </aside>

@@ -122,7 +122,7 @@ export function createSite(opts: SiteOptions) {
 
   site.get("/fronts", (c) => {
     const version = versionOf(c.req.query("version"));
-    return c.html(<FrontsPage data={data} version={version} path={c.req.path} progress={progressOf(version)} />);
+    return c.html(<FrontsPage data={data} version={version} path={c.req.path} progress={progressOf(version)} owner={c.req.query("owner")} />);
   });
 
   site.get("/fronts/:num", (c) => {

@@ -163,11 +163,12 @@ describe("the site over a fixture", () => {
     expect(body).toContain('<span class="d">of 2 delegated decisions</span>');
   });
 
-  test("the overview lists the current fronts by machine, each a card linking to its section", async () => {
+  test("the overview lists the current fronts, each a card naming its owner and linking to its section", async () => {
     const { body } = await get("/");
-    expect(body).toMatch(/<h3><a href="\/fronts#machine-1">machine-1<\/a><span class="muted small"> · 1 front<\/span><\/h3>/);
-    expect(body).toContain('<a class="mini-card" href="/fronts#machine-1-150-rakun"><span class="fnum">150</span>');
-    expect(body).toContain('<a class="mini-card" href="/fronts#machine-2-163-meta-ci"><span class="fnum">163</span>');
+    expect(body).not.toContain('href="/fronts#machine-1"');
+    expect(body).toContain('<a class="mini-card" href="/fronts#150-rakun"><span class="fnum">150</span>');
+    expect(body).toContain('<a class="mini-card" href="/fronts#163-meta-ci"><span class="fnum">163</span>');
+    expect(body).toContain('<span translate="no">machine-2 · </span>');
     // The title says what the number and the name do not: no "Front 163 — meta-ci" again.
     expect(body).toContain("the meta repository&#39;s CI");
     expect(body).not.toContain("Front 163 — meta-ci");
@@ -240,31 +241,37 @@ describe("the site over a fixture", () => {
     expect(q).not.toContain("Async");
   });
 
-  test("/fronts is the current milestone in sections: the milestone, then a section per machine", async () => {
+  test("/fronts is the current milestone: its documents, then its fronts — a machine is a front's owner, not a section", async () => {
     const { status, body } = await get("/fronts");
     expect(status).toBe(200);
     expect(body).toMatch(/<h1>1\.0\.12-beta <span class="pill current">current<\/span><\/h1>/);
     const h2 = [...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1]);
-    expect(h2).toEqual(["milestone", "machine-1", "machine-2"]);
-    // The machine's README titles its section.
-    expect(body).toContain('<a href="/docs/milestone/machine-1">Machine 1 — the work queue</a>');
+    expect(h2).toEqual(["milestone", "fronts"]);
+    // A machine's page is one of the milestone's documents.
+    expect(body).toContain('<a href="/docs/milestone/machine-1">machine-1</a>');
+    // The owners filter the list.
+    expect(body).toContain('<a href="/fronts?owner=machine-1">machine-1 · 1</a>');
+    const one = (await get("/fronts?owner=machine-2")).body;
+    expect(one).toContain('id="163-meta-ci"');
+    expect(one).not.toContain('id="150-rakun"');
+    expect(one).toContain('<span class="on">machine-2 · 1</span>');
   });
 
-  test("a front is a card in its machine's section: number, name linking its README, title, counts", async () => {
+  test("a front is a card: number, name linking its README, title, its owner, counts", async () => {
     const { body } = await get("/fronts");
-    const card = body.slice(body.indexOf('<section class="front-card" id="machine-1-150-rakun">'));
-    expect(card).toStartWith('<section class="front-card" id="machine-1-150-rakun"><header><span class="fnum">150</span>');
+    const card = body.slice(body.indexOf('<section class="front-card" id="150-rakun">'));
+    expect(card).toStartWith('<section class="front-card" id="150-rakun"><header><span class="fnum">150</span>');
     expect(card).toContain('<h3><a href="/docs/150-rakun/README">rakun</a>');
-    expect(card).toContain('<p class="fmeta">machine-1 · 4 docs · 2 folders</p>');
-    expect(body.indexOf('id="machine-1-150-rakun"')).toBeLessThan(body.indexOf('id="machine-2-163-meta-ci"'));
+    expect(card).toContain('<p class="fmeta"><a class="owner" href="/fronts?owner=machine-1" title="the machine that works this front" translate="no">owner: machine-1</a> · 4 docs · 2 folders</p>');
+    expect(body.indexOf('id="150-rakun"')).toBeLessThan(body.indexOf('id="163-meta-ci"'));
   });
 
   test("the folders inside a front are its sub-subsections, titled without repeating their name", async () => {
     const { body } = await get("/fronts");
     const h4 = [...body.matchAll(/<h4 id="([^"]+)">(.*?)<\/h4>/g)].map((m) => [m[1], m[2]!.replace(/<[^>]+>/g, "")]);
     expect(h4).toEqual([
-      ["machine-1-150-rakun-04-rakun", "04-rakun"],
-      ["machine-1-150-rakun-121-bpp-content", "121-bpp-content posts as data"],
+      ["150-rakun-04-rakun", "04-rakun"],
+      ["150-rakun-121-bpp-content", "121-bpp-content posts as data"],
     ]);
     // A folder's documents are chips named below the folder, deeper folders included.
     expect(body).toContain('href="/docs/150-rakun/121-bpp-content/examples/post" title="A sample post">examples/post</a>');
@@ -292,7 +299,7 @@ describe("the site over a fixture", () => {
 
   test("a folder with no README leads to its section", async () => {
     const folder = await get("/docs/150-rakun/04-rakun");
-    expect([folder.status, folder.res.headers.get("location")]).toEqual([302, "/fronts#machine-1-150-rakun-04-rakun"]);
+    expect([folder.status, folder.res.headers.get("location")]).toEqual([302, "/fronts#150-rakun-04-rakun"]);
     const loose = await get("/docs/04-rakun/closure-audit");
     expect(loose.res.headers.get("location")).toBe("/fronts?version=1.0.11-beta");
   });
@@ -300,14 +307,13 @@ describe("the site over a fixture", () => {
   test("a document's breadcrumbs lead back to each section it sits in", async () => {
     const { body } = await get("/docs/150-rakun/04-rakun/track");
     const crumbs = [...body.slice(body.indexOf('<nav class="crumbs"')).matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)]
-      .slice(0, 5)
+      .slice(0, 4)
       .map((m) => [m[2], m[1]]);
     expect(crumbs).toEqual([
       ["Fronts", "/fronts"],
       ["1.0.12-beta", "/fronts"],
-      ["machine-1", "/fronts#machine-1"],
-      ["150-rakun", "/fronts#machine-1-150-rakun"],
-      ["04-rakun", "/fronts#machine-1-150-rakun-04-rakun"],
+      ["150-rakun", "/fronts#150-rakun"],
+      ["04-rakun", "/fronts#150-rakun-04-rakun"],
     ]);
     // A frozen milestone's crumbs name it.
     expect((await get("/docs/04-rakun/README")).body).toContain('<a href="/fronts?version=1.0.11-beta#04-rakun">04-rakun</a>');
@@ -347,7 +353,7 @@ describe("a front's progress on the site", () => {
 
   test("each front card on /fronts carries its progress, linking to the front's page", async () => {
     const { body } = await get("/fronts");
-    const card = body.slice(body.indexOf('id="machine-1-150-rakun"'), body.indexOf('id="machine-2-163-meta-ci"'));
+    const card = body.slice(body.indexOf('id="150-rakun"'), body.indexOf('id="163-meta-ci"'));
     expect(card).toContain('<div class="pbar" role="img" aria-label="0 done, 1 open, 0 waiting">');
     expect(card).toContain('<a href="/fronts/150">');
     expect(card).toContain("from the README&#39;s 1 step and their boxes");

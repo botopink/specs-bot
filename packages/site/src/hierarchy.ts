@@ -1,6 +1,6 @@
-// The one hierarchy every page shows: milestone → machine → front → the folders inside a front → documents.
-// An old milestone has no machine folder; its fronts sit in one "Fronts" section. Anchors are stable and
-// readable ("machine-1-150-rakun-04-rakun") so a document's breadcrumbs can point back to its section.
+// The one hierarchy every page shows: milestone → front → the folders inside a front → documents. The machine
+// that works a front is a value of the front (its owner, the README's **Machine:** field), never a level.
+// Anchors are stable and readable ("150-rakun-04-rakun") so a document's breadcrumbs can point back to its section.
 import { MILESTONE_DIR } from "@specs-bot/core";
 import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
@@ -19,7 +19,8 @@ export interface FrontNode {
   dir: string;
   num: number;
   slug: string;
-  machine: string;
+  /** The machine that works it ("machine-1"); "" when its README names none (an old milestone). */
+  owner: string;
   anchor: string;
   readme?: Doc;
   /** What the README's title says beyond the front's number and name (see shortTitle); may be empty. */
@@ -30,80 +31,51 @@ export interface FrontNode {
   count: number;
 }
 
-export interface MachineNode {
-  /** "machine-1"; "" for an old milestone, whose fronts have no machine. */
-  name: string;
-  anchor: string;
-  readme?: Doc;
-  title?: string;
-  docs: Doc[];
-  fronts: FrontNode[];
-  count: number;
-}
-
 export interface MilestoneNode {
   version: string;
   current: boolean;
-  /** The milestone's own documents (status, fronts, …) and those in unnumbered folders under it. */
+  /** The milestone's own documents (status, fronts, the machines' pages, …). */
   docs: Doc[];
-  machines: MachineNode[];
+  fronts: FrontNode[];
+  /** The owners its fronts name, in order. */
+  owners: string[];
   count: number;
 }
 
 /** A milestone's own documents in reading order; the rest by name. */
-const MILESTONE_ORDER = ["README", "overview", "status", "fronts", "contracts", "deferred", "language-gaps", "closure"];
+const MILESTONE_ORDER = ["README", "overview", "status", "fronts", "contracts", "deferred", "language-gaps", "closure", "machine-1", "machine-2", "machine-3"];
 
 export function milestoneOf(data: SiteData, version: string): MilestoneNode {
   const docs = data.tree.docs.filter((d) => d.version === version);
   const top: Doc[] = [];
-  const machines = new Map<string, MachineNode>();
   const fronts = new Map<string, FrontNode>();
   const folders = new Map<string, FolderNode>();
 
   for (const d of docs) {
     if (!d.front) {
-      if (d.machine) {
-        const m = machineOf(machines, d.machine);
-        if (d.ref === `${MILESTONE_DIR}/${d.machine}`) m.readme = d;
-        else m.docs.push(d);
-      } else {
-        top.push(d);
-      }
+      top.push(d);
       continue;
     }
-    const machine = d.machine ?? "";
-    const m = machineOf(machines, machine);
-    const fkey = `${machine}/${d.front.dir}`;
-    let f = fronts.get(fkey);
+    let f = fronts.get(d.front.dir);
     if (!f) {
-      f = {
-        dir: d.front.dir,
-        num: d.front.num,
-        slug: d.front.slug,
-        machine,
-        anchor: frontAnchor(machine, d.front.dir),
-        title: "",
-        docs: [],
-        folders: [],
-        count: 0,
-      };
-      fronts.set(fkey, f);
-      m.fronts.push(f);
+      f = { dir: d.front.dir, num: d.front.num, slug: d.front.slug, owner: "", anchor: frontAnchor(d.front.dir), title: "", docs: [], folders: [], count: 0 };
+      fronts.set(d.front.dir, f);
     }
     f.count++;
     if (!d.group) {
-      if (`/${d.ref}`.endsWith(`/${d.front.dir}/README`)) {
+      if (d.ref === `${d.front.dir}/README`) {
         f.readme = d;
         f.title = shortTitle(d.title, d.front.num, d.front.slug);
+        f.owner = d.machine ?? "";
       } else {
         f.docs.push(d);
       }
       continue;
     }
-    const gkey = `${fkey}/${d.group.dir}`;
+    const gkey = `${d.front.dir}/${d.group.dir}`;
     let g = folders.get(gkey);
     if (!g) {
-      g = { dir: d.group.dir, anchor: folderAnchor(machine, d.front.dir, d.group.dir), docs: [] };
+      g = { dir: d.group.dir, anchor: folderAnchor(d.front.dir, d.group.dir), docs: [] };
       folders.set(gkey, g);
       f.folders.push(g);
     }
@@ -118,37 +90,22 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
     }
   }
 
-  const ordered = [...machines.values()].sort((a, b) => byNumber(a.name, b.name));
-  for (const m of ordered) {
-    m.fronts.sort((a, b) => a.num - b.num || a.dir.localeCompare(b.dir));
-    for (const f of m.fronts) {
-      f.folders.sort((a, b) => byNumber(a.dir, b.dir));
-      f.docs = sortDocs(f.docs);
-      for (const g of f.folders) g.docs = sortDocs(g.docs);
-    }
-    m.docs = sortDocs(m.docs);
-    m.count = m.fronts.reduce((n, f) => n + f.count, (m.readme ? 1 : 0) + m.docs.length);
-    if (m.readme) m.title = m.readme.title;
+  const list = [...fronts.values()].sort((a, b) => a.num - b.num || a.dir.localeCompare(b.dir));
+  for (const f of list) {
+    f.folders.sort((a, b) => byNumber(a.dir, b.dir));
+    f.docs = sortDocs(f.docs);
+    for (const g of f.folders) g.docs = sortDocs(g.docs);
   }
-  return { version, current: version === data.tree.current, docs: sortDocs(top), machines: ordered, count: docs.length };
+  const owners = [...new Set(list.map((f) => f.owner).filter(Boolean))].sort(byNumber);
+  return { version, current: version === data.tree.current, docs: sortDocs(top), fronts: list, owners, count: docs.length };
 }
 
-function machineOf(machines: Map<string, MachineNode>, name: string): MachineNode {
-  let m = machines.get(name);
-  if (!m) machines.set(name, (m = { name, anchor: machineAnchor(name), docs: [], fronts: [], count: 0 }));
-  return m;
+export function frontAnchor(frontDir: string): string {
+  return frontDir;
 }
 
-export function machineAnchor(machine: string): string {
-  return machine || "fronts";
-}
-
-export function frontAnchor(machine: string, frontDir: string): string {
-  return machine ? `${machine}-${frontDir}` : frontDir;
-}
-
-export function folderAnchor(machine: string, frontDir: string, dir: string): string {
-  return `${frontAnchor(machine, frontDir)}-${dir}`;
+export function folderAnchor(frontDir: string, dir: string): string {
+  return `${frontDir}-${dir}`;
 }
 
 /** The URL of a section of the Fronts page; the current milestone needs no version. */
@@ -206,17 +163,15 @@ export interface Crumb {
 
 /**
  * Where a document sits, each level linking to its section of the Fronts page:
- * Fronts / 1.0.12-beta / machine-1 / 150-rakun / 04-rakun / track.
+ * Fronts / 1.0.12-beta / 150-rakun / 04-rakun / track.
  */
 export function crumbsOf(data: SiteData, d: Doc): Crumb[] {
   const crumbs: Crumb[] = [
     { label: "Fronts", href: frontsHref(data, data.tree.current) },
     { label: d.version, href: frontsHref(data, d.version) },
   ];
-  const machine = d.machine ?? "";
-  if (d.machine) crumbs.push({ label: d.machine, href: frontsHref(data, d.version, machineAnchor(machine)) });
-  if (d.front) crumbs.push({ label: d.front.dir, href: frontsHref(data, d.version, frontAnchor(machine, d.front.dir)) });
-  if (d.front && d.group) crumbs.push({ label: d.group.dir, href: frontsHref(data, d.version, folderAnchor(machine, d.front.dir, d.group.dir)) });
+  if (d.front) crumbs.push({ label: d.front.dir, href: frontsHref(data, d.version, frontAnchor(d.front.dir)) });
+  if (d.front && d.group) crumbs.push({ label: d.group.dir, href: frontsHref(data, d.version, folderAnchor(d.front.dir, d.group.dir)) });
   // Folders between the deepest section and the file ("examples") are named, not linked.
   const known = [d.ref.startsWith(`${MILESTONE_DIR}/`), d.front, d.group].filter(Boolean).length;
   const rest = d.ref.split("/").slice(known);
@@ -229,9 +184,9 @@ export function crumbsOf(data: SiteData, d: Doc): Crumb[] {
 export function sectionOfFolder(data: SiteData, ref: string): string | undefined {
   const inside = data.tree.docs.find((d) => d.ref.startsWith(`${ref}/`));
   if (!inside) return undefined;
-  // The crumbs past "Fronts": the milestone, the machine (when the front names one), the front, the group.
+  // The crumbs past "Fronts": the milestone, the front, the group.
   const crumbs = crumbsOf(data, inside).slice(1);
-  const at = (inside.machine ? 2 : 1) + ref.split("/").length - 1;
+  const at = ref.split("/").length;
   // An unnumbered folder has no section of its own: its milestone's stands for it.
   return (/^\d+-/.test(ref.split("/").at(-1)!) && crumbs[at]?.href) || frontsHref(data, inside.version);
 }
