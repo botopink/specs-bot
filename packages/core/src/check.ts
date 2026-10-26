@@ -124,6 +124,10 @@ function checkDocs(store: Store): Finding[] {
     // Every document carries its metadata block, the milestone at least (meta.ts).
     if (d.metaError) out.push(err("doc-meta-invalid", d.ref, `its metadata block: ${d.metaError}`));
     else if (!d.meta.milestone) out.push(err("doc-meta-missing", d.ref, "has no metadata block with its milestone (---\nmilestone: …\n---)"));
+    // owner is a front's: only its README holds it, and the documents under it inherit it.
+    if (d.meta.owner && !(d.front && d.ref === `${d.front.dir}/README`)) {
+      out.push(err("doc-owner-outside-front", d.ref, "owner belongs on the front's README alone (claim / assign set it there)"));
+    }
     for (const link of d.links) {
       if (EXTERNAL.test(link)) continue;
       const target = normalize(join(dirname(d.ref), decodeURIComponent(link.split("#")[0]!)));

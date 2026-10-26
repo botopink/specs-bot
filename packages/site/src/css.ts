@@ -119,6 +119,7 @@ h1 a.anchor, h2 a.anchor, h3 a.anchor, h4 a.anchor { color: inherit; }
 .front-card .owner { padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); font-family: var(--mono, monospace); font-size: 12px; }
 .front-card .owner:hover { text-decoration: none; border-color: var(--fg); }
 .owners { margin-top: 0; }
+.front-card .owner.free { color: var(--muted); border-style: dashed; }
 .front-card > .chips { margin: 12px 0 0; }
 .folders { margin-top: 12px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0 20px; }
 .folder { padding: 10px 0 6px; border-bottom: 1px dashed var(--line); scroll-margin-top: 64px; min-width: 0; }

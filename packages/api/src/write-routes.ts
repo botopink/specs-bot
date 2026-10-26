@@ -4,6 +4,9 @@
 import {
   addSection,
   answer,
+  assignFront,
+  claimFront,
+  releaseFront,
   appendToSection,
   chatRead,
   chatSend,
@@ -100,6 +103,9 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
   "chat.send": (m, b, party) =>
     chatSend(m, { to: str(b, "to"), purpose: str(b, "purpose"), subject: str(b, "subject"), text: str(b, "text"), ...opt(b, "inReplyTo") }, party),
   "chat.read": (m, b, party) => chatRead(m, { id: str(b, "id") }, party),
+  "front.claim": (m, b, party) => claimFront(m, { front: str(b, "front") }, party),
+  "front.release": (m, b, party) => releaseFront(m, { front: str(b, "front") }, party),
+  "front.assign": (m, b, party) => assignFront(m, { front: str(b, "front"), to: str(b, "to") }, party),
 };
 
 export interface WriteDeps {

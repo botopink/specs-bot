@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import {
-  answer,
+import { assignFront, answer,
   appendToSection,
   buildIndex,
   chatSend,
@@ -63,7 +62,8 @@ const AT = new Date(2026, 9, 25, 9, 5);
 /** The writes the test lands, one per kind of file the index reads. */
 const WRITES: [string, (m: Model) => Plan, string][] = [
   ["doc.append", (m) => appendToSection(m, { ref: "milestone/status", anchor: "open", text: "- [ ] opaque ranges zyxwq" }), "machine-1"],
-  ["doc.meta", (m) => setMeta(m, { ref: "150-rakun/README", set: { owner: "machine-2" } }), "maintainer"],
+  ["front.assign", (m) => assignFront(m, { front: "150-rakun", to: "machine-2" }, "maintainer"), "maintainer"],
+  ["doc.meta", (m) => setMeta(m, { ref: "150-rakun/README", set: { model: "opus" } }), "maintainer"],
   ["answer", (m) => answer(m, { id: "q-9", rule: "The router narrows opaque ranges.", binds: "z", subject: "lang", at: AT }, "maintainer"), "maintainer"],
   ["chat.send", (m) => chatSend(m, { to: "all", purpose: "report", subject: "Opaque ranges landed", text: "The router narrows zyxwq.", at: AT }, "machine-2"), "machine-2"],
   ["doc.new", (m) => newDoc(m, { ref: "150-rakun/narrowing", text: "# Narrowing\n\n## Opaque ranges\n\nThe router narrows zyxwq routes.\n" }), "machine-1"],

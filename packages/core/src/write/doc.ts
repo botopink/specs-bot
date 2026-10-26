@@ -122,10 +122,9 @@ export function newDoc(model: Model, input: { ref: string; text: string }): Plan
   const { meta: brought, end, error } = splitMeta(given);
   if (error) throw new WriteError("invalid", `the metadata block: ${error}`);
   if (brought.milestone && brought.milestone !== version) throw new WriteError("invalid", `milestone: ${brought.milestone} — a new document is in ${version}`);
-  const owner = brought.owner ?? model.tree.placeOf(dir).machine;
-  const meta: Meta = { milestone: version, ...(owner ? { owner } : {}), ...brought };
+  if (brought.owner) throw new WriteError("invalid", "owner is a front's, set by claim / assign on its README", "specs-bot claim <front>");
+  const meta: Meta = { milestone: version, ...brought };
   meta.milestone = version;
-  if (owner) meta.owner = owner;
   if (!given[end]?.startsWith("# ")) throw new WriteError("invalid", 'a document starts with its title ("# …"), after its metadata block if it brings one');
   const lines = withMeta(given, meta);
   return {
@@ -148,6 +147,7 @@ export function setMeta(model: Model, input: { ref: string; set?: Record<string,
   for (const k of [...Object.keys(set), ...unset]) {
     if (!KEY.test(k)) throw new WriteError("invalid", `a key is lowercase words with hyphens: ${k}`);
     if (k === "milestone") throw new WriteError("invalid", "milestone is where the document sits; it is not set by hand");
+    if (k === "owner") throw new WriteError("invalid", "owner changes by claim, release or assign", "specs-bot claim <front> · release <front> · assign <front> --to <machine>");
   }
   for (const [k, v] of Object.entries(set)) if (!v.trim()) throw new WriteError("invalid", `${k} is empty; --unset removes a key`);
   const meta: Meta = { ...doc.meta };

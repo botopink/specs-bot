@@ -58,7 +58,7 @@ function FolderRow({ folder }: { folder: FolderNode }) {
   );
 }
 
-export function FrontCard(props: { front: FrontNode; version: string; progress?: FrontProgress | undefined; href?: string }) {
+export function FrontCard(props: { front: FrontNode; version: string; progress?: FrontProgress | undefined; href?: string; current?: boolean }) {
   const { front, version, progress, href } = props;
   return (
     <section class="front-card" id={front.anchor}>
@@ -84,8 +84,15 @@ export function FrontCard(props: { front: FrontNode; version: string; progress?:
                 </a>
                 {" · "}
               </>
+            ) : props.current ? (
+              <>
+                <a class="owner free" href="/fronts?owner=none" title="no machine has taken it: specs-bot claim" translate="no">
+                  unassigned
+                </a>
+                {" · "}
+              </>
             ) : null}
-            {[front.owner ? "" : version, plural(front.count, "doc"), front.folders.length ? plural(front.folders.length, "folder") : ""]
+            {[props.current ? "" : version, plural(front.count, "doc"), front.folders.length ? plural(front.folders.length, "folder") : ""]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -111,7 +118,9 @@ if(m[2])location.replace("#"+m[2]);else location.replace("/fronts?owner="+m[1]);
 export function FrontsPage(props: { data: SiteData; version: string; path: string; progress: Map<number, FrontProgress>; owner?: string | undefined }) {
   const { data, version, owner } = props;
   const ms = milestoneOf(data, version);
-  const fronts = owner ? ms.fronts.filter((f) => f.owner === owner) : ms.fronts;
+  // ?owner=none keeps the fronts no machine has taken.
+  const fronts = owner === "none" ? ms.fronts.filter((f) => !f.owner) : owner ? ms.fronts.filter((f) => f.owner === owner) : ms.fronts;
+  const free = ms.fronts.filter((f) => !f.owner).length;
   const q = (o?: string) => {
     const params = new URLSearchParams();
     if (version !== data.tree.current) params.set("version", version);
@@ -153,17 +162,18 @@ export function FrontsPage(props: { data: SiteData; version: string; path: strin
               </a>
               <span class="muted small"> · {plural(fronts.length, "front")}</span>
             </h2>
-            {ms.owners.length ? (
+            {ms.current ? (
               <nav class="versions owners" aria-label="Owner" translate="no">
                 {owner ? <a href={q()}>all</a> : <span class="on">all</span>}
                 {ms.owners.map((o) => {
                   const n = ms.fronts.filter((f) => f.owner === o).length;
                   return o === owner ? <span class="on">{o} · {n}</span> : <a href={q(o)}>{o} · {n}</a>;
                 })}
+                {free ? owner === "none" ? <span class="on">unassigned · {free}</span> : <a href={q("none")}>unassigned · {free}</a> : null}
               </nav>
             ) : null}
             {fronts.map((f) => (
-              <FrontCard front={f} version={version} progress={props.progress.get(f.num)} href={frontProgressHref(data, version, f.num)} />
+              <FrontCard front={f} version={version} progress={props.progress.get(f.num)} href={frontProgressHref(data, version, f.num)} current={ms.current} />
             ))}
           </section>
         </div>

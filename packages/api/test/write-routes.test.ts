@@ -92,13 +92,13 @@ describe("POST /api/write/<op>", () => {
 
   test("doc.meta sets and removes keys of a document's block; the doc read shows them", async () => {
     expect((await call("GET", "/api/docs/milestone/status")).body.meta).toEqual({ milestone: "1.0.12-beta" });
-    const r = await call("POST", "/api/write/doc.meta", { ref: "milestone/status", set: { owner: "machine-1", wave: 3 }, apply: true });
+    const r = await call("POST", "/api/write/doc.meta", { ref: "milestone/status", set: { track: "machine-1", wave: 3 }, apply: true });
     expect([r.status, r.body.applied]).toEqual([200, true]);
-    expect(readFileSync(join(root, "specs/milestone/status.md"), "utf8")).toStartWith('---\nmilestone: 1.0.12-beta\nowner: machine-1\nwave: "3"\n---\n# Status\n');
-    expect((await call("GET", "/api/docs/milestone/status")).body.meta).toEqual({ milestone: "1.0.12-beta", owner: "machine-1", wave: "3" });
+    expect(readFileSync(join(root, "specs/milestone/status.md"), "utf8")).toStartWith('---\nmilestone: 1.0.12-beta\ntrack: machine-1\nwave: "3"\n---\n# Status\n');
+    expect((await call("GET", "/api/docs/milestone/status")).body.meta).toEqual({ milestone: "1.0.12-beta", track: "machine-1", wave: "3" });
     const unset = await call("POST", "/api/write/doc.meta", { ref: "milestone/status", unset: ["wave"], apply: true });
     expect(unset.body.applied).toBe(true);
-    expect((await call("GET", "/api/docs/milestone/status")).body.meta).toEqual({ milestone: "1.0.12-beta", owner: "machine-1" });
+    expect((await call("GET", "/api/docs/milestone/status")).body.meta).toEqual({ milestone: "1.0.12-beta", track: "machine-1" });
     const refused = await call("POST", "/api/write/doc.meta", { ref: "milestone/status", set: { milestone: "2.0.0" } });
     expect([refused.status, refused.body.code]).toEqual([422, "invalid"]);
   });

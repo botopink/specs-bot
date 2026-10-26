@@ -104,6 +104,30 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
     await write("doc.meta", { ref, set, unset: o.unset ?? [] }, o);
   });
 
+  // ── fronts ──
+
+  common(
+    program
+      .command("claim")
+      .argument("<front>", "the front's folder (150-rakun) or its number")
+      .description("take a free front to work it: this machine becomes its owner"),
+  ).action(async (front: string, o) => write("front.claim", { front }, o));
+
+  common(
+    program
+      .command("release")
+      .argument("<front>", "the front's folder or its number")
+      .description("let a front go: it has no owner again (its owner or the maintainer)"),
+  ).action(async (front: string, o) => write("front.release", { front }, o));
+
+  common(
+    program
+      .command("assign")
+      .argument("<front>", "the front's folder or its number")
+      .requiredOption("--to <machine>", "machine-1, machine-2 or machine-3")
+      .description("give a front to a machine, whoever held it (the maintainer only)"),
+  ).action(async (front: string, o) => write("front.assign", { front, to: o.to }, o));
+
   // ── decisions ──────────────────────────────────────────────────────────────────────────────────────────
 
   const fieldOptions = (cmd: Command) =>

@@ -94,7 +94,7 @@ function Overview({ data }: { data: SiteData }) {
                     </span>
                   ) : null}
                   <span class="mini-meta">
-                    {f.owner ? <span translate="no">{f.owner} · </span> : null}
+                    <span translate="no">{f.owner || "unassigned"} · </span>
                     {plural(f.count, "doc")}
                     {f.folders.length ? ` · ${plural(f.folders.length, "folder")}` : ""}
                   </span>
