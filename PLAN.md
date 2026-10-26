@@ -308,7 +308,7 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [x] `AGENTS.md` com § Specs — through specs-bot; `.claude/settings.json` libera `specs-bot`, bloqueia clonar/ler o `specs-data`
 - [x] `conversation-chat` arquivado no GitHub (README aponta para o `specs-data`)
 - [x] Push do `specs-data` depois de cada escrita (fila em segundo plano, estado no `/api/health`) — hoje com a chave SSH do usuário do host
-- [ ] **Deploy key** de escrita só do host + ruleset na `main` do `specs-data` bloqueando os demais — bloqueado: a org `botopink` está com deploy keys desativadas (o mantenedor liga em Settings → Member privileges)
+- [x] **Deploy key** de escrita só do host (`~/.config/specs-bot/deploy_key`, `SPECS_DATA_PUSH_KEY`) + ruleset na `main` do `specs-data` (update/deletion/non-fast-forward; só a deploy key passa) — 2026-10-26; deploy keys ligadas na org via `gh api`; push com a chave do mantenedor confirmado recusado
 - [ ] **Usuário de SO `specs-bot`** dono do `specs-data`, serviço do sistema (precisa de `sudo` do mantenedor)
 - [ ] Rede: TLS se a API sair da LAN
 - [ ] Ledgers: o `HEADER` gerado ainda diz "Generated from botopink/projects · specs/…" — trocar exige regenerar os 14 ledgers dos repositórios
