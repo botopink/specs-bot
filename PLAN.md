@@ -253,6 +253,7 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
   - `write`: `op, party, commit, refs[], summary, at`. É uma escrita gravada; `refs` usa os nomes da API, nunca caminhos.
   - `chat`: `id, from, to, purpose, subject, at`. Uma mensagem nova; com `to`, chegam as para a máquina e as para `all`.
   - `presence`: `party, online, at`. Uma máquina entrou ou saiu; várias conexões da mesma máquina contam como uma.
+  - `doing` e `session` (§ 5.8): só para quem os pede em `types`; o padrão sem `types` é `write, chat, presence`.
 - **Cliente → servidor**:
   - `{"type":"subscribe","types":[…],"to":"…"}` troca o filtro e é respondido com `subscribed`.
   - `{"type":"ping"}` é respondido com `pong`.
@@ -295,6 +296,36 @@ própria CLI (o mesmo binário compilado), MCP sobre stdio; stdout é o protocol
   com o filtro (padrão: chat para a própria parte), ou o timeout (600 s; no máximo 1800), como `watch --once`.
 - **Configuração** no `projects` (versionado): `.mcp.json` com `{"mcpServers":{"specs-bot":{"command":"specs-bot","args":["mcp"]}}}`.
   Cada sessão diz quem é com `as` (o prompt da sessão nomeia a parte); uma parte por sessão, uma sessão por parte.
+- **`doing {text, front?}` / `done`**: o que a sessão está fazendo agora (§ 5.8). Respostas mínimas (`party`, `doing`,
+  `front`). Os eventos `doing` e `session` **não** entram no `events:` dos resultados — só o site os pede.
+
+### 5.8 O que cada máquina está fazendo (`/now`)
+
+Pedido do mantenedor (2026-10-26): ver no site, em tempo real, o que cada máquina está fazendo.
+
+- **"Doing"**: uma linha (até 200 caracteres) que a parte diz sobre o trabalho atual, opcionalmente com a frente
+  (pasta ou número de uma frente do milestone corrente, validada como no `front.claim`). Fica **em memória** na API e
+  pertence à **sessão** que segura a parte: some quando a sessão termina (`logout`, 30 min de silêncio, WebSocket
+  fechado). `POST /api/doing {text, front?}` define (precisa de sessão); `DELETE /api/doing` limpa. CLI:
+  `specs-bot doing <texto> [--front f]` e `specs-bot done`; MCP: `doing` e `done`. O agente define ao começar uma
+  tarefa e atualiza quando ela muda.
+- **`GET /api/now`**: `{at, parties: [{party, online, session: {label, since, bound} | null, doing: {text, front,
+  since} | null, fronts[], recent[], chat[]}]}` para maintainer e machine-1..3. `fronts`: as frentes que a parte é
+  dona no milestone corrente. `recent`: as últimas 10 escritas da parte (`op, summary, refs, commit, at`), de um anel
+  em memória alimentado pelos eventos `write` e semeado na partida com os ~50 últimos commits do `specs-data`
+  (trailers `Op`/`Party`; autor = parte; `refs` vêm dos arquivos tocados). `chat`: as 5 últimas mensagens de, para ou
+  para `all`.
+- **Eventos novos** no WebSocket (§ 5.6): `doing` (`party, text, front, at`; `text: null` = limpo ou sessão
+  encerrada) e `session` (`party, held, label, since, at`; uma sessão tomou ou largou a parte). Só chegam a quem os
+  pede em `types`; sem `types`, o padrão continua `write, chat, presence` — clientes antigos (`watch --once`, o MCP)
+  não acordam com eles.
+- **Site**: `/now` ("Now", em destaque na navegação) — um cartão por parte: ponto online, desde quando, onde (o
+  `label` da sessão, `mcp`/`cli`), a linha "doing" grande (com a frente → `/fronts#<frente>` e o README dela), as
+  frentes como chips, as últimas escritas (refs com link para doc, step, pending ou frente) e as últimas mensagens.
+  Renderizado no servidor; um script abre `ws(s)://<host>/api/ws?types=…` como leitor anônimo e, a cada evento
+  (com debounce) e a cada reconexão, busca de novo os cartões já renderizados (`/now/cards`, HTML) — sem recarregar a
+  página; indicador "live"/"reconnecting"; tempos relativos atualizam a cada 15 s. A visão geral (`/`) ganha uma faixa
+  "Now" (uma linha por parte, ao vivo pelo mesmo script, `/now/strip`) com link para `/now`.
 
 ---
 

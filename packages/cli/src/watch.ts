@@ -7,8 +7,9 @@ import { get } from "./client.ts";
 import type { ClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 
-export type EventType = "write" | "chat" | "presence";
-const TYPES: EventType[] = ["write", "chat", "presence"];
+export type EventType = "write" | "chat" | "presence" | "doing" | "session";
+/** doing and session come only when named: without --type the api sends the first three. */
+const TYPES: EventType[] = ["write", "chat", "presence", "doing", "session"];
 
 export interface WatchOptions {
   types?: EventType[];
@@ -35,7 +36,7 @@ export function parseTypes(raw: string | undefined): EventType[] | undefined {
   if (!raw) return undefined;
   const list = raw.split(",").map((t) => t.trim());
   const bad = list.filter((t) => !TYPES.includes(t as EventType));
-  if (bad.length) throw new Error(`unknown event type ${bad.join(", ")} (write, chat, presence)`);
+  if (bad.length) throw new Error(`unknown event type ${bad.join(", ")} (${TYPES.join(", ")})`);
   return list as EventType[];
 }
 
@@ -51,6 +52,10 @@ export function renderEvent(event: Record<string, unknown>, format: Format): str
       return `${at} chat ${event.id} ${event.from} → ${event.to} (${event.purpose}) — ${event.subject}`;
     case "presence":
       return `${at} ${event.party} ${event.online ? "online" : "offline"}`;
+    case "doing":
+      return `${at} ${event.party} ${event.text === null ? "done" : `doing: ${event.text}${event.front ? ` [${event.front}]` : ""}`}`;
+    case "session":
+      return `${at} ${event.party} ${event.held ? "taken" : "let go"} · ${event.label}`;
     default:
       return `${at} ${JSON.stringify(event)}`;
   }
@@ -128,7 +133,7 @@ export function registerRealtime(program: Command, config: () => ClientConfig): 
   program
     .command("watch")
     .description("events as they happen: writes, chat, machines coming and going (the api's websocket)")
-    .option("-t, --type <types>", "write,chat,presence (comma-separated; all by default)")
+    .option("-t, --type <types>", "write,chat,presence,doing,session (comma-separated; the first three by default)")
     .option("--to <party>", "chat to this party (and to all) only; this machine's own party by default")
     .option("--all", "chat to anyone, not only to this machine")
     .option("--once", "stop after the first event (exit 0) — wait for the next message to this machine")

@@ -2,7 +2,7 @@
 // whole session instead of one process per command. On start it takes the folder's party (SPECS_BOT_AS / --as)
 // over the api's websocket (`/api/ws?as=<party>`): the lease lasts as long as the connection, and the hello's
 // session id goes with every HTTP call of this process. The same socket brings the events (writes, chat,
-// presence); each tool result ends with the ones that arrived since the previous call, and `wait` blocks for the
+// presence — never doing or session, which only the site's /now page asks for); each tool result ends with the ones that arrived since the previous call, and `wait` blocks for the
 // next. Every answer is TOON, as the CLI prints it. stdout is the protocol: logs go to stderr.
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -12,7 +12,7 @@ import { ApiError, type Query, request } from "./client.ts";
 import type { ClientConfig } from "./config.ts";
 import { render } from "./output.ts";
 import { sessionLabel } from "./session.ts";
-import { printWrite, type WriteAnswer, type WriteArgs, writeBody } from "./write.ts";
+import { printDoing, printWrite, type WriteAnswer, type WriteArgs, writeBody } from "./write.ts";
 
 const log = (s: string) => process.stderr.write(`specs-bot mcp: ${s}\n`);
 
@@ -312,7 +312,7 @@ export class Refused extends Error {
 
 export function tools(config: ClientConfig, link: Link): Tool[] {
   /** One call with this process's session; a session the api forgot (a restart) is taken again, once. */
-  const call = async (path: string, opts: { query?: Query; body?: unknown }) => {
+  const call = async (path: string, opts: { query?: Query; body?: unknown; method?: "DELETE" }) => {
     try {
       return await request(config, link.session, path, opts);
     } catch (e) {
@@ -330,6 +330,22 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     run: async (a) => render(await call(path(a), { query: query(a) }), "toon"),
   });
 
+  /** A write goes only with the party this session holds; otherwise why not, said once. */
+  const holding = () => {
+    if (!link.party) {
+      throw new Refused("this session holds no party yet", "call the as tool with yours first (maintainer, machine-1, machine-2, machine-3); it is held until the session ends");
+    }
+    if (link.refused) {
+      throw new Refused(
+        link.refused.reason,
+        link.refused.code === 4409
+          ? `one session per party: ${link.party} comes back when that session ends; the next call tries again`
+          : "as names a party the api does not know (maintainer, machine-1, machine-2, machine-3)",
+      );
+    }
+    if (!link.session) throw new Refused(`the specs-bot api at ${config.api} is unreachable, so ${link.party} is not taken`, "the next call tries again");
+  };
+
   const COMMON = {
     apply: bool("write it; without it (the default) a dry run that returns the diff and writes nothing"),
     landed: strs("the code commit(s) this write goes with, as repo@sha; kept in the commit, never in the text"),
@@ -340,18 +356,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     write: true,
     inputSchema: { type: "object", properties: { ...properties, ...COMMON }, required },
     run: async (a) => {
-      if (!link.party) {
-        throw new Refused("this session holds no party yet", "call the as tool with yours first (maintainer, machine-1, machine-2, machine-3); it is held until the session ends");
-      }
-      if (link.refused) {
-        throw new Refused(
-          link.refused.reason,
-          link.refused.code === 4409
-            ? `one session per party: ${link.party} comes back when that session ends; the next call tries again`
-            : "as names a party the api does not know (maintainer, machine-1, machine-2, machine-3)",
-        );
-      }
-      if (!link.session) throw new Refused(`the specs-bot api at ${config.api} is unreachable, so ${link.party} is not taken`, "the next call tries again");
+      holding();
       const { op, body } = writeBody(cli, a as WriteArgs);
       return printWrite((await call(`write/${op}`, { body })) as WriteAnswer, "toon", "call again with apply: true to write it");
     },
@@ -400,6 +405,26 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
               ? link.refused.reason
               : "offline; the next call tries again";
         return render({ api: config.api, party: link.party ?? null, session: link.session ?? null, since: link.since ?? null, state, health }, "toon");
+      },
+    },
+    {
+      name: "doing",
+      description: "say what you are doing now (shown live on the site); set it when a task starts, again when it changes",
+      inputSchema: { type: "object", properties: { text: str("one line, ≤200 chars"), front: str("front folder or number") }, required: ["text"] },
+      run: async (a) => {
+        holding();
+        const r = (await call("doing", { body: { text: s(a.text) ?? "", ...(s(a.front) ? { front: s(a.front) } : {}) } })) as Parameters<typeof printDoing>[0];
+        return printDoing(r, "toon");
+      },
+    },
+    {
+      name: "done",
+      description: "clear what you said you are doing",
+      inputSchema: { type: "object", properties: {} },
+      run: async () => {
+        holding();
+        const r = (await call("doing", { method: "DELETE" })) as { party: string };
+        return printDoing({ party: r.party, doing: null }, "toon");
       },
     },
     read("overview", "counts of the current milestone", {}, [], () => "overview"),

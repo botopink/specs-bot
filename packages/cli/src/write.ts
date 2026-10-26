@@ -40,6 +40,12 @@ export function printWrite(a: WriteAnswer, format: Format, applyHint = "add --ap
   return `${head}\n---\n${a.diff}`;
 }
 
+/** What `doing` and `done` print (CLI and MCP alike): the party and its line, nothing more. */
+export function printDoing(a: { party: string; doing?: { text: string; front: string | null } | null }, format: Format): string {
+  const d = a.doing;
+  return render({ party: a.party, doing: d ? d.text : null, ...(d?.front ? { front: d.front } : {}) }, format);
+}
+
 // ── the request bodies ───────────────────────────────────────────────────────────────────────────────────
 
 export type WriteArgs = Record<string, unknown>;

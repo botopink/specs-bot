@@ -19,13 +19,18 @@ export const websocket = {
 };
 
 export interface Filter {
-  /** Only these event types; every type when absent. */
+  /** Only these event types; DEFAULT_TYPES when absent. */
   types?: Set<SpecEvent["type"]>;
   /** For chat events: only messages to this party (or to all). */
   to?: string;
 }
 
-const TYPES: SpecEvent["type"][] = ["write", "chat", "presence"];
+const TYPES: SpecEvent["type"][] = ["write", "chat", "presence", "doing", "session"];
+/**
+ * What a client that names no types gets: the first three. `doing` and `session` (the site's /now page) come only
+ * when asked for, so a client from before them — `specs-bot watch --once` — never wakes for one.
+ */
+export const DEFAULT_TYPES: ReadonlySet<SpecEvent["type"]> = new Set(["write", "chat", "presence"]);
 
 export function parseFilter(types: unknown, to: unknown): Filter {
   const list = (Array.isArray(types) ? types : typeof types === "string" ? types.split(",") : [])
@@ -38,7 +43,7 @@ export function parseFilter(types: unknown, to: unknown): Filter {
 }
 
 export function matches(filter: Filter, event: SpecEvent): boolean {
-  if (filter.types && !filter.types.has(event.type)) return false;
+  if (!(filter.types ?? DEFAULT_TYPES).has(event.type)) return false;
   if (filter.to && event.type === "chat") return event.to === filter.to || event.to === "all";
   return true;
 }
@@ -190,7 +195,7 @@ export function mountRealtime(app: Hono, sessions: Sessions, tokens: Map<string,
           if (msg.type === "ping") ws.send(JSON.stringify({ type: "pong", at: now() }));
           else if (msg.type === "subscribe") {
             me.filter = parseFilter(msg.types, msg.to);
-            ws.send(JSON.stringify({ type: "subscribed", types: [...(me.filter.types ?? TYPES)], to: me.filter.to ?? null }));
+            ws.send(JSON.stringify({ type: "subscribed", types: [...(me.filter.types ?? DEFAULT_TYPES)], to: me.filter.to ?? null }));
           } else ws.send(JSON.stringify({ type: "error", error: `unknown message type ${msg.type}` }));
         },
         onPong() {

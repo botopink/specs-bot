@@ -1,9 +1,11 @@
 import type { SiteData } from "../data.ts";
 import { frontsHref, milestoneOf } from "../hierarchy.ts";
 import type { SiteStatus } from "../status.ts";
+import type { NowData } from "../now.ts";
 import { Layout, plural, Title } from "./layout.tsx";
+import { NowSummary } from "./now.tsx";
 
-export function Home(props: { data: SiteData | undefined; status: SiteStatus; version: string }) {
+export function Home(props: { data: SiteData | undefined; status: SiteStatus; version: string; now?: NowData | undefined }) {
   const { data, status } = props;
   return (
     <Layout title="specs-bot" path="/">
@@ -20,6 +22,7 @@ export function Home(props: { data: SiteData | undefined; status: SiteStatus; ve
           </>
         )}
       </p>
+      {props.now ? <NowSummary now={props.now} /> : null}
       {data ? <Overview data={data} /> : <p class="bad">The specs could not be read.</p>}
       <p class="muted small">
         API: <a href="/api/health">/api/health</a>. Agents use the <code>specs-bot</code> CLI.

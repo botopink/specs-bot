@@ -23,9 +23,13 @@ export interface Lease {
 
 export const SESSION_TTL_MS = 30 * 60 * 1000;
 
+/** A party taken (`held`), or let go: released, silent past the TTL, its websocket closed, or left for another party. */
+export type SessionChange = { lease: Omit<Lease, "lastSeen">; held: boolean };
+
 export class Sessions {
   #byParty = new Map<string, Lease>();
   #byId = new Map<string, Lease>();
+  #listeners = new Set<(change: SessionChange) => void>();
 
   constructor(readonly ttlMs = SESSION_TTL_MS, readonly now: () => number = Date.now) {}
 
@@ -41,6 +45,29 @@ export class Sessions {
   #drop(l: Lease): void {
     this.#byParty.delete(l.party);
     this.#byId.delete(l.id);
+    this.#emit(l, false);
+  }
+
+  #emit(l: Lease, held: boolean): void {
+    const { lastSeen: _, ...lease } = l;
+    for (const fn of this.#listeners) {
+      try {
+        fn({ lease, held });
+      } catch (e) {
+        console.error(`specs-bot: a session listener failed: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  /** Called whenever a party is taken or let go; answers the unsubscribe. */
+  onChange(fn: (change: SessionChange) => void): () => void {
+    this.#listeners.add(fn);
+    return () => this.#listeners.delete(fn);
+  }
+
+  /** Lets go of every lease silent past the TTL now (otherwise it is found the next time it is asked for). */
+  sweep(): void {
+    for (const l of [...this.#byParty.values()]) this.#alive(l);
   }
 
   /** Takes `party` for a new session, or says who holds it. A session that held another party lets it go. */
@@ -54,6 +81,7 @@ export class Sessions {
     const lease: Lease = { id: crypto.randomUUID().replace(/-/g, ""), party, label, since: new Date(this.now()).toISOString(), lastSeen: this.now(), ...(bound ? { bound } : {}) };
     this.#byParty.set(party, lease);
     this.#byId.set(lease.id, lease);
+    this.#emit(lease, true);
     return { lease };
   }
 
@@ -77,7 +105,7 @@ export class Sessions {
   }
 
   list(): Omit<Lease, "id" | "lastSeen">[] {
-    for (const l of [...this.#byParty.values()]) this.#alive(l);
+    this.sweep();
     return [...this.#byParty.values()].map(({ id: _, lastSeen: __, ...rest }) => rest);
   }
 }

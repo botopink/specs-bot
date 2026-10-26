@@ -14,6 +14,8 @@ import { FrontsPage } from "./views/fronts.tsx";
 import { buildProgress, type FrontProgress, type ProgressItem } from "./progress.ts";
 import { FrontProgressPage, frontNodes } from "./views/progress.tsx";
 import { Home } from "./views/home.tsx";
+import type { NowFn } from "./now.ts";
+import { NowCards, NowPage, NowStrip } from "./views/now.tsx";
 import { NotFound, Unavailable } from "./views/layout.tsx";
 import { StepPage, StepsPage } from "./views/steps.tsx";
 
@@ -23,6 +25,8 @@ export interface SiteOptions {
   version: string;
   /** Already loaded data (tests); loaded from dataPath when absent. */
   loaded?: Loaded;
+  /** What each party is doing now (the api's /api/now); without it /now says the live status is unavailable. */
+  now?: NowFn;
 }
 
 export function createSite(opts: SiteOptions) {
@@ -46,7 +50,25 @@ export function createSite(opts: SiteOptions) {
     c.res = new Response(html, { status: c.res.status, headers: c.res.headers });
   });
 
-  site.get("/", async (c) => c.html(<Home data={data} status={await opts.status()} version={opts.version} />));
+  site.get("/", async (c) => c.html(<Home data={data} status={await opts.status()} version={opts.version} now={opts.now?.()} />));
+
+  // What each party is doing now: the page, and the blocks its script fetches again on every event (PLAN.md § 5.8).
+  // They answer without the specs too: who is online does not need them.
+  const fresh = (c: { header: (k: string, v: string) => void }) => c.header("Cache-Control", "no-store");
+  site.get("/now", (c) => {
+    fresh(c);
+    return c.html(<NowPage now={opts.now?.()} data={data} path={c.req.path} />);
+  });
+  site.get("/now/cards", (c) => {
+    if (!opts.now) return c.html("", 404);
+    fresh(c);
+    return c.html(<NowCards now={opts.now()} data={data} />);
+  });
+  site.get("/now/strip", (c) => {
+    if (!opts.now) return c.html("", 404);
+    fresh(c);
+    return c.html(<NowStrip now={opts.now()} />);
+  });
 
   // Every page below needs the data; without it they answer 503.
   site.use("*", async (c, next) => {

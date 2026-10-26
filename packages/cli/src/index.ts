@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 // `specs-bot` — the agents' door to the specs (PLAN.md § 5.1). A thin client: every answer comes from the api.
 import { Command, Option } from "commander";
-import { ApiError, get, type Query, releaseParty, takeParty } from "./client.ts";
+import { ApiError, del, get, post, type Query, releaseParty, takeParty } from "./client.ts";
 import { savedSession } from "./session.ts";
 import { type ClientConfig, loadClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 import { registerRealtime } from "./watch.ts";
 import { registerExport } from "./export.ts";
 import { serveMcp } from "./mcp.ts";
-import { registerWrites } from "./write.ts";
+import { printDoing, registerWrites } from "./write.ts";
 
 const program = new Command()
   .name("specs-bot")
@@ -60,6 +60,25 @@ program
   });
 
 program.command("sessions").description("which session holds which party now").action(read("sessions"));
+
+// What this session is doing now, shown live on the site's /now page (PLAN.md § 5.8); it ends with the session.
+program
+  .command("doing")
+  .argument("<text...>", "what this party is doing now, one line (at most 200 characters)")
+  .option("--front <front>", "the current front it is about (its folder or number)")
+  .description("say what this party is doing now (the site's /now page); set it when a task starts, again when it changes")
+  .action(async (words: string[], o) => {
+    const r = (await post(config(), "doing", { text: words.join(" "), ...(o.front ? { front: o.front } : {}) })) as Parameters<typeof printDoing>[0];
+    console.log(printDoing(r, program.opts().format as Format));
+  });
+
+program
+  .command("done")
+  .description("clear what this party said it is doing")
+  .action(async () => {
+    const r = (await del(config(), "doing")) as { party: string };
+    console.log(printDoing({ party: r.party, doing: null }, program.opts().format as Format));
+  });
 
 program.command("overview").description("counts of the current milestone").action(read("overview"));
 program.command("next").description("the next free decision number, and whether the files agree").action(read("next"));

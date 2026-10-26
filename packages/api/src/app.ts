@@ -5,6 +5,7 @@ import { identify, mountSessions, Sessions, type Vars } from "./sessions.ts";
 import type { ServerConfig } from "./config.ts";
 import { dataState } from "./data.ts";
 import { EventBus } from "./events.ts";
+import { Activity, nowRoutes } from "./now.ts";
 import { Pusher } from "./push.ts";
 import { readRoutes } from "./routes.ts";
 import { writeRoutes } from "./write-routes.ts";
@@ -43,7 +44,21 @@ export function createApp(config: ServerConfig, opts: AppOptions = {}) {
 
   // The model in force; a write swaps it for the one over the data it left, and the site is rebuilt over it.
   let model: Model | undefined = loaded.ok ? loaded.data : undefined;
-  const site = () => createSite({ dataPath: config.dataPath, status: () => dataState(config.dataPath), version: VERSION, loaded: model ? { ok: true, data: model } : loaded });
+
+  // What each party is doing now (/api/now, /api/doing; the site's /now page), with or without the model (PLAN.md § 5.8).
+  const activity = new Activity(bus, sessions, config.dataPath);
+  api.route("/", nowRoutes(activity, () => model));
+  // A lease silent past the TTL is let go within a minute, and its doing with it, even when nobody asks.
+  setInterval(() => sessions.sweep(), 60_000).unref();
+
+  const site = () =>
+    createSite({
+      dataPath: config.dataPath,
+      status: () => dataState(config.dataPath),
+      version: VERSION,
+      loaded: model ? { ok: true, data: model } : loaded,
+      now: () => activity.snapshot(model),
+    });
   let currentSite = site();
 
   if (model) {
@@ -70,5 +85,5 @@ export function createApp(config: ServerConfig, opts: AppOptions = {}) {
 
   // The read-only site: "/" and its pages, always the one built over the model in force.
   app.all("*", (c) => currentSite.fetch(c.req.raw));
-  return Object.assign(app, { bus, pusher });
+  return Object.assign(app, { bus, pusher, activity, sessions });
 }

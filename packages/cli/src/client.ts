@@ -35,13 +35,17 @@ export async function post(config: ClientConfig, path: string, body: unknown): P
   return send(config, urlOf(config, path), json(body));
 }
 
+export async function del(config: ClientConfig, path: string): Promise<unknown> {
+  return send(config, urlOf(config, path), { method: "DELETE" });
+}
+
 /**
  * One GET (no body) or POST (a body) with the session id the caller holds — the MCP server's, bound to its
  * websocket — instead of this folder's session file; none means a reader (or the old token, when set).
  */
-export async function request(config: ClientConfig, session: string | undefined, path: string, opts: { query?: Query; body?: unknown } = {}): Promise<unknown> {
+export async function request(config: ClientConfig, session: string | undefined, path: string, opts: { query?: Query; body?: unknown; method?: "DELETE" } = {}): Promise<unknown> {
   const url = urlOf(config, path, opts.query);
-  return raw(config, url, opts.body === undefined ? { method: "GET" } : json(opts.body), session);
+  return raw(config, url, opts.method ? { method: opts.method } : opts.body === undefined ? { method: "GET" } : json(opts.body), session);
 }
 
 /** Takes `party` for this folder's session (letting go of the one it held) and keeps the id. */

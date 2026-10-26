@@ -128,7 +128,7 @@ describe("specs-bot mcp", () => {
     expect(init.result.serverInfo.name).toBe("specs-bot");
     expect(init.result.capabilities.tools).toBeDefined();
     const names = ((await first.rpc("tools/list")).result.tools as { name: string; inputSchema: { type: string } }[]).map((t) => t.name);
-    for (const n of ["as", "logout", "whoami", "search", "doc", "chat", "sessions", "wait", "edit", "append", "add_section", "new_doc", "meta", "answer", "send", "mark_read", "claim", "release", "assign"]) {
+    for (const n of ["as", "logout", "whoami", "search", "doc", "chat", "sessions", "wait", "edit", "append", "add_section", "new_doc", "meta", "answer", "send", "mark_read", "claim", "release", "assign", "doing", "done"]) {
       expect(names).toContain(n);
     }
   });
@@ -162,6 +162,23 @@ describe("specs-bot mcp", () => {
     expect(done).toContain("applied: true");
     const commit = done.match(/commit: (\w+)/)![1];
     expect(await git(data, "log", "-1", "--format=%an %h")).toBe(`machine-2 ${commit}`);
+  }, 15000);
+
+  test("doing says what the session's party is doing, done clears it; tiny answers, and no doing events after a result", async () => {
+    const set = await first.tool("doing", { text: "appending to the status" });
+    expect(set.isError).toBeUndefined();
+    expect(text(set)).toBe("party: machine-2\ndoing: appending to the status");
+    const now = (await (await app.request("/api/now")).json()) as { parties: { party: string; doing: { text: string } | null }[] };
+    expect(now.parties.find((p) => p.party === "machine-2")!.doing!.text).toBe("appending to the status");
+
+    // Another party's doing (and its session) is not appended to this session's results.
+    const m1 = ((await (await app.request("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ party: "machine-3", label: "t" }) })).json()) as { session: string }).session;
+    await app.request("/api/doing", { method: "POST", headers: { "content-type": "application/json", "x-specs-bot-session": m1 }, body: JSON.stringify({ text: "elsewhere" }) });
+    await app.request("/api/session", { method: "DELETE", headers: { "x-specs-bot-session": m1 } });
+    await Bun.sleep(150);
+    expect(text(await first.tool("done"))).toBe("party: machine-2\ndoing: null");
+    const after = (await (await app.request("/api/now")).json()) as { parties: { party: string; doing: unknown }[] };
+    expect(after.parties.find((p) => p.party === "machine-2")!.doing).toBeNull();
   }, 15000);
 
   test("an api error is a tool error, in TOON with its hint", async () => {
@@ -244,6 +261,9 @@ describe("specs-bot mcp without a party", () => {
       const w = await mcp.tool("send", { to: "all", purpose: "report", subject: "x", text: "y" });
       expect(w.isError).toBe(true);
       expect(text(w)).toContain("call the as tool");
+      const d = await mcp.tool("doing", { text: "x" });
+      expect(d.isError).toBe(true);
+      expect(text(d)).toContain("call the as tool");
     } finally {
       mcp.proc.kill();
       void server.stop(true);

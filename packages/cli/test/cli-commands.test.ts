@@ -13,6 +13,10 @@ const server = Bun.serve({
     const body = req.method === "GET" ? null : await req.json().catch(() => null);
     seen.push({ method: req.method, path: url.pathname, body, session: req.headers.get("x-specs-bot-session") });
     if (url.pathname === "/api/session" && req.method === "POST") return Response.json({ session: "s1", party: "machine-1", since: "t" });
+    if (url.pathname === "/api/doing") {
+      const b = body as { text: string; front?: string } | null;
+      return Response.json(req.method === "DELETE" ? { party: "machine-1", cleared: true } : { party: "machine-1", doing: { text: b!.text, front: b!.front ? "150-rakun" : null, since: "t" } });
+    }
     if (url.pathname.startsWith("/api/write/")) return Response.json({ applied: false, op: url.pathname.slice("/api/write/".length), refs: [], diff: "" });
     return Response.json({ sessions: [] });
   },
@@ -53,6 +57,20 @@ describe("the CLI's commands", () => {
       [{ front: "150-rakun", apply: false, landed: [] }, "s1"],
       [{ front: "150", apply: false, landed: [] }, "s1"],
       [{ front: "163-meta-ci", to: "machine-2", apply: false, landed: [] }, "s1"],
+    ]);
+  });
+
+  test("doing posts the line (and the front) with the session; done deletes it; both print the party and the line only", async () => {
+    seen.length = 0;
+    const set = await run("doing", "porting", "the", "gate", "--front", "150");
+    expect(set.code).toBe(0);
+    expect(set.out.trim()).toBe("party: machine-1\ndoing: porting the gate\nfront: 150-rakun");
+    const done = await run("done");
+    expect(done.code).toBe(0);
+    expect(done.out.trim()).toBe("party: machine-1\ndoing: null");
+    expect(seen.map((r) => [`${r.method} ${r.path}`, r.body, r.session])).toEqual([
+      ["POST /api/doing", { text: "porting the gate", front: "150" }, "s1"],
+      ["DELETE /api/doing", null, "s1"],
     ]);
   });
 });

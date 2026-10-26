@@ -255,4 +255,47 @@ dl.meta dt { color: var(--muted); font-family: var(--mono, monospace); font-size
 dl.meta dd { margin: 0; }
 dl.meta dd p { margin: 0; }
 @media (max-width: 640px) { dl.meta { grid-template-columns: 1fr; } dl.meta dd { margin-bottom: 6px; } }
+
+/* Now: a card per party, live over the api's websocket. */
+header.top nav a.nav-now { color: var(--accent); font-weight: 650; }
+header.top nav a.nav-now::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 5px; vertical-align: 2px; }
+.dot { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--gone); }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.now-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; vertical-align: middle; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.live[data-live="live"] { color: var(--ok); }
+.live[data-live="live"] .live-dot { background: var(--ok); animation: live-pulse 2s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live[data-live="live"] .live-dot { animation: none; } }
+.now-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 16px; margin: 16px 0; }
+.now-card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; scroll-margin-top: 64px; }
+.now-card.is-off { opacity: .78; }
+.now-card:target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
+.now-card header { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.now-card h2 { margin: 0; font-size: 18px; font-family: var(--mono); }
+.now-state { color: var(--muted); font-size: 13px; }
+.now-where { margin: 2px 0 0 20px; color: var(--muted); font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
+.now-doing { margin: 12px 0 4px; font-size: 19px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.now-doing.idle { font-size: 15px; font-weight: 400; color: var(--muted); font-style: italic; }
+.now-doing-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; font-size: 13px; font-weight: 400; color: var(--muted); }
+.now-doing-meta .chip { font-family: var(--mono); }
+.now-fronts { margin-top: 10px; } .now-fronts .chip { font-family: var(--mono); font-size: 12px; }
+.now-sub h3 { margin: 14px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.now-list { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+.now-list li { padding: 5px 0; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; line-height: 1.45; }
+.now-list li:last-child { border-bottom: 0; }
+.now-list code { font-size: 12px; }
+.now-list time, .now-doing-meta time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.now-list time { margin-left: 6px; }
+.now-refs { margin-left: 6px; font: 12px var(--mono); }
+.now-refs > * + *::before { content: " · "; color: var(--muted); }
+.now-who { font: 12px var(--mono); color: var(--muted); }
+.now-strip { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.now-strip a { display: flex; gap: 10px; align-items: center; min-width: 0; padding: 8px 12px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.now-strip a:hover { text-decoration: none; border-color: var(--accent); }
+.strip-party { flex: none; font: 600 13px var(--mono); min-width: 6.5em; }
+.strip-doing { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 14px; }
+.now-strip-wrap h2 a { color: inherit; }
+@media (max-width: 560px) { .now-card { padding: 14px; } .now-doing { font-size: 17px; } .strip-party { min-width: 0; } }
 `;

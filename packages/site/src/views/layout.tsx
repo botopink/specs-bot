@@ -4,6 +4,7 @@ import type { StepStatus } from "@specs-bot/core";
 
 const NAV: [string, string][] = [
   ["/", "Overview"],
+  ["/now", "Now"],
   ["/fronts", "Fronts"],
   ["/steps", "Steps"],
   ["/pending", "Pending"],
@@ -92,7 +93,7 @@ export function Layout(props:{ title: string; path: string; prose?: boolean; chi
             <a class="brand" href="/">specs-bot</a>
             <nav>
               {NAV.map(([href, label]) => (
-                <a href={href} class={href === section ? "on" : ""}>
+                <a href={href} class={`${href === section ? "on" : ""}${href === "/now" ? " nav-now" : ""}`.trim()}>
                   {label}
                 </a>
               ))}
