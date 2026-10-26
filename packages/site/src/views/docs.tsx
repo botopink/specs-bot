@@ -1,4 +1,4 @@
-import type { Doc } from "@specs-bot/core";
+import { type Doc, splitMeta } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
 import { crumbsOf } from "../hierarchy.ts";
 import { type LinkContext, renderMarkdown } from "../markdown.ts";
@@ -6,9 +6,25 @@ import type { FrontProgress } from "../progress.ts";
 import { Html, Layout } from "./layout.tsx";
 import { DocProgressPanel } from "./progress.tsx";
 
-/** The document's body as HTML. Rendering a long document takes marked ~0.5 s, so the site caches it. */
+/**
+ * The document as HTML: its body, with the YAML block at its top shown as a table of its keys under the title
+ * (each value a markdown fragment). Rendering a long document takes marked ~0.5 s, so the site caches it.
+ */
 export function renderDoc(doc: Doc, ctx: LinkContext): string {
-  return renderMarkdown(doc.lines.join("\n"), ctx);
+  const { end } = doc.ref.includes("/examples/") ? { end: 0 } : splitMeta(doc.lines);
+  const body = renderMarkdown(doc.lines.slice(end).join("\n"), ctx);
+  const keys = Object.keys(doc.meta);
+  if (!keys.length) return body;
+  const rows = keys
+    .map((k) => `<dt translate="no">${escapeHtml(k)}</dt><dd>${renderMarkdown(doc.meta[k]!, ctx)}</dd>`)
+    .join("");
+  const table = `<dl class="meta">${rows}</dl>`;
+  const h1 = body.indexOf("</h1>");
+  return h1 < 0 ? table + body : body.slice(0, h1 + 5) + table + body.slice(h1 + 5);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
 export function DocPage(props: { data: SiteData; doc: Doc; html: string; path: string; progress?: FrontProgress | undefined; ctx: LinkContext }) {

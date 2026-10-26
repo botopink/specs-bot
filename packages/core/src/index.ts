@@ -24,3 +24,4 @@ export * from "./write/decisions.ts";
 export * from "./write/chat.ts";
 export * from "./write/git.ts";
 export * from "./gaps.ts";
+export * from "./docs/meta.ts";

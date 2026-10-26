@@ -72,9 +72,10 @@ Binds: every repository
 | \`@Task<T>\` | \`Async<T>\` | 3 (2), 4 | 2026-10-18 |
 | \`Option<T>\` | \`?T\` | 1 |  |
 `,
-  "milestone/README.md": `# Specs — 1.0.12-beta
-
-**Milestone:** 1.0.12-beta
+  "milestone/README.md": `---
+milestone: 1.0.12-beta
+---
+# Specs — 1.0.12-beta
 `,
   "milestone/status.md": `# Status — 1.0.12-beta
 
@@ -82,10 +83,14 @@ Binds: every repository
 
 Front [150](../150-rakun/README.md) landed.
 `,
-  "150-rakun/README.md": `# Front 150 — rakun
-
-**Milestone:** 1.0.12-beta
-**Machine:** machine-1
+  "150-rakun/README.md": `---
+milestone: 1.0.12-beta
+owner: machine-1
+depends-on: |-
+  144 B-11 (\`wrapWith\`), see [the status](../milestone/status.md#done)
+  and B-12
+---
+# Front 150 — rakun
 
 <script>alert(1)</script>
 
@@ -98,9 +103,9 @@ See [the status](../milestone/status.md#done), [pending](../decisions-pending.md
   "milestone/machine-1.md": "# Machine 1 — the work queue\n",
   "150-rakun/04-rakun/track.md": "# Track 04 — rakun\n",
   "150-rakun/121-bpp-content/context.md": "# Front 121 — bpp content: posts as `data`\n",
-  "150-rakun/121-bpp-content/examples/post.md": "# A sample post\n",
-  "163-meta-ci/README.md": "# Front 163 — meta-ci: the meta repository's CI\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-2\n",
-  "04-rakun/README.md": "# Front 04 — rakun: the old track\n\n**Milestone:** 1.0.11-beta\n",
+  "150-rakun/121-bpp-content/examples/post.md": "---\ntitle: Hello\n---\n# A sample post\n",
+  "163-meta-ci/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-2\n---\n# Front 163 — meta-ci: the meta repository's CI\n",
+  "04-rakun/README.md": "---\nmilestone: 1.0.11-beta\n---\n# Front 04 — rakun: the old track\n",
   "04-rakun/closure-audit/notes.md": "# Closure audit notes\n",
 };
 
@@ -329,6 +334,23 @@ describe("the site over a fixture", () => {
     expect(body).toContain('<span class="unresolved">the repo</span>');
     expect(body).toContain('id="s1--the-bpp-router"');
     expect(body).toContain('href="#steps"'); // the outline
+  });
+
+  test("the metadata block is a table under the title, each value markdown; the raw block is not rendered", async () => {
+    const { body } = await get("/docs/150-rakun/README");
+    const dl = body.slice(body.indexOf('<dl class="meta">'), body.indexOf("</dl>") + 5);
+    expect(body.indexOf("</h1>")).toBeLessThan(body.indexOf('<dl class="meta">'));
+    expect([...dl.matchAll(/<dt translate="no">([^<]+)<\/dt>/g)].map((m) => m[1])).toEqual(["milestone", "owner", "depends-on"]);
+    expect(dl).toContain("<code>wrapWith</code>");
+    expect(dl).toContain('href="/docs/milestone/status#done"');
+    expect(body).not.toContain("<hr");
+    expect(body).not.toContain("depends-on: |-");
+  });
+
+  test("a sample under examples/ renders as written: its block is content, not metadata", async () => {
+    const { body } = await get("/docs/150-rakun/121-bpp-content/examples/post");
+    expect(body).not.toContain('<dl class="meta">');
+    expect(body).toContain("title: Hello");
   });
 
   test("a directory ref redirects to its README; an unknown ref is 404", async () => {

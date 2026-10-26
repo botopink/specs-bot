@@ -1,6 +1,7 @@
 // Document writes (PLAN.md § 5.2) — the most frequent: a status checklist, a front's README.
 // Each plans one change to one file; frozen milestones are refused.
 import { type Doc, docMeta, sectionText } from "../docs/doc.ts";
+import { type Meta, splitMeta, withMeta } from "../docs/meta.ts";
 import type { Model } from "../model.ts";
 import { etagOf, type Plan, WriteError } from "./plan.ts";
 
@@ -101,29 +102,69 @@ export function addSection(model: Model, input: { ref: string; after: string; he
 export function newDoc(model: Model, input: { ref: string; text: string }): Plan {
   const ref = input.ref.replace(/\.md$/, "");
   if (model.docByRef.has(ref)) throw new WriteError("invalid", `doc ${ref} already exists`, "specs-bot doc edit changes it");
-  let meta;
+  let where;
   try {
-    meta = docMeta(`${ref}.md`);
+    where = docMeta(`${ref}.md`);
   } catch {
     throw new WriteError("invalid", `${ref} is not a document ref (<front>/…/<name>)`);
   }
   const version = model.tree.placeOf(ref.split("/").slice(0, -1).join("/")).version;
   if (version !== model.tree.current) throw new WriteError("frozen", `${ref.split("/")[0]} is in ${version}, a closed milestone`, `write in a front of ${model.tree.current}`);
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(meta.name) && meta.name !== "README") {
-    throw new WriteError("invalid", `a document's name is lowercase words with hyphens: ${meta.name}`);
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(where.name) && where.name !== "README") {
+    throw new WriteError("invalid", `a document's name is lowercase words with hyphens: ${where.name}`);
   }
   const dir = ref.split("/").slice(0, -1).join("/");
   if (![...model.docByRef.keys()].some((r) => r.startsWith(`${dir}/`))) {
     throw new WriteError("invalid", `no document lives in ${dir}/ yet`, "a new front starts with its README (specs-bot front new, later)");
   }
-  const lines = bodyLines(input.text, "the document");
-  if (!lines[0]!.startsWith("# ")) throw new WriteError("invalid", 'a document starts with its title ("# …")');
+  // The YAML block: the one the text brings, with the milestone and the owner its folder gives (meta.ts).
+  const given = bodyLines(input.text, "the document");
+  const { meta: brought, end, error } = splitMeta(given);
+  if (error) throw new WriteError("invalid", `the metadata block: ${error}`);
+  if (brought.milestone && brought.milestone !== version) throw new WriteError("invalid", `milestone: ${brought.milestone} — a new document is in ${version}`);
+  const owner = brought.owner ?? model.tree.placeOf(dir).machine;
+  const meta: Meta = { milestone: version, ...(owner ? { owner } : {}), ...brought };
+  meta.milestone = version;
+  if (owner) meta.owner = owner;
+  if (!given[end]?.startsWith("# ")) throw new WriteError("invalid", 'a document starts with its title ("# …"), after its metadata block if it brings one');
+  const lines = withMeta(given, meta);
   return {
     op: "doc.new",
     refs: [ref],
     message: `spec(${version}): ${ref.split("/").slice(-2).join("/")} added`,
     summary: `new document ${ref}`,
     changes: [{ path: pathOf(ref), before: null, after: `${lines.join("\n")}\n` }],
+  };
+}
+
+const KEY = /^[\p{Ll}\p{N}][\p{Ll}\p{N}-]*$/u;
+
+/** Sets and removes keys of a document's metadata block; milestone is the tree's and is not set by hand. */
+export function setMeta(model: Model, input: { ref: string; set?: Record<string, string>; unset?: string[] }): Plan {
+  const doc = docFor(model, input.ref);
+  const set = input.set ?? {};
+  const unset = input.unset ?? [];
+  if (!Object.keys(set).length && !unset.length) throw new WriteError("invalid", "nothing to set or unset");
+  for (const k of [...Object.keys(set), ...unset]) {
+    if (!KEY.test(k)) throw new WriteError("invalid", `a key is lowercase words with hyphens: ${k}`);
+    if (k === "milestone") throw new WriteError("invalid", "milestone is where the document sits; it is not set by hand");
+  }
+  for (const [k, v] of Object.entries(set)) if (!v.trim()) throw new WriteError("invalid", `${k} is empty; --unset removes a key`);
+  const meta: Meta = { ...doc.meta };
+  if (!meta.milestone) meta.milestone = doc.version;
+  for (const k of unset) {
+    if (!(k in meta)) throw new WriteError("not-found", `${doc.ref} has no key ${k}`);
+    delete meta[k];
+  }
+  Object.assign(meta, set);
+  const after = withMeta(doc.lines, meta);
+  const what = [...Object.keys(set).map((k) => `${k} set`), ...unset.map((k) => `${k} removed`)].join(", ");
+  return {
+    op: "doc.meta",
+    refs: [doc.ref],
+    message: `spec(${doc.version}): ${shortRef(doc)}: ${what}`,
+    summary: `${what} in ${doc.ref}`,
+    changes: [{ path: pathOf(doc.ref), before: doc.lines.join("\n"), after: after.join("\n") }],
   };
 }
 

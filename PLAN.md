@@ -157,9 +157,16 @@ interface ChatMessage { id: string; from: string; to: string; purpose: string; s
 
 `specs/<NNN-frente>/[<NNN-grupo>/]…/<nome>.md` — sem pastas de versão nem de máquina. Os documentos do marco
 corrente ficam em `specs/milestone/` (`README`, `status`, `fronts`, `contracts`, `deferred`, `language-gaps`,
-`machine-N`). O README de cada frente leva `**Milestone:** <versão>` e, quando há, `**Machine:** machine-N`
-logo abaixo do título; um documento herda os campos do README mais próximo acima dele. O marco corrente é o
-`**Milestone:**` de `milestone/README.md`; uma frente de outro marco é congelada.
+`machine-N`).
+
+**Metadados em YAML** (2026-10-26): todo `.md` de spec abre com um bloco YAML — `milestone` e `owner` (a máquina
+que trabalha a frente) primeiro, depois os campos que antes eram linhas `**Campo:**` sob o título (`priority`,
+`repository`, `owns`, `depends-on`, `does-not-touch`, `gate`, `track`, …; valor de várias linhas em bloco literal).
+Todo documento traz `milestone` explícito; o marco corrente é o `milestone` de `milestone/README.md`, e uma frente de
+outro marco é congelada. `examples/` guarda conteúdo de exemplo e fica de fora. `check` acusa bloco ausente ou
+inválido (`doc-meta-missing`, `doc-meta-invalid`); `new-doc` cria o bloco; `specs-bot meta <ref> --set k=v --unset k`
+muda chaves. Na página de frentes, a máquina é o `owner` da frente (filtro `/fronts?owner=machine-1`), não uma seção.
+Migração: `scripts/frontmatter.ts`.
 
 Migração (`scripts/flatten.ts migrate`): de cada nome numerado (grupo ou subfrente) fica só a cópia mais nova;
 uma subfrente vai para baixo do novo lugar do seu grupo; os documentos dos marcos fechados saem (o histórico do

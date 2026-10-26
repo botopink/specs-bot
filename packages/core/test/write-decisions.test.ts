@@ -91,7 +91,7 @@ function model(over: { steps?: string; pending?: string } = {}): Model {
     pending: parsePending(over.pending ?? PENDING),
     taken: parseTaken(TAKEN),
     retired: parseRetired(RETIRED),
-    tree: placeDocs([parseDoc("milestone/README.md", "# Specs\n\n**Milestone:** 1.0.12-beta\n")]),
+    tree: placeDocs([parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n")]),
     chat: [],
   });
 }

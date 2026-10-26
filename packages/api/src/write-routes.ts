@@ -16,6 +16,7 @@ import {
   type ApplyResult,
   type Model,
   newDoc,
+  setMeta,
   type Plan,
   replaceSection,
   WriteError,
@@ -64,6 +65,12 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
       ...(typeof b.level === "number" ? { level: b.level } : {}),
     }),
   "doc.new": (m, b) => newDoc(m, { ref: str(b, "ref"), text: str(b, "text") }),
+  "doc.meta": (m, b) =>
+    setMeta(m, {
+      ref: str(b, "ref"),
+      ...(b.set && typeof b.set === "object" && !Array.isArray(b.set) ? { set: Object.fromEntries(Object.entries(b.set as Record<string, unknown>).map(([k, v]) => [k, String(v)])) } : {}),
+      ...(Array.isArray(b.unset) ? { unset: (b.unset as unknown[]).map(String) } : {}),
+    }),
   "pending.add": (m, b) => pendingAdd(m, { id: str(b, "id"), section: str(b, "section"), title: str(b, "title"), fields: fieldsOf(b) }),
   "pending.edit": (m, b) => pendingEdit(m, { id: str(b, "id"), etag: str(b, "etag"), ...opt(b, "title"), fields: fieldsOf(b) }),
   "pending.withdraw": (m, b) => pendingWithdraw(m, { id: str(b, "id"), reason: str(b, "reason") }),

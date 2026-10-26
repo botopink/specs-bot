@@ -195,7 +195,7 @@ export function readRoutes(current: () => Model) {
       // The etag goes back with an edit of this section (specs-bot doc edit), so a stale edit is refused.
       return c.json({ ref: doc.ref, title: doc.title, section: anchor, etag: etagOf(text), text });
     }
-    return c.json({ ref: doc.ref, title: doc.title, version: doc.version, frozen: doc.version !== model.tree.current, outline, text: doc.lines.join("\n") });
+    return c.json({ ref: doc.ref, title: doc.title, version: doc.version, frozen: doc.version !== model.tree.current, meta: doc.meta, outline, text: doc.lines.join("\n") });
   });
 
   api.get("/chat", (c) => {

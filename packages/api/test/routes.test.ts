@@ -53,9 +53,9 @@ Binds: x
 |---|---|---|---|
 | \`@Task<T>\` | \`Async<T>\` | 3 |  |
 `,
-  "specs/milestone/README.md": "# Specs — 1.0.12-beta\n\n**Milestone:** 1.0.12-beta\n",
-  "specs/milestone/status.md": "# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
-  "specs/150-rakun/README.md": "# Front 150 — rakun\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\n## Steps\n\nRouting.\n",
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+  "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
+  "specs/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n\n## Steps\n\nRouting.\n",
   "moved.json": JSON.stringify({
     "1.0.12-beta/machine-1/150-rakun/README": "150-rakun/README",
     "1.0.11-beta/overview": "https://github.com/botopink/specs-data/blob/abc/specs/1.0.11-beta/overview.md",

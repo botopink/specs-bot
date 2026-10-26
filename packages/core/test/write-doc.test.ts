@@ -12,6 +12,8 @@ import {
   placeDocs,
   replaceSection,
   sectionEtag,
+  setMeta,
+  splitMeta,
   WriteError,
 } from "../src/index.ts";
 
@@ -42,9 +44,9 @@ const model = buildModel({
   taken: parseTaken(""),
   retired: parseRetired(""),
   tree: placeDocs([
-    parseDoc("milestone/README.md", "# Specs\n\n**Milestone:** 1.0.12-beta\n"),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
     parseDoc("milestone/status.md", STATUS),
-    parseDoc("01-checker/status.md", "# Old\n\n**Milestone:** 1.0.5-beta\n\n## Done\n\nx\n"),
+    parseDoc("01-checker/status.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n\n## Done\n\nx\n"),
   ]),
   chat: [],
 });
@@ -112,15 +114,73 @@ describe("addSection", () => {
   });
 });
 
+// A model with a front its README gives an owner, to see a new document inherit it.
+const owned = buildModel({
+  specsDir: "/nowhere",
+  steps: parseSteps(""),
+  pending: parsePending(""),
+  taken: parseTaken(""),
+  retired: parseRetired(""),
+  tree: placeDocs([
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+    parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\npriority: high\n---\n# Front 150\n\n## Steps\n\nx\n"),
+    parseDoc("01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n"),
+  ]),
+  chat: [],
+});
+
 describe("newDoc", () => {
-  test("a new document beside existing ones", () => {
+  test("a new document beside existing ones, its metadata block first: the current milestone", () => {
     const p = newDoc(model, { ref: "milestone/contracts", text: "# Contracts\n\nText." });
-    expect(p.changes).toEqual([{ path: "specs/milestone/contracts.md", before: null, after: "# Contracts\n\nText.\n" }]);
+    expect(p.changes).toEqual([
+      { path: "specs/milestone/contracts.md", before: null, after: "---\nmilestone: 1.0.12-beta\n---\n# Contracts\n\nText.\n" },
+    ]);
   });
 
-  test("refuses an existing ref, a folder with no documents, a missing title", () => {
+  test("the owner comes from the front; keys the text brings are kept", () => {
+    const plain = after(newDoc(owned, { ref: "150-rakun/track", text: "# Track\n" }));
+    expect(plain).toBe("---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Track\n");
+    const brought = after(newDoc(owned, { ref: "150-rakun/notes", text: "---\nowner: machine-2\nwave: \"3\"\n---\n# Notes\n" }));
+    expect(splitMeta(brought.split("\n")).meta).toEqual({ milestone: "1.0.12-beta", owner: "machine-2", wave: "3" });
+    expect(brought).toEndWith("---\n# Notes\n");
+  });
+
+  test("refuses an existing ref, a folder with no documents, a missing title, another milestone", () => {
     expect(refused(() => newDoc(model, { ref: "milestone/status", text: "# S" })).message).toContain("already exists");
     expect(refused(() => newDoc(model, { ref: "150-nowhere/x", text: "# X" })).message).toContain("no document lives");
     expect(refused(() => newDoc(model, { ref: "milestone/notes", text: "No title" })).message).toContain("starts with its title");
+    expect(refused(() => newDoc(model, { ref: "milestone/notes", text: "---\nmilestone: 1.0.5-beta\n---\n# N" })).message).toContain("milestone: 1.0.5-beta");
+    expect(refused(() => newDoc(model, { ref: "milestone/notes", text: "---\nmilestone: [\n---\n# N" })).message).toContain("metadata block");
+    expect(refused(() => newDoc(owned, { ref: "01-checker/notes", text: "# N" })).code).toBe("frozen");
+  });
+});
+
+describe("setMeta", () => {
+  const readme = () => owned.docByRef.get("150-rakun/README")!;
+
+  test("sets and removes keys; the body is left as it was", () => {
+    const p = setMeta(owned, { ref: "150-rakun/README", set: { owner: "machine-2", "depends-on": "144 B-11\nand B-12" }, unset: ["priority"] });
+    expect(p.op).toBe("doc.meta");
+    expect(p.refs).toEqual(["150-rakun/README"]);
+    expect(p.message).toBe("spec(1.0.12-beta): 150-rakun/README: owner set, depends-on set, priority removed");
+    const text = after(p);
+    expect(splitMeta(text.split("\n")).meta).toEqual({ milestone: "1.0.12-beta", owner: "machine-2", "depends-on": "144 B-11\nand B-12" });
+    expect(text).toContain("depends-on: |-\n  144 B-11\n  and B-12\n");
+    expect(text.slice(text.indexOf("# Front 150"))).toBe(readme().lines.slice(splitMeta(readme().lines).end).join("\n"));
+  });
+
+  test("a document with no block gets one, its milestone first", () => {
+    const text = after(setMeta(model, { ref: "milestone/status", set: { owner: "machine-1" } }));
+    expect(text.startsWith("---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Status — 1.0.12-beta\n")).toBe(true);
+  });
+
+  test("refuses the milestone, a bad key, an empty value, a missing key, nothing to do, a frozen document", () => {
+    const r = (input: Parameters<typeof setMeta>[1], m = owned) => refused(() => setMeta(m, input));
+    expect(r({ ref: "150-rakun/README", set: { milestone: "2.0.0" } }).message).toContain("not set by hand");
+    expect(r({ ref: "150-rakun/README", set: { Owner: "x" } }).message).toContain("lowercase words");
+    expect(r({ ref: "150-rakun/README", set: { owner: "  " } }).message).toContain("is empty");
+    expect(r({ ref: "150-rakun/README", unset: ["wave"] }).code).toBe("not-found");
+    expect(r({ ref: "150-rakun/README" }).message).toContain("nothing to set");
+    expect(r({ ref: "01-checker/README", set: { owner: "machine-1" } }).code).toBe("frozen");
   });
 });

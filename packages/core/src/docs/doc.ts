@@ -1,7 +1,8 @@
 // A spec document: any .md under specs/ except the decision files at its root. The tree is flat
 // (`<NNN-front>/[<NNN-group>/]…/<name>.md`, the milestone's own documents in `milestone/`); a front's milestone
-// and machine are fields of its README (`**Milestone:** 1.0.12-beta`, `**Machine:** machine-1`), which every
-// document under it inherits (load.ts).
+// and machine are keys of the YAML block at its top (`milestone: 1.0.12-beta`, `owner: machine-1`; meta.ts).
+
+import { type Meta, splitMeta } from "./meta.ts";
 
 export interface Section {
   level: number;
@@ -32,12 +33,14 @@ export interface Doc extends DocMeta {
   lines: string[];
   sections: Section[];
   links: string[];
-  /** The document's own `**Milestone:**` / `**Machine:**` fields, before its first section. */
+  /** The YAML block at its top (meta.ts): every key, and the two the tree places it by. */
+  meta: Meta;
   fields: { milestone?: string; machine?: string };
+  /** Why the block could not be read, when it could not. */
+  metaError?: string;
 }
 
 const NUMBERED = /^(\d+)-([a-z0-9][a-z0-9-]*)$/;
-const FIELD = /^\*\*(Milestone|Machine):\*\* *(\S+)/;
 
 /** Where a path sits in the tree; `version` and `machine` are filled by the loader from the fields. */
 export function docMeta(path: string): DocMeta {
@@ -59,14 +62,13 @@ export function parseDoc(path: string, text: string): Doc {
   const lines = text.split("\n");
   const sections = sectionsOf(lines);
   const h1 = sections.find((s) => s.level === 1);
+  // A sample under examples/ (a post a library renders) keeps its own block; it is not the spec's metadata.
+  const { meta, error } = path.includes("/examples/") ? { meta: {} as Meta, error: undefined } : splitMeta(lines);
   const fields: Doc["fields"] = {};
-  const until = sections.find((s) => s.level > 1)?.start ?? lines.length;
-  for (const line of lines.slice(0, until)) {
-    const m = line.match(FIELD);
-    if (m) fields[m[1] === "Milestone" ? "milestone" : "machine"] = m[2]!;
-  }
-  const meta = docMeta(path);
-  return { ...meta, title: h1?.heading ?? meta.name, lines, sections, links: linksOf(lines), fields };
+  if (meta.milestone) fields.milestone = meta.milestone;
+  if (meta.owner) fields.machine = meta.owner;
+  const where = docMeta(path);
+  return { ...where, title: h1?.heading ?? where.name, lines, sections, links: linksOf(lines), meta, fields, ...(error ? { metaError: error } : {}) };
 }
 
 const HEADING = /^(#{1,6}) +(.+?) *#* *$/;

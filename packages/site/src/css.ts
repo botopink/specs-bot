@@ -248,4 +248,10 @@ table.step-table tr.group th { text-align: left; font-size: 13px; font-weight: 6
 .state.blocked { background: color-mix(in srgb, #b26b00 20%, transparent); color: #b26b00; }
 tr[data-state="done"] td { opacity: .72; }
 a.dec { text-decoration-style: dotted; }
+/* A document's metadata (its YAML block), under its title. */
+dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0 22px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+dl.meta dt { color: var(--muted); font-family: var(--mono, monospace); font-size: 13px; }
+dl.meta dd { margin: 0; }
+dl.meta dd p { margin: 0; }
+@media (max-width: 640px) { dl.meta { grid-template-columns: 1fr; } dl.meta dd { margin-bottom: 6px; } }
 `;

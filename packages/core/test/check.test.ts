@@ -6,6 +6,7 @@ import {
   parsePending,
   parseRetired,
   parseSteps,
+  parseDoc,
   parseTaken,
   placeDocs,
   summarize,
@@ -82,6 +83,21 @@ const codes = (fs: Finding[]) => fs.map((f) => `${f.code} ${f.about}`);
 describe("check", () => {
   test("a consistent repository has only the bare-pipe warning", () => {
     expect(codes(check(store()))).toEqual(["step-bare-pipe step 3"]);
+  });
+
+  test("every spec document carries its metadata block with its milestone; examples/ are samples", () => {
+    const s = store();
+    s.tree = placeDocs([
+      parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+      parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150\n"),
+      parseDoc("150-rakun/track.md", "# Track — no block\n"),
+      parseDoc("150-rakun/notes.md", "---\nowner: machine-1\n---\n# Notes — a block with no milestone\n"),
+      parseDoc("150-rakun/bad.md", "---\nowner: [machine-1\n---\n# Bad\n"),
+      parseDoc("150-rakun/examples/post.md", "---\ntitle: A post\n---\n# A post\n"),
+    ]);
+    const f = check(s).filter((x) => x.code.startsWith("doc-meta"));
+    expect(codes(f).sort()).toEqual(["doc-meta-invalid 150-rakun/bad", "doc-meta-missing 150-rakun/notes", "doc-meta-missing 150-rakun/track"]);
+    expect(f.every((x) => x.severity === "error")).toBe(true);
   });
 
   test("a next free number that disagrees with the rows", () => {

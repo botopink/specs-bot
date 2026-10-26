@@ -9,7 +9,7 @@ const FILES: Record<string, string> = {
   "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
   "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
   "specs/retired.md": "# R\n",
-  "specs/milestone/README.md": "# Specs\n\n**Milestone:** 1.0.12-beta\n",
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
 };
 

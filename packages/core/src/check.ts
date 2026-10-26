@@ -121,6 +121,9 @@ function checkDocs(store: Store): Finding[] {
   for (const d of store.tree.docs) {
     // examples/ holds sample content (a blog post a library renders), not documents of the spec.
     if (d.ref.includes("/examples/")) continue;
+    // Every document carries its metadata block, the milestone at least (meta.ts).
+    if (d.metaError) out.push(err("doc-meta-invalid", d.ref, `its metadata block: ${d.metaError}`));
+    else if (!d.meta.milestone) out.push(err("doc-meta-missing", d.ref, "has no metadata block with its milestone (---\nmilestone: …\n---)"));
     for (const link of d.links) {
       if (EXTERNAL.test(link)) continue;
       const target = normalize(join(dirname(d.ref), decodeURIComponent(link.split("#")[0]!)));

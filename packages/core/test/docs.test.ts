@@ -31,14 +31,14 @@ describe("docMeta", () => {
 
 describe("placeDocs", () => {
   const tree = placeDocs([
-    parseDoc("milestone/README.md", "# Specs\n\n**Milestone:** 1.0.12-beta\n"),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
     parseDoc("milestone/status.md", "# Status\n"),
     parseDoc("milestone/machine-1.md", "# Machine 1\n"),
-    parseDoc("150-rakun/README.md", "# Front 150\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\n## Steps\n\n**Milestone:** 9.9.9\n"),
+    parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150\n\n## Steps\n\n**Milestone:** 9.9.9\n"),
     parseDoc("150-rakun/04-rakun/track.md", "# Track\n"),
-    parseDoc("150-rakun/07-old/README.md", "# Old\n\n**Milestone:** 1.0.11-beta\n"),
+    parseDoc("150-rakun/07-old/README.md", "---\nmilestone: 1.0.11-beta\n---\n# Old\n"),
     parseDoc("150-rakun/07-old/notes.md", "# Notes\n"),
-    parseDoc("01-checker/README.md", "# Checker\n\n**Milestone:** 1.0.5-beta\n"),
+    parseDoc("01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Checker\n"),
   ]);
   const at = (ref: string) => tree.docs.find((d) => d.ref === ref)!;
 

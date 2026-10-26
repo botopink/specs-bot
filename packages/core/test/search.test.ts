@@ -32,8 +32,8 @@ Binds: x
 | \`@Task<T>\` | \`Async<T>\` | 814 |  |
 `),
   tree: placeDocs([
-    parseDoc("150-rakun/README.md", "# Front 150 — rakun\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\n## Steps\n\nThe router reads opaque routes.\n\n### s1\n\nRouting detail.\n"),
-    parseDoc("01-checker/README.md", "# Checker\n\n**Milestone:** 1.0.5-beta\n\nOld opaque notes.\n"),
+    parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n\n## Steps\n\nThe router reads opaque routes.\n\n### s1\n\nRouting detail.\n"),
+    parseDoc("01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Checker\n\nOld opaque notes.\n"),
   ]),
   chat: [],
 };

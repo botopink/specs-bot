@@ -87,6 +87,23 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .description("create a document"),
   ).action(async (ref: string, o) => write("doc.new", { ref, text: await textArg(o.text) }, o));
 
+  common(
+    program
+      .command("meta")
+      .argument("<ref>", "the document")
+      .option("--set <key=value...>", "a key of its metadata block and its value (owner=machine-2, priority=high)")
+      .option("--unset <key...>", "a key to remove")
+      .description("set or remove keys of a document's metadata block (the YAML at its top)"),
+  ).action(async (ref: string, o) => {
+    const set: Record<string, string> = {};
+    for (const kv of (o.set ?? []) as string[]) {
+      const at = kv.indexOf("=");
+      if (at < 1) throw new Error(`--set wants key=value: ${kv}`);
+      set[kv.slice(0, at)] = kv.slice(at + 1).replace(/\\n/g, "\n");
+    }
+    await write("doc.meta", { ref, set, unset: o.unset ?? [] }, o);
+  });
+
   // ── decisions ──────────────────────────────────────────────────────────────────────────────────────────
 
   const fieldOptions = (cmd: Command) =>

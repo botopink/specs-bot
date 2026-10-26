@@ -3,10 +3,11 @@ import { existsSync } from "node:fs";
 import { buildModel, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs } from "@specs-bot/core";
 import { buildProgress, namesFront, percent } from "../src/progress.ts";
 
-const README = `# Front 150 — rakun
-
-**Milestone:** 1.0.12-beta
-**Machine:** machine-1
+const README = `---
+milestone: 1.0.12-beta
+owner: machine-1
+---
+# Front 150 — rakun
 
 ## Steps
 
@@ -83,13 +84,13 @@ const model = buildModel({
   taken: parseTaken(""),
   retired: parseRetired(""),
   tree: placeDocs([
-    parseDoc("milestone/README.md", "# Specs\n\n**Milestone:** 1.0.12-beta\n"),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
     parseDoc("milestone/status.md", STATUS),
     parseDoc("150-rakun/README.md", README),
     parseDoc("150-rakun/04-rakun/track.md", "# Track 04\n\n- [ ] not a step of the README\n"),
-    parseDoc("135-snap/README.md", "# Front 135 — snap\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\nCoordination only.\n"),
+    parseDoc("135-snap/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 135 — snap\n\nCoordination only.\n"),
     parseDoc("135-snap/20-snap/context.md", "# Front 135 — snap: the evaluation\n"),
-    parseDoc("151-json/README.md", "# Front 151 — json\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n"),
+    parseDoc("151-json/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 151 — json\n"),
   ]),
   chat: [],
 });

@@ -17,7 +17,7 @@ const model = buildModel({
   taken: parseTaken(`## lang — the language\n\n**Lead.**\n\nText.\n\nSteps: 1, 3\nBinds: x\n`),
   retired: parseRetired(`## Language spellings\n\n| Retired | Replaced by | Decisions | Since / note |\n|---|---|---|---|\n| a | b | 3 |  |\n`),
   tree: placeDocs([
-    parseDoc("150-rakun/README.md", "# Front 150 — rakun\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n"),
+    parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n"),
     parseDoc("150-rakun/04-rakun/track.md", "# Track 04\n"),
     parseDoc("milestone/status.md", "# Status\n"),
   ]),
