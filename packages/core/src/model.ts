@@ -7,7 +7,7 @@ import type { RetiredRow } from "./decisions/retired.ts";
 import { nextFree, statedNextFree, type StepRow } from "./decisions/steps.ts";
 import type { Subject } from "./decisions/taken.ts";
 import type { Doc } from "./docs/doc.ts";
-import { buildIndex, type SearchIndex } from "./search.ts";
+import { buildIndex, type SearchIndex, updateIndex } from "./search.ts";
 import { loadStore, type Store } from "./store.ts";
 
 export interface Front {
@@ -40,15 +40,47 @@ export interface Model extends Store {
   fronts: Front[];
   nextFree: number;
   statedNextFree: { steps?: number; pending?: number };
-  /** Built on first use (about a second over the real data). */
+  /** Built on first use (about a second over the real data), or updated from the index of the model it follows. */
   readonly index: SearchIndex;
 }
 
-export function loadModel(dataPath: string): Model {
-  return buildModel(loadStore(dataPath));
+/** The model a write left behind: the one before it, and the files it changed (relative to the data repository). */
+export interface Follows {
+  model: Model;
+  paths: string[];
 }
 
-export function buildModel(store: Store): Model {
+export function loadModel(dataPath: string, follows?: Follows): Model {
+  return buildModel(loadStore(dataPath), follows);
+}
+
+/**
+ * A model's search index, made on first use. A model that follows another takes that one's index over and replaces
+ * only the units of the changed files, when it has been built; through a chain of models never searched, the
+ * changed files add up.
+ */
+interface IndexSlot {
+  index?: SearchIndex;
+  follows?: { slot: IndexSlot; paths: string[] };
+}
+
+const slots = new WeakMap<Model, IndexSlot>();
+
+function indexOf(slot: IndexSlot, store: Store): SearchIndex {
+  if (!slot.index) {
+    const paths: string[] = [];
+    let at = slot;
+    while (!at.index && at.follows) {
+      paths.push(...at.follows.paths);
+      at = at.follows.slot;
+    }
+    slot.index = at.index ? updateIndex(at.index, store, paths) : buildIndex(store);
+  }
+  delete slot.follows;
+  return slot.index;
+}
+
+export function buildModel(store: Store, follows?: Follows): Model {
   const { steps, pending, taken, retired, tree, chat } = store;
 
   const subjectsByStep = new Map<number, Subject[]>();
@@ -67,8 +99,9 @@ export function buildModel(store: Store): Model {
   const pendingStated = statedNextFree(pending.head.join("\n"));
   if (pendingStated !== undefined) stated.pending = pendingStated;
 
-  let index: SearchIndex | undefined;
-  return {
+  const before = follows && slots.get(follows.model);
+  const slot: IndexSlot = before ? { follows: { slot: before, paths: follows.paths } } : {};
+  const model: Model = {
     ...store,
     stepByNum: new Map(steps.rows.map((r) => [r.num, r])),
     entries: pendingEntries(pending),
@@ -83,9 +116,11 @@ export function buildModel(store: Store): Model {
     nextFree: nextFree(steps),
     statedNextFree: stated,
     get index() {
-      return (index ??= buildIndex(store));
+      return indexOf(slot, store);
     },
   };
+  slots.set(model, slot);
+  return model;
 }
 
 /** A front is a numbered directory at the top of specs/; its README titles it and names its milestone. */

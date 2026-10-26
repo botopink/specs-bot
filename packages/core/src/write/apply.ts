@@ -33,6 +33,8 @@ const key = (f: Finding) => `${f.code}\u0000${f.about}\u0000${f.message}`;
 
 export class Writer {
   #queue: Promise<unknown> = Promise.resolve();
+  /** The model over the data as the last write left it: the next one's search index is updated from its. */
+  #last?: Model;
 
   constructor(readonly dataPath: string) {}
 
@@ -83,7 +85,8 @@ export class Writer {
       }
 
       // The write may not bring an error the data did not have.
-      const after = loadModel(this.dataPath);
+      // A plan made on an older model still lands on the data the last write left.
+      const after = loadModel(this.dataPath, { model: this.#last ?? model, paths: files });
       const had = new Set(check(model).filter((f) => f.severity === "error").map(key));
       const fresh = check(after).filter((f) => f.severity === "error" && !had.has(key(f)));
       if (fresh.length) {
@@ -97,6 +100,7 @@ export class Writer {
         GIT_AUTHOR_EMAIL: `${party}@specs-bot`,
       });
       const commit = await git(this.dataPath, ["rev-parse", "--short", "HEAD"]);
+      this.#last = after;
       return { ...base, commit, model: after };
     } catch (e) {
       undo();

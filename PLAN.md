@@ -320,7 +320,7 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [x] Conversa: `send` (arquivo pela convenção do `conversation-chat`, id por autor), `mark-read`
 - [x] API `POST /api/write/<op>` (token obrigatório, dry-run por padrão, troca o modelo da API e do site, publica `write`/`chat` no WebSocket)
 - [x] Ensaio sobre clone real: 956-b aberta e respondida como 957, mensagem enviada; `check` sem erro novo; achou 2 bugs (seção ambígua, diff de duas regiões) — corrigidos
-- [ ] Atualizar o índice de busca de forma incremental (hoje reconstrói ~1 s depois de cada escrita, em segundo plano)
+- [x] Índice de busca incremental: o modelo depois de uma escrita herda o índice do anterior e troca só as unidades dos arquivos que o plano mudou (`updateIndex`); igual a um `buildIndex` do zero (teste de equivalência); nos dados reais a primeira busca depois de uma escrita caiu de ~700 ms para ~17 ms
 - [ ] `status.md` do `conversation-chat` (gerado por `scripts/status.sh`) — gerar pelo specs-bot
 
 ### Fase 4 — Migração e isolamento
