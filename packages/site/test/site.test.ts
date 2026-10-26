@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import { shortTitle } from "../src/hierarchy.ts";
 import { createSite, loadSiteData } from "../src/index.ts";
 import { resolveLink } from "../src/markdown.ts";
-import { refOfPath } from "../src/short-links.ts";
 
 describe("shortTitle", () => {
   test("drops the front's own number and name, keeps what more it says", () => {
@@ -73,33 +72,36 @@ Binds: every repository
 | \`@Task<T>\` | \`Async<T>\` | 3 (2), 4 | 2026-10-18 |
 | \`Option<T>\` | \`?T\` | 1 |  |
 `,
-  "1.0.12-beta/status.md": `# Status — 1.0.12-beta
+  "milestone/README.md": `# Specs — 1.0.12-beta
+
+**Milestone:** 1.0.12-beta
+`,
+  "milestone/status.md": `# Status — 1.0.12-beta
 
 ## Done
 
-Front [150](machine-1/150-rakun/README.md) landed.
+Front [150](../150-rakun/README.md) landed.
 `,
-  "1.0.12-beta/machine-1/150-rakun/README.md": `# Front 150 — rakun
+  "150-rakun/README.md": `# Front 150 — rakun
+
+**Milestone:** 1.0.12-beta
+**Machine:** machine-1
 
 <script>alert(1)</script>
 
 ## Steps
 
-See [the status](../../status.md#done), [pending](../../../decisions-pending.md), [the repo](../../../../repository/rakun/AGENTS.md) and [an example](examples/a.bp).
+See [the status](../milestone/status.md#done), [pending](../decisions-pending.md), [the repo](../../repository/rakun/AGENTS.md) and [an example](examples/a.bp).
 
 ### s1 · The \`bpp\` router
 `,
-  "1.0.12-beta/machine-1/README.md": "# Machine 1 — the work queue\n",
-  "1.0.12-beta/machine-1/150-rakun/04-rakun/track.md": "# Track 04 — rakun\n",
-  "1.0.12-beta/machine-1/150-rakun/121-bpp-content/context.md": "# Front 121 — bpp content: posts as `data`\n",
-  "1.0.12-beta/machine-1/150-rakun/121-bpp-content/examples/post.md": "# A sample post\n",
-  "1.0.12-beta/machine-2/163-meta-ci/README.md": "# Front 163 — meta-ci: the meta repository's CI\n",
-  "1.0.11-beta/overview.md": `# 1.0.11-beta — closed
-
-Frozen.
-`,
-  "1.0.11-beta/04-rakun/README.md": "# Front 04 — rakun: the old track\n",
-  "1.0.11-beta/closure-audit/notes.md": "# Closure audit notes\n",
+  "milestone/machine-1.md": "# Machine 1 — the work queue\n",
+  "150-rakun/04-rakun/track.md": "# Track 04 — rakun\n",
+  "150-rakun/121-bpp-content/context.md": "# Front 121 — bpp content: posts as `data`\n",
+  "150-rakun/121-bpp-content/examples/post.md": "# A sample post\n",
+  "163-meta-ci/README.md": "# Front 163 — meta-ci: the meta repository's CI\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-2\n",
+  "04-rakun/README.md": "# Front 04 — rakun: the old track\n\n**Milestone:** 1.0.11-beta\n",
+  "04-rakun/closure-audit/notes.md": "# Closure audit notes\n",
 };
 
 function fixture(): string {
@@ -154,7 +156,7 @@ describe("the site over a fixture", () => {
       ["review", "/review", 1, "To review"],
       ["subjects", "/subjects", 1, "Subjects"],
       ["retired", "/retired", 2, "Retired"],
-      ["docs", "/fronts", 7, "Documents"],
+      ["docs", "/fronts", 8, "Documents"],
     ]);
     // The breakdown sits in the detail line, not in the label.
     expect(body).toContain('<span class="d">1 overtaken · 0 replaced · 0 reversed</span>');
@@ -245,14 +247,14 @@ describe("the site over a fixture", () => {
     const h2 = [...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1]);
     expect(h2).toEqual(["milestone", "machine-1", "machine-2"]);
     // The machine's README titles its section.
-    expect(body).toContain('<a href="/docs/machine-1/README">Machine 1 — the work queue</a>');
+    expect(body).toContain('<a href="/docs/milestone/machine-1">Machine 1 — the work queue</a>');
   });
 
   test("a front is a card in its machine's section: number, name linking its README, title, counts", async () => {
     const { body } = await get("/fronts");
     const card = body.slice(body.indexOf('<section class="front-card" id="machine-1-150-rakun">'));
     expect(card).toStartWith('<section class="front-card" id="machine-1-150-rakun"><header><span class="fnum">150</span>');
-    expect(card).toContain('<h3><a href="/docs/machine-1/150-rakun/README">rakun</a>');
+    expect(card).toContain('<h3><a href="/docs/150-rakun/README">rakun</a>');
     expect(card).toContain('<p class="fmeta">machine-1 · 4 docs · 2 folders</p>');
     expect(body.indexOf('id="machine-1-150-rakun"')).toBeLessThan(body.indexOf('id="machine-2-163-meta-ci"'));
   });
@@ -265,14 +267,15 @@ describe("the site over a fixture", () => {
       ["machine-1-150-rakun-121-bpp-content", "121-bpp-content posts as data"],
     ]);
     // A folder's documents are chips named below the folder, deeper folders included.
-    expect(body).toContain('href="/docs/machine-1/150-rakun/121-bpp-content/examples/post" title="A sample post">examples/post</a>');
+    expect(body).toContain('href="/docs/150-rakun/121-bpp-content/examples/post" title="A sample post">examples/post</a>');
     expect(body).toContain("<code>data</code>");
   });
 
   test("an old milestone has no machines: its fronts sit in one Fronts section; the switcher links the others", async () => {
     const { body } = await get("/fronts?version=1.0.11-beta");
     expect(body).toMatch(/<h1>1\.0\.11-beta <span class="pill frozen-pill">frozen<\/span><\/h1>/);
-    expect([...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1])).toEqual(["milestone", "fronts"]);
+    // Only the current milestone keeps documents of its own (milestone/): an old one is its fronts alone.
+    expect([...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1])).toEqual(["fronts"]);
     expect(body).toContain('<section class="front-card" id="04-rakun">');
     expect(body).toContain('<a href="/fronts">1.0.12-beta</a>');
     expect(body).toContain('<span class="on">1.0.11-beta</span>');
@@ -288,14 +291,14 @@ describe("the site over a fixture", () => {
   });
 
   test("a folder with no README leads to its section", async () => {
-    const folder = await get("/docs/1.0.12-beta/machine-1/150-rakun/04-rakun");
+    const folder = await get("/docs/150-rakun/04-rakun");
     expect([folder.status, folder.res.headers.get("location")]).toEqual([302, "/fronts#machine-1-150-rakun-04-rakun"]);
-    const loose = await get("/docs/1.0.11-beta/closure-audit");
+    const loose = await get("/docs/04-rakun/closure-audit");
     expect(loose.res.headers.get("location")).toBe("/fronts?version=1.0.11-beta");
   });
 
   test("a document's breadcrumbs lead back to each section it sits in", async () => {
-    const { body } = await get("/docs/1.0.12-beta/machine-1/150-rakun/04-rakun/track");
+    const { body } = await get("/docs/150-rakun/04-rakun/track");
     const crumbs = [...body.slice(body.indexOf('<nav class="crumbs"')).matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)]
       .slice(0, 5)
       .map((m) => [m[2], m[1]]);
@@ -307,15 +310,15 @@ describe("the site over a fixture", () => {
       ["04-rakun", "/fronts#machine-1-150-rakun-04-rakun"],
     ]);
     // A frozen milestone's crumbs name it.
-    expect((await get("/docs/1.0.11-beta/04-rakun/README")).body).toContain('<a href="/fronts?version=1.0.11-beta#04-rakun">04-rakun</a>');
+    expect((await get("/docs/04-rakun/README")).body).toContain('<a href="/fronts?version=1.0.11-beta#04-rakun">04-rakun</a>');
   });
 
   test("a doc renders with anchors, mapped links and raw HTML escaped", async () => {
-    const { status, body } = await get("/docs/1.0.12-beta/machine-1/150-rakun/README");
+    const { status, body } = await get("/docs/150-rakun/README");
     expect(status).toBe(200);
     expect(body).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(body).not.toContain("<script>alert");
-    expect(body).toContain('href="/docs/status#done"');
+    expect(body).toContain('href="/docs/milestone/status#done"');
     expect(body).toContain('href="/pending"');
     expect(body).toContain('<span class="unresolved">the repo</span>');
     expect(body).toContain('id="s1--the-bpp-router"');
@@ -323,9 +326,9 @@ describe("the site over a fixture", () => {
   });
 
   test("a directory ref redirects to its README; an unknown ref is 404", async () => {
-    const dir = await get("/docs/1.0.12-beta/machine-1/150-rakun");
+    const dir = await get("/docs/150-rakun");
     expect(dir.status).toBe(302);
-    expect(dir.res.headers.get("location")).toBe("/docs/machine-1/150-rakun/README");
+    expect(dir.res.headers.get("location")).toBe("/docs/150-rakun/README");
     expect((await get("/docs/nope")).status).toBe(404);
   });
 });
@@ -333,7 +336,7 @@ describe("the site over a fixture", () => {
 describe("a front's progress on the site", () => {
   const root = fixture();
   writeFileSync(
-    join(root, "specs/1.0.12-beta/status.md"),
+    join(root, "specs/milestone/status.md"),
     "# Status — 1.0.12-beta\n\n## L1 — now\n\n### 150 rakun\n\n- [ ] 150 s2 — the router's tail\n\n## Done — landed\n\n### 150 rakun\n\n- [x] 150 s1 — the `bpp` router\n",
   );
   const site = createSite({ dataPath: root, status, version: "0.0.1" });
@@ -354,26 +357,26 @@ describe("a front's progress on the site", () => {
     const { status: code, body } = await get("/fronts/150");
     expect(code).toBe(200);
     expect(body).toContain("Steps — from the README");
-    expect(body).toContain('href="/docs/machine-1/150-rakun/README#s1--the-bpp-router"');
+    expect(body).toContain('href="/docs/150-rakun/README#s1--the-bpp-router"');
     expect(body).toContain("In status.md");
-    expect(body).toContain('href="/docs/status#150-rakun"');
+    expect(body).toContain('href="/docs/milestone/status#150-rakun"');
     expect(body).toContain('<span class="lane" translate="no">Done</span>');
     expect((await get("/fronts/999")).status).toBe(404);
     expect((await get("/fronts/04?version=1.0.11-beta")).status).toBe(200);
   });
 
   test("a document inside a front opens with the front's progress; one outside does not", async () => {
-    const inside = (await get("/docs/1.0.12-beta/machine-1/150-rakun/04-rakun/track")).body;
+    const inside = (await get("/docs/150-rakun/04-rakun/track")).body;
     expect(inside).toContain('<aside class="doc-progress">');
     expect(inside).toContain("All of front 150&#39;s steps");
-    expect((await get("/docs/1.0.12-beta/status")).body).not.toContain('class="doc-progress"');
+    expect((await get("/docs/milestone/status")).body).not.toContain('class="doc-progress"');
   });
 });
 
 describe("translation: what the browser may translate and what never", () => {
   const root = fixture();
   writeFileSync(
-    join(root, "specs/1.0.12-beta/machine-1/150-rakun/notes.md"),
+    join(root, "specs/150-rakun/notes.md"),
     [
       "# Notes on the router",
       "",
@@ -398,14 +401,14 @@ describe("translation: what the browser may translate and what never", () => {
   const page = async (path: string) => (await site.request(path)).text();
 
   test("code blocks, inline code and a table cell that is code alone are never translated", async () => {
-    const body = await page("/docs/1.0.12-beta/machine-1/150-rakun/notes");
+    const body = await page("/docs/150-rakun/notes");
     expect(body).toMatch(/<pre class="notranslate" translate="no"><code class="notranslate language-bp" translate="no">/);
     expect(body).toContain('<td class="notranslate" translate="no"><code class="notranslate" translate="no">for-await-one-source</code></td>');
     expect(body).toContain('<code class="notranslate" translate="no">main.bp</code>');
   });
 
   test("labels and the keywords that are no English word are kept; English words are not", async () => {
-    const body = await page("/docs/1.0.12-beta/machine-1/150-rakun/notes");
+    const body = await page("/docs/150-rakun/notes");
     const kept = [...body.matchAll(/<span class="notranslate" translate="no">([^<]+)<\/span>/g)].map((m) => m[1]);
     for (const label of ["fn", "comptime", "150 s31", "B-162", "04-rakun", "810-d", "machine-1"]) expect(kept).toContain(label);
     // "return" and "type" are English here: the translator gets them.
@@ -415,7 +418,7 @@ describe("translation: what the browser may translate and what never", () => {
   });
 
   test("prose is translatable; a block after <!-- notrans --> is not, and the marker is not shown", async () => {
-    const body = await page("/docs/1.0.12-beta/machine-1/150-rakun/notes");
+    const body = await page("/docs/150-rakun/notes");
     expect(body).toContain('<div class="notranslate" translate="no"><p>A paragraph kept as written.</p>');
     expect(body).toContain("<p>A paragraph translated as usual.</p>");
     expect(body).not.toContain("notrans --");
@@ -471,8 +474,8 @@ describe("the site without data", () => {
 });
 
 describe("resolveLink", () => {
-  const refs = new Set(["1.0.12-beta/status", "1.0.12-beta/machine-1/150-rakun/README"]);
-  const from = "1.0.12-beta/machine-1/150-rakun/README";
+  const refs = new Set(["milestone/status", "150-rakun/README"]);
+  const from = "150-rakun/README";
 
   test("keeps absolute URLs and in-page anchors", () => {
     expect(resolveLink("https://example.com/x", { refs, from })).toBe("https://example.com/x");
@@ -480,18 +483,17 @@ describe("resolveLink", () => {
   });
 
   test("maps a relative .md and a directory to doc routes", () => {
-    expect(resolveLink("../../status.md#done", { refs, from })).toBe("/docs/1.0.12-beta/status#done");
-    // resolveLink answers the versioned ref; the page shortens the current milestone's links (short-links.ts).
-    expect(resolveLink("../150-rakun/", { refs, from })).toBe("/docs/1.0.12-beta/machine-1/150-rakun/README");
+    expect(resolveLink("../milestone/status.md#done", { refs, from })).toBe("/docs/milestone/status#done");
+    expect(resolveLink("../150-rakun/", { refs, from })).toBe("/docs/150-rakun/README");
   });
 
   test("maps the files above the milestones to their pages", () => {
-    expect(resolveLink("../../../decisions-taken-steps.md", { refs, from })).toBe("/steps");
-    expect(resolveLink("../../../retired.md#std", { refs, from })).toBe("/retired");
+    expect(resolveLink("../decisions-taken-steps.md", { refs, from })).toBe("/steps");
+    expect(resolveLink("../retired.md#std", { refs, from })).toBe("/retired");
   });
 
   test("anything else resolves to nothing", () => {
-    expect(resolveLink("../../../../AGENTS.md", { refs, from })).toBeUndefined();
+    expect(resolveLink("../../AGENTS.md", { refs, from })).toBeUndefined();
     expect(resolveLink("examples/a.bp", { refs, from })).toBeUndefined();
   });
 });
@@ -503,7 +505,7 @@ if (!(!realRoot || !existsSync(join(realRoot, "specs")))) describe("the site ove
   const site = createSite({ dataPath: realRoot, status, version: "0.0.1" });
 
   test("every page answers 200 and shows no filesystem path", async () => {
-    for (const path of ["/", "/steps", "/steps/814", "/pending", "/review", "/subjects", "/retired", "/fronts", "/fronts?version=1.0.5-beta", "/docs/1.0.12-beta/README"]) {
+    for (const path of ["/", "/steps", "/steps/814", "/pending", "/review", "/subjects", "/retired", "/fronts", "/fronts?version=1.0.5-beta", "/docs/milestone/README"]) {
       const res = await site.request(path);
       const body = await res.text();
       expect([path, res.status]).toEqual([path, 200]);
@@ -518,8 +520,8 @@ if (!(!realRoot || !existsSync(join(realRoot, "specs")))) describe("the site ove
       const body = await (await site.request(`/fronts?version=${v}`)).text();
       const ids = [...body.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
       expect([v, ids.length - new Set(ids).size]).toEqual([v, 0]);
-      // The current milestone's documents are linked without their version.
-      const listed = [...body.matchAll(/href="\/docs\/([^"#]+)"/g)].map((m) => refOfPath(m[1]!, loaded.data.tree.current));
+      // Every document is linked by its ref.
+      const listed = [...body.matchAll(/href="\/docs\/([^"#]+)"/g)].map((m) => m[1]!);
       const docs = loaded.data.tree.docs.filter((d) => d.version === v).map((d) => d.ref);
       expect([v, docs.filter((r) => !listed.includes(r))]).toEqual([v, []]);
     }

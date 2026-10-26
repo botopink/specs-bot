@@ -105,9 +105,10 @@ export function newDoc(model: Model, input: { ref: string; text: string }): Plan
   try {
     meta = docMeta(`${ref}.md`);
   } catch {
-    throw new WriteError("invalid", `${ref} is not a document ref (<version>/…/<name>)`);
+    throw new WriteError("invalid", `${ref} is not a document ref (<front>/…/<name>)`);
   }
-  if (meta.version !== model.tree.current) throw new WriteError("frozen", `${meta.version} is not the current milestone`, `write under ${model.tree.current}/`);
+  const version = model.tree.placeOf(ref.split("/").slice(0, -1).join("/")).version;
+  if (version !== model.tree.current) throw new WriteError("frozen", `${ref.split("/")[0]} is in ${version}, a closed milestone`, `write in a front of ${model.tree.current}`);
   if (!/^[a-z0-9][a-z0-9-]*$/.test(meta.name) && meta.name !== "README") {
     throw new WriteError("invalid", `a document's name is lowercase words with hyphens: ${meta.name}`);
   }
@@ -120,7 +121,7 @@ export function newDoc(model: Model, input: { ref: string; text: string }): Plan
   return {
     op: "doc.new",
     refs: [ref],
-    message: `spec(${meta.version}): ${ref.split("/").slice(-2).join("/")} added`,
+    message: `spec(${version}): ${ref.split("/").slice(-2).join("/")} added`,
     summary: `new document ${ref}`,
     changes: [{ path: pathOf(ref), before: null, after: `${lines.join("\n")}\n` }],
   };

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { buildIndex, loadStore, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, snippet, type Store } from "../src/index.ts";
+import { buildIndex, loadStore, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs, snippet, type Store } from "../src/index.ts";
 
 const store: Store = {
   specsDir: "/nowhere",
@@ -31,14 +31,10 @@ Binds: x
 |---|---|---|---|
 | \`@Task<T>\` | \`Async<T>\` | 814 |  |
 `),
-  tree: {
-    current: "1.0.12-beta",
-    versions: ["1.0.5-beta", "1.0.12-beta"],
-    docs: [
-      parseDoc("1.0.12-beta/machine-1/150-rakun/README.md", "# Front 150 — rakun\n\n## Steps\n\nThe router reads opaque routes.\n\n### s1\n\nRouting detail.\n"),
-      parseDoc("1.0.5-beta/01-checker/README.md", "# Checker\n\nOld opaque notes.\n"),
-    ],
-  },
+  tree: placeDocs([
+    parseDoc("150-rakun/README.md", "# Front 150 — rakun\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\n## Steps\n\nThe router reads opaque routes.\n\n### s1\n\nRouting detail.\n"),
+    parseDoc("01-checker/README.md", "# Checker\n\n**Milestone:** 1.0.5-beta\n\nOld opaque notes.\n"),
+  ]),
   chat: [],
 };
 
@@ -63,15 +59,15 @@ describe("buildIndex", () => {
 
   test("a closed milestone's sections are left out unless asked for", () => {
     const keys = (o = {}) => index.search("opaque", { kinds: ["section"], ...o }).map((h) => h.key);
-    expect(keys()).toEqual(["1.0.12-beta/machine-1/150-rakun/README#steps"]);
-    expect(keys({ frozen: true })).toContain("1.0.5-beta/01-checker/README#checker");
-    expect(keys({ version: "1.0.5-beta" })).toEqual(["1.0.5-beta/01-checker/README#checker"]);
+    expect(keys()).toEqual(["150-rakun/README#steps"]);
+    expect(keys({ frozen: true })).toContain("01-checker/README#checker");
+    expect(keys({ version: "1.0.5-beta" })).toEqual(["01-checker/README#checker"]);
   });
 
   test("a section is its own text, not its subsections'", () => {
-    expect(index.search("routing detail", { kinds: ["section"] })[0]!.key).toBe("1.0.12-beta/machine-1/150-rakun/README#s1");
+    expect(index.search("routing detail", { kinds: ["section"] })[0]!.key).toBe("150-rakun/README#s1");
     expect(index.search("routing detail", { kinds: ["section"] }).map((h) => h.key)).not.toContain(
-      "1.0.12-beta/machine-1/150-rakun/README#steps",
+      "150-rakun/README#steps",
     );
   });
 

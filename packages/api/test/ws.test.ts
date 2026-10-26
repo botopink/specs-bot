@@ -123,7 +123,7 @@ describe("/api/ws", () => {
     expect(await c.nextOf("subscribed")).toEqual({ type: "subscribed", types: ["write"], to: null });
 
     const chat: SpecEvent = { type: "chat", id: "m1-0025", from: "machine-1", to: "machine-2", purpose: "report", subject: "x", at: "t" };
-    const write: SpecEvent = { type: "write", op: "doc.edit", party: "machine-1", commit: "abc1234", refs: ["1.0.12-beta/status"], summary: "s", at: "t" };
+    const write: SpecEvent = { type: "write", op: "doc.edit", party: "machine-1", commit: "abc1234", refs: ["milestone/status"], summary: "s", at: "t" };
     bus.publish(chat);
     bus.publish(write);
     expect(await c.next()).toEqual(write);

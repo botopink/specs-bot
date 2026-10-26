@@ -53,8 +53,13 @@ Binds: x
 |---|---|---|---|
 | \`@Task<T>\` | \`Async<T>\` | 3 |  |
 `,
-  "specs/1.0.12-beta/status.md": "# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
-  "specs/1.0.12-beta/machine-1/150-rakun/README.md": "# Front 150 — rakun\n\n## Steps\n\nRouting.\n",
+  "specs/milestone/README.md": "# Specs — 1.0.12-beta\n\n**Milestone:** 1.0.12-beta\n",
+  "specs/milestone/status.md": "# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
+  "specs/150-rakun/README.md": "# Front 150 — rakun\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\n## Steps\n\nRouting.\n",
+  "moved.json": JSON.stringify({
+    "1.0.12-beta/machine-1/150-rakun/README": "150-rakun/README",
+    "1.0.11-beta/overview": "https://github.com/botopink/specs-data/blob/abc/specs/1.0.11-beta/overview.md",
+  }),
   "conversation-chat/machine-2/20261021-1144-rebased-m1-0024.md":
     "---\nfrom: machine-1\nto: machine-2\npurpose: report\nsubject: Rebased\nread: [ ]\nin-reply-to:\n---\n\nDone.\n",
 };
@@ -121,18 +126,25 @@ describe("the read api", () => {
 
   test("a front with the in-force rows that bind it", async () => {
     const f = (await get("/api/fronts/150")).body;
-    expect(f.fronts[0]).toMatchObject({ ref: "1.0.12-beta/machine-1/150-rakun", title: "Front 150 — rakun" });
+    expect(f.fronts[0]).toMatchObject({ ref: "150-rakun", machine: "machine-1", title: "Front 150 — rakun" });
     expect(f.binds).toEqual([3]);
   });
 
   test("a document whole, its outline, or one section", async () => {
-    expect((await get("/api/docs/1.0.12-beta/status?outline")).body.outline.map((s: any) => s.anchor)).toEqual(["status", "done", "open"]);
-    expect((await get("/api/docs/1.0.12-beta/status?section=open")).body.text).toBe("## Open\n\n- b\n");
-    expect((await get("/api/docs/1.0.12-beta/machine-1/150-rakun")).body.ref).toBe("1.0.12-beta/machine-1/150-rakun/README");
+    expect((await get("/api/docs/milestone/status?outline")).body.outline.map((s: any) => s.anchor)).toEqual(["status", "done", "open"]);
+    expect((await get("/api/docs/milestone/status?section=open")).body.text).toBe("## Open\n\n- b\n");
+    expect((await get("/api/docs/150-rakun")).body.ref).toBe("150-rakun/README");
+  });
+
+  test("a ref from before the flattening answers as its new one; a removed file names its permalink", async () => {
+    expect((await get("/api/docs/1.0.12-beta/machine-1/150-rakun")).body.ref).toBe("150-rakun/README");
+    const gone = await get("/api/docs/1.0.11-beta/overview");
+    expect(gone.status).toBe(404);
+    expect(gone.body.movedTo).toStartWith("https://github.com/botopink/specs-data/blob/abc/");
   });
 
   test("no answer carries a file path", async () => {
-    const all = await Promise.all(["/api/overview", "/api/docs/1.0.12-beta/status", "/api/check", "/api/chat"].map((p) => get(p)));
+    const all = await Promise.all(["/api/overview", "/api/docs/milestone/status", "/api/check", "/api/chat"].map((p) => get(p)));
     for (const r of all) expect(JSON.stringify(r.body)).not.toContain(tmpdir());
   });
 
@@ -149,7 +161,7 @@ describe("the read api", () => {
 describe("export", () => {
   test("ledger: the record and the current milestone's READMEs, by relative path", async () => {
     const r = (await get("/api/export/ledger")).body;
-    expect(Object.keys(r.files).sort()).toEqual(["1.0.12-beta/machine-1/150-rakun/README.md", "decisions-taken-steps.md"]);
+    expect(Object.keys(r.files).sort()).toEqual(["150-rakun/README.md", "decisions-taken-steps.md", "milestone/README.md"]);
     expect(r.files["decisions-taken-steps.md"]).toContain("| 3 | q-3");
   });
 

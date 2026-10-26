@@ -1,5 +1,5 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, etagOf, type Kind, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
+import { check, etagOf, type Kind, MILESTONE_DIR, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./auth.ts";
 
@@ -179,7 +179,11 @@ export function readRoutes(current: () => Model) {
   });
 
   api.get("/docs/*", (c) => {
-    const ref = decodeURIComponent(c.req.path.replace(/^\/api\/docs\//, "")).replace(/\.md$/, "").replace(/\/$/, "");
+    let ref = decodeURIComponent(c.req.path.replace(/^\/api\/docs\//, "")).replace(/\.md$/, "").replace(/\/$/, "");
+    // A ref from before the tree was flattened (1.0.12-beta/machine-1/150-rakun/README) answers as its new one.
+    const moved = model.docByRef.has(ref) || model.docByRef.has(`${ref}/README`) ? undefined : (model.tree.moved.get(ref) ?? model.tree.moved.get(`${ref}/README`));
+    if (moved?.startsWith("https://")) return c.json({ ...notFound(`doc ${ref}`, `removed when the tree was flattened; it is at ${moved}`), movedTo: moved }, 404);
+    if (moved) ref = moved;
     const doc = model.docByRef.get(ref) ?? model.docByRef.get(`${ref}/README`);
     if (!doc) return c.json(notFound(`doc ${ref}`, "GET /api/search?q=… or /api/fronts to find one"), 404);
     const outline = doc.sections.map((s) => ({ level: s.level, heading: s.heading, anchor: s.anchor, lines: s.end - s.start, etag: sectionEtag(doc, s.anchor)! }));
@@ -223,17 +227,16 @@ export function readRoutes(current: () => Model) {
     const text = (ref: string) => model.docByRef.get(ref)?.lines.join("\n");
     const files: Record<string, string> = {};
     if (set === "ledger") {
-      // decisions-split.py: the record, and the current milestone's README with its front READMEs (the aliases).
+      // decisions-split.py: the record, and the milestone's README with the current fronts' READMEs (the aliases).
       files["decisions-taken-steps.md"] = model.steps.lines.join("\n");
       for (const d of model.tree.docs) {
-        if (d.version !== current || d.name !== "README") continue;
-        const depth = d.ref.split("/").length;
-        if (depth === 2 || depth === 4) files[`${d.ref}.md`] = d.lines.join("\n");
+        if (d.version !== current || d.name !== "README" || d.ref.split("/").length !== 2) continue;
+        files[`${d.ref}.md`] = d.lines.join("\n");
       }
     } else if (set === "language-gaps") {
-      const gaps = text(`${current}/language-gaps`);
+      const gaps = text(`${MILESTONE_DIR}/language-gaps`);
       if (gaps === undefined) return c.json({ error: `${current} has no language-gaps.md` }, 404);
-      files[`${current}/language-gaps.md`] = gaps;
+      files[`${MILESTONE_DIR}/language-gaps.md`] = gaps;
     } else {
       return c.json({ error: `no export ${set}`, hint: "ledger | language-gaps" }, 404);
     }

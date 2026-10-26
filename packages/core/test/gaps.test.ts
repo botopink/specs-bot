@@ -14,9 +14,9 @@ test("the marker index and the gap rows are read apart", () => {
 
 | File | Markers | Rows |
 |---|---|---|
-| \`specs/1.0.12-beta/m/x.bp\` | 2 | **No name for a derived type** · **Gone** |
+| \`specs/150-rakun/examples/x.bp\` | 2 | **No name for a derived type** · **Gone** |
 `);
   expect(r.hasIndex).toBe(true);
-  expect(r.rows).toEqual([{ path: "specs/1.0.12-beta/m/x.bp", count: 2, gaps: ["No name for a derived type", "Gone"] }]);
+  expect(r.rows).toEqual([{ path: "specs/150-rakun/examples/x.bp", count: 2, gaps: ["No name for a derived type", "Gone"] }]);
   expect([...r.gapTitles]).toEqual(["No name for a derived type"]);
 });

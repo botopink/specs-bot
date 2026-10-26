@@ -128,7 +128,7 @@ roda `specs-bot admin reindex`; o `check` aponta o que ficou inconsistente.
 
 ```ts
 interface Doc {            // qualquer .md de milestone: README, status, track, deep dive
-  ref: string;             // "1.0.12-beta/m1/150-rakun/04-rakun/track"  (id estável, não caminho)
+  ref: string;             // "150-rakun/04-rakun/track", "milestone/status"  (id estável, não caminho)
   version: string; frozen: boolean;
   machine?: 'machine-1' | 'machine-2' | 'machine-3';
   front?: { num: number; slug: string }; group?: string;
@@ -152,6 +152,21 @@ interface RetiredRow { area: string; retired: string; replacedBy: string; decisi
 interface ChatMessage { id: string; from: string; to: string; purpose: string; subject: string;
                         read: boolean; inReplyTo?: string; at: string; body: string; }
 ```
+
+### 4.1 Árvore plana (2026-10-26)
+
+`specs/<NNN-frente>/[<NNN-grupo>/]…/<nome>.md` — sem pastas de versão nem de máquina. Os documentos do marco
+corrente ficam em `specs/milestone/` (`README`, `status`, `fronts`, `contracts`, `deferred`, `language-gaps`,
+`machine-N`). O README de cada frente leva `**Milestone:** <versão>` e, quando há, `**Machine:** machine-N`
+logo abaixo do título; um documento herda os campos do README mais próximo acima dele. O marco corrente é o
+`**Milestone:**` de `milestone/README.md`; uma frente de outro marco é congelada.
+
+Migração (`scripts/flatten.ts migrate`): de cada nome numerado (grupo ou subfrente) fica só a cópia mais nova;
+uma subfrente vai para baixo do novo lugar do seu grupo; os documentos dos marcos fechados saem (o histórico do
+git guarda). Links relativos são recalculados, links para o que saiu viram permalink no commit anterior, caminhos
+no texto são reescritos; rótulos como `machine-1/144` (sem o nome da frente) ficam. `moved.json` na raiz do
+`specs-data` mapeia cada ref antigo → ref novo (ou permalink): a API responde e o site redireciona (301) os
+links velhos. `scripts/flatten.ts rewrite` reescreve as referências nos outros repositórios.
 
 **Regra de ouro**: `serialize(parse(arquivo)) === arquivo` byte a byte para todos os arquivos migrados; writers
 alteram o mínimo e reemitem o resto intacto.

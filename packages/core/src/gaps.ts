@@ -1,10 +1,11 @@
-// `// LANGUAGE GAP` markers in the spec examples (`.bp` under the current milestone) against the `## Marker index`
-// of its language-gaps.md — the part of botopink's language-gap-markers check that reads spec files, kept here
-// once the specs left the projects repository (PLAN.md § 6). Index paths are written from the meta root
-// (`specs/1.0.12-beta/…/x.bp`), which is the same path in specs-data.
+// `// LANGUAGE GAP` markers in the spec examples (`.bp` in a folder of the current milestone) against the
+// `## Marker index` of milestone/language-gaps.md — the part of botopink's language-gap-markers check that reads
+// spec files, kept here once the specs left the projects repository (PLAN.md § 6). Index paths are written from
+// the data root (`specs/150-rakun/…/x.bp`).
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { Finding } from "./check.ts";
+import { MILESTONE_DIR } from "./docs/load.ts";
 import type { Store } from "./store.ts";
 
 const MARK = "// LANGUAGE GAP";
@@ -39,6 +40,7 @@ export function markerIndex(text: string): { rows: IndexRow[]; gapTitles: Set<st
 
 function* bpFiles(dir: string): Generator<string> {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue;
     const p = join(dir, e.name);
     if (e.isDirectory()) yield* bpFiles(p);
     else if (e.name.endsWith(".bp")) yield p;
@@ -47,7 +49,7 @@ function* bpFiles(dir: string): Generator<string> {
 
 export function checkGapMarkers(store: Store): Finding[] {
   const current = store.tree.current;
-  const gapsDoc = store.tree.docs.find((d) => d.ref === `${current}/language-gaps`);
+  const gapsDoc = store.tree.docs.find((d) => d.ref === `${MILESTONE_DIR}/language-gaps`);
   if (!gapsDoc) return [];
   const about = gapsDoc.ref;
   const { rows, gapTitles, hasIndex } = markerIndex(gapsDoc.lines.join("\n"));
@@ -57,11 +59,13 @@ export function checkGapMarkers(store: Store): Finding[] {
 
   const dataRoot = join(store.specsDir, "..");
   const counts = new Map<string, number>();
-  for (const file of bpFiles(join(store.specsDir, current))) {
+  for (const file of bpFiles(store.specsDir)) {
+    // Closed milestones' examples keep their markers as they were written.
+    if (store.tree.placeOf(relative(store.specsDir, file)).version !== current) continue;
     const n = readFileSync(file, "utf8").split("\n").filter((l) => l.includes(MARK)).length;
     if (n) counts.set(relative(dataRoot, file), n);
   }
-  const specRows = rows.filter((r) => r.path.startsWith(`specs/${current}/`));
+  const specRows = rows.filter((r) => r.path.startsWith("specs/") && store.tree.placeOf(r.path.slice("specs/".length)).version === current);
   for (const r of specRows) {
     const n = counts.get(r.path);
     if (n === undefined) out.push(err("gaps-stale-row", `${r.path} holds no marker; delete its index row`));

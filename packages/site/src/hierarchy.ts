@@ -1,6 +1,7 @@
 // The one hierarchy every page shows: milestone → machine → front → the folders inside a front → documents.
 // An old milestone has no machine folder; its fronts sit in one "Fronts" section. Anchors are stable and
 // readable ("machine-1-150-rakun-04-rakun") so a document's breadcrumbs can point back to its section.
+import { MILESTONE_DIR } from "@specs-bot/core";
 import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
 
@@ -63,7 +64,7 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
     if (!d.front) {
       if (d.machine) {
         const m = machineOf(machines, d.machine);
-        if (d.ref === `${version}/${d.machine}/README`) m.readme = d;
+        if (d.ref === `${MILESTONE_DIR}/${d.machine}`) m.readme = d;
         else m.docs.push(d);
       } else {
         top.push(d);
@@ -91,7 +92,7 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
     }
     f.count++;
     if (!d.group) {
-      if (d.ref.endsWith(`/${d.front.dir}/README`)) {
+      if (`/${d.ref}`.endsWith(`/${d.front.dir}/README`)) {
         f.readme = d;
         f.title = shortTitle(d.title, d.front.num, d.front.slug);
       } else {
@@ -106,7 +107,7 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
       folders.set(gkey, g);
       f.folders.push(g);
     }
-    if (d.ref.endsWith(`/${d.group.dir}/README`)) {
+    if (`/${d.ref}`.endsWith(`/${d.group.dir}/README`)) {
       g.readme = d;
       g.title = shortTitle(d.title, d.group.num, d.group.slug);
     } else {
@@ -193,8 +194,9 @@ export function sortDocs(docs: Doc[]): Doc[] {
  * front 105-i18n holds a folder 105-i18n of its own.
  */
 export function labelBelow(d: Doc, dir: string): string {
-  const i = d.ref.lastIndexOf(`/${dir}/`);
-  return i < 0 ? d.name : d.ref.slice(i + dir.length + 2);
+  const ref = `/${d.ref}`;
+  const i = ref.lastIndexOf(`/${dir}/`);
+  return i < 0 ? d.name : ref.slice(i + dir.length + 2);
 }
 
 export interface Crumb {
@@ -216,7 +218,7 @@ export function crumbsOf(data: SiteData, d: Doc): Crumb[] {
   if (d.front) crumbs.push({ label: d.front.dir, href: frontsHref(data, d.version, frontAnchor(machine, d.front.dir)) });
   if (d.front && d.group) crumbs.push({ label: d.group.dir, href: frontsHref(data, d.version, folderAnchor(machine, d.front.dir, d.group.dir)) });
   // Folders between the deepest section and the file ("examples") are named, not linked.
-  const known = [d.version, d.machine, d.front?.dir, d.group?.dir].filter(Boolean).length;
+  const known = [d.ref.startsWith(`${MILESTONE_DIR}/`), d.front, d.group].filter(Boolean).length;
   const rest = d.ref.split("/").slice(known);
   for (const seg of rest.slice(0, -1)) crumbs.push({ label: seg });
   crumbs.push({ label: rest.at(-1)! });
@@ -227,8 +229,9 @@ export function crumbsOf(data: SiteData, d: Doc): Crumb[] {
 export function sectionOfFolder(data: SiteData, ref: string): string | undefined {
   const inside = data.tree.docs.find((d) => d.ref.startsWith(`${ref}/`));
   if (!inside) return undefined;
-  const depth = ref.split("/").length;
-  const crumbs = crumbsOf(data, inside).slice(1); // drop "Fronts": index 0 is now the version
-  // An unnumbered folder ("closure-audit") has no section of its own: its milestone's stands for it.
-  return crumbs[depth - 1]?.href ?? frontsHref(data, inside.version);
+  // The crumbs past "Fronts": the milestone, the machine (when the front names one), the front, the group.
+  const crumbs = crumbsOf(data, inside).slice(1);
+  const at = (inside.machine ? 2 : 1) + ref.split("/").length - 1;
+  // An unnumbered folder has no section of its own: its milestone's stands for it.
+  return (/^\d+-/.test(ref.split("/").at(-1)!) && crumbs[at]?.href) || frontsHref(data, inside.version);
 }

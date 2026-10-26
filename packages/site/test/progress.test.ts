@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { buildModel, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken } from "@specs-bot/core";
+import { buildModel, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs } from "@specs-bot/core";
 import { buildProgress, namesFront, percent } from "../src/progress.ts";
 
 const README = `# Front 150 — rakun
+
+**Milestone:** 1.0.12-beta
+**Machine:** machine-1
 
 ## Steps
 
@@ -79,18 +82,15 @@ const model = buildModel({
 `),
   taken: parseTaken(""),
   retired: parseRetired(""),
-  tree: {
-    current: "1.0.12-beta",
-    versions: ["1.0.12-beta"],
-    docs: [
-      parseDoc("1.0.12-beta/status.md", STATUS),
-      parseDoc("1.0.12-beta/machine-1/150-rakun/README.md", README),
-      parseDoc("1.0.12-beta/machine-1/150-rakun/04-rakun/track.md", "# Track 04\n\n- [ ] not a step of the README\n"),
-      parseDoc("1.0.12-beta/machine-1/135-snap/README.md", "# Front 135 — snap\n\nCoordination only.\n"),
-      parseDoc("1.0.12-beta/machine-1/135-snap/20-snap/context.md", "# Front 135 — snap: the evaluation\n"),
-      parseDoc("1.0.12-beta/machine-1/151-json/README.md", "# Front 151 — json\n"),
-    ],
-  },
+  tree: placeDocs([
+    parseDoc("milestone/README.md", "# Specs\n\n**Milestone:** 1.0.12-beta\n"),
+    parseDoc("milestone/status.md", STATUS),
+    parseDoc("150-rakun/README.md", README),
+    parseDoc("150-rakun/04-rakun/track.md", "# Track 04\n\n- [ ] not a step of the README\n"),
+    parseDoc("135-snap/README.md", "# Front 135 — snap\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n\nCoordination only.\n"),
+    parseDoc("135-snap/20-snap/context.md", "# Front 135 — snap: the evaluation\n"),
+    parseDoc("151-json/README.md", "# Front 151 — json\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n"),
+  ]),
   chat: [],
 });
 
@@ -109,7 +109,7 @@ describe("buildProgress — the README's steps", () => {
   });
 
   test("each step links to its heading and says what it is", () => {
-    expect(p.steps[0]).toMatchObject({ text: "the core's open boxes (04)", source: "readme", href: "/docs/1.0.12-beta/machine-1/150-rakun/README#150-s1--the-cores-open-boxes-04" });
+    expect(p.steps[0]).toMatchObject({ text: "the core's open boxes (04)", source: "readme", href: "/docs/150-rakun/README#150-s1--the-cores-open-boxes-04" });
   });
 
   test("the counts come from the README when it has steps", () => {
@@ -147,7 +147,7 @@ describe("buildProgress — status.md", () => {
   test("a front whose README has no steps counts from status.md, and says so", () => {
     const p = progress.get(135)!;
     expect([p.basis, p.counts]).toEqual(["status", { done: 1, open: 2, blocked: 0 }]);
-    expect(progress.get(135)!.status[2]!.href).toBe("/docs/1.0.12-beta/status#135-snap");
+    expect(progress.get(135)!.status[2]!.href).toBe("/docs/milestone/status#135-snap");
   });
 });
 
@@ -185,7 +185,7 @@ if (root && existsSync(root))
       const p = all.get(150)!;
       expect(p.basis).toBe("readme");
       expect(p.steps[0]!.label).toBe("150 s1");
-      expect(p.steps.every((s) => s.href.startsWith("/docs/1.0.12-beta/machine-1/150-rakun/README#"))).toBe(true);
+      expect(p.steps.every((s) => s.href.startsWith("/docs/150-rakun/README#"))).toBe(true);
     });
 
     test("144's steps add up over its folders on both machines", () => {

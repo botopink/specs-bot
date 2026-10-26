@@ -9,10 +9,12 @@ import {
   parseRetired,
   parseSteps,
   parseTaken,
+  parseDoc,
   pendingAdd,
   pendingEdit,
   pendingEtag,
   pendingWithdraw,
+  placeDocs,
   retiredAdd,
   supersede,
   type Plan,
@@ -89,7 +91,7 @@ function model(over: { steps?: string; pending?: string } = {}): Model {
     pending: parsePending(over.pending ?? PENDING),
     taken: parseTaken(TAKEN),
     retired: parseRetired(RETIRED),
-    tree: { docs: [], versions: [], current: "1.0.12-beta" },
+    tree: placeDocs([parseDoc("milestone/README.md", "# Specs\n\n**Milestone:** 1.0.12-beta\n")]),
     chat: [],
   });
 }

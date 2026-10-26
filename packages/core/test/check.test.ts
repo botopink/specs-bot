@@ -7,6 +7,7 @@ import {
   parseRetired,
   parseSteps,
   parseTaken,
+  placeDocs,
   summarize,
   type Finding,
   type Store,
@@ -71,7 +72,7 @@ function store(over: Partial<Record<"steps" | "pending" | "taken" | "retired", s
     pending: parsePending(over.pending ?? PENDING),
     taken: parseTaken(over.taken ?? TAKEN),
     retired: parseRetired(over.retired ?? RETIRED),
-    tree: { docs: [], versions: [], current: "" },
+    tree: placeDocs([]),
     chat: [],
   };
 }
@@ -124,11 +125,11 @@ if (!(!root || !existsSync(root))) describe("check over the real repository", ()
   });
 
   test("the warnings are today's known ones", () => {
-    // Pinned so a new defect shows up as a diff; fixing data lowers these numbers.
+    // Pinned so a new defect shows up as a diff; fixing data lowers these numbers. (The flattening took the 5
+    // broken links away: they were in closed milestones' documents.)
     expect(summarize(findings)).toEqual({
       "warning step-bare-pipe": 22,
       "warning subject-no-lead": 2,
-      "warning doc-link-broken": 5,
       "warning chat-reply-path": 46,
     });
   });

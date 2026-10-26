@@ -9,6 +9,7 @@ import {
   parseRetired,
   parseSteps,
   parseTaken,
+  placeDocs,
   slugOf,
   WriteError,
 } from "../src/index.ts";
@@ -21,7 +22,7 @@ const model: Model = buildModel({
   pending: parsePending(""),
   taken: parseTaken(""),
   retired: parseRetired(""),
-  tree: { docs: [], versions: [], current: "" },
+  tree: placeDocs([]),
   chat: [
     msg("machine-2/20261021-1144-rebased-m1-0024.md", "from: machine-1\nto: machine-2\npurpose: report\nsubject: Rebased\nread: [ ]"),
     msg("all/20261020-1152-a-rule-mt-0035.md", "from: maintainer\nto: all\npurpose: rule\nsubject: A rule\nread: m1 [x] · m2 [ ] · m3 [ ]"),

@@ -5,7 +5,7 @@ import { CSS } from "./css.ts";
 import { type Loaded, loadSiteData } from "./data.ts";
 import type { LinkContext } from "./markdown.ts";
 import type { StatusFn } from "./status.ts";
-import { docHref, refOfPath, shortenDocLinks } from "./short-links.ts";
+import { docHref, movedTo } from "./short-links.ts";
 import { protectHtml } from "./translate.ts";
 import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, SubjectsPage } from "./views/decisions.tsx";
 import { frontsHref, sectionOfFolder } from "./hierarchy.ts";
@@ -38,13 +38,11 @@ export function createSite(opts: SiteOptions) {
     return c.body(CSS);
   });
 
-  // Every page leaves code, identifiers and labels to the browser's translator untouched (translate.ts), and
-  // links the current milestone's documents without their version (short-links.ts).
-  const current = data?.tree.current ?? "";
+  // Every page leaves code, identifiers and labels to the browser's translator untouched (translate.ts).
   site.use("*", async (c, next) => {
     await next();
     if (!c.res.headers.get("content-type")?.startsWith("text/html")) return;
-    const html = shortenDocLinks(protectHtml(await c.res.text()), current);
+    const html = protectHtml(await c.res.text());
     c.res = new Response(html, { status: c.res.status, headers: c.res.headers });
   });
 
@@ -153,16 +151,18 @@ export function createSite(opts: SiteOptions) {
     } catch {
       // keep it as written
     }
-    // A path without a version is the current milestone's: /docs/machine-1/144-botopink-lang/README.
-    ref = refOfPath(ref.replace(/\.md$/, "").replace(/\/$/, ""), current);
+    ref = ref.replace(/\.md$/, "").replace(/\/$/, "");
     const doc = data.docByRef.get(ref) ?? data.docByRef.get(`${ref}/README`);
     if (!doc) {
+      // A path from before the tree was flattened (short-links.ts).
+      const moved = movedTo(data.tree, ref);
+      if (moved) return c.redirect(moved.startsWith("https://") ? moved : docHref(moved), 301);
       // A folder with no README of its own (a former front, a track) is a section of the Fronts page.
       const section = sectionOfFolder(data, ref);
       if (section) return c.redirect(section);
       return c.html(<NotFound path={c.req.path} what={`No document ${ref}.`} back="/fronts" backLabel="All fronts" />, 404);
     }
-    if (doc.ref !== ref) return c.redirect(docHref(doc.ref, current));
+    if (doc.ref !== ref) return c.redirect(docHref(doc.ref));
     let html = rendered.get(doc.ref);
     if (html === undefined) {
       // A table of steps reads each step's state from the front's progress (step-tables.ts).

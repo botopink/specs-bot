@@ -9,7 +9,8 @@ const FILES: Record<string, string> = {
   "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
   "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
   "specs/retired.md": "# R\n",
-  "specs/1.0.12-beta/status.md": "# Status\n\n## Done\n\n- [x] a\n",
+  "specs/milestone/README.md": "# Specs\n\n**Milestone:** 1.0.12-beta\n",
+  "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
 };
 
 async function sh(cwd: string, ...args: string[]) {
@@ -38,28 +39,28 @@ beforeEach(async () => {
   writer = new Writer(root);
 });
 
-const append = (text: string) => appendToSection(model, { ref: "1.0.12-beta/status", anchor: "done", text });
+const append = (text: string) => appendToSection(model, { ref: "milestone/status", anchor: "done", text });
 
 describe("Writer", () => {
   test("a write lands as one commit authored by the party, with its trailers", async () => {
     const r = await writer.apply(model, append("- [x] b"), "machine-2", { landed: ["rakun@abc1234"] });
-    expect(readFileSync(join(root, "specs/1.0.12-beta/status.md"), "utf8")).toBe("# Status\n\n## Done\n\n- [x] a\n- [x] b\n");
+    expect(readFileSync(join(root, "specs/milestone/status.md"), "utf8")).toBe("# Status\n\n## Done\n\n- [x] a\n- [x] b\n");
     expect(r.commit).toMatch(/^[0-9a-f]{7,}$/);
-    expect(await sh(root, "log", "-1", "--format=%an|%s")).toBe("machine-2|spec(1.0.12-beta): 1.0.12-beta/status § Done: added");
+    expect(await sh(root, "log", "-1", "--format=%an|%s")).toBe("machine-2|spec(1.0.12-beta): milestone/status § Done: added");
     expect(await sh(root, "log", "-1", "--format=%b")).toBe("Op: doc.append\nParty: machine-2\nLanded: rakun@abc1234");
     expect(await sh(root, "status", "--porcelain")).toBe("");
-    expect(r.model!.docByRef.get("1.0.12-beta/status")!.lines).toContain("- [x] b");
+    expect(r.model!.docByRef.get("milestone/status")!.lines).toContain("- [x] b");
   });
 
   test("a dry run returns the diff and writes nothing", async () => {
     const r = await writer.apply(model, append("- [x] b"), "machine-2", { dryRun: true });
     expect(r.diff).toContain("+- [x] b");
     expect(r.commit).toBeUndefined();
-    expect(readFileSync(join(root, "specs/1.0.12-beta/status.md"), "utf8")).toBe(FILES["specs/1.0.12-beta/status.md"]!);
+    expect(readFileSync(join(root, "specs/milestone/status.md"), "utf8")).toBe(FILES["specs/milestone/status.md"]!);
   });
 
   test("a file edited since the model was read refuses the write", async () => {
-    writeFileSync(join(root, "specs/1.0.12-beta/status.md"), "# Status\n\nby hand\n");
+    writeFileSync(join(root, "specs/milestone/status.md"), "# Status\n\nby hand\n");
     const e = await writer.apply(model, append("- [x] b"), "machine-2").catch((x) => x);
     expect(e).toBeInstanceOf(WriteError);
     expect((e as WriteError).code).toBe("conflict");
@@ -73,7 +74,7 @@ describe("Writer", () => {
 
   test("a write that brings a check error is undone", async () => {
     // A document whose link-free text is fine, but the plan also breaks the next free number in the record.
-    const plan = newDoc(model, { ref: "1.0.12-beta/notes", text: "# Notes" });
+    const plan = newDoc(model, { ref: "milestone/notes", text: "# Notes" });
     plan.changes.push({
       path: "specs/decisions-taken-steps.md",
       before: FILES["specs/decisions-taken-steps.md"]!,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { buildModel, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken } from "../src/index.ts";
+import { buildModel, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs } from "../src/index.ts";
 
 const model = buildModel({
   specsDir: "/nowhere",
@@ -16,15 +16,11 @@ const model = buildModel({
   pending: parsePending(`the next free\nnumber, which is **4**.\n\n## Machine 1\n\n#### q-9 · Open\n- **Measured.** Built.\n`),
   taken: parseTaken(`## lang — the language\n\n**Lead.**\n\nText.\n\nSteps: 1, 3\nBinds: x\n`),
   retired: parseRetired(`## Language spellings\n\n| Retired | Replaced by | Decisions | Since / note |\n|---|---|---|---|\n| a | b | 3 |  |\n`),
-  tree: {
-    current: "1.0.12-beta",
-    versions: ["1.0.12-beta"],
-    docs: [
-      parseDoc("1.0.12-beta/machine-1/150-rakun/README.md", "# Front 150 — rakun\n"),
-      parseDoc("1.0.12-beta/machine-1/150-rakun/04-rakun/track.md", "# Track 04\n"),
-      parseDoc("1.0.12-beta/status.md", "# Status\n"),
-    ],
-  },
+  tree: placeDocs([
+    parseDoc("150-rakun/README.md", "# Front 150 — rakun\n\n**Milestone:** 1.0.12-beta\n**Machine:** machine-1\n"),
+    parseDoc("150-rakun/04-rakun/track.md", "# Track 04\n"),
+    parseDoc("milestone/status.md", "# Status\n"),
+  ]),
   chat: [],
 });
 
@@ -44,17 +40,17 @@ describe("buildModel", () => {
     expect(model.statedNextFree).toEqual({ steps: 4, pending: 4 });
   });
 
-  test("a front is the first numbered folder, titled by its README", () => {
+  test("a front is a numbered folder at the top, titled by its README, its milestone and machine its README's", () => {
     expect(model.fronts).toEqual([
       {
         version: "1.0.12-beta",
         machine: "machine-1",
         num: 150,
         slug: "rakun",
-        ref: "1.0.12-beta/machine-1/150-rakun",
+        ref: "150-rakun",
         title: "Front 150 — rakun",
-        readme: "1.0.12-beta/machine-1/150-rakun/README",
-        docs: ["1.0.12-beta/machine-1/150-rakun/README", "1.0.12-beta/machine-1/150-rakun/04-rakun/track"],
+        readme: "150-rakun/README",
+        docs: ["150-rakun/README", "150-rakun/04-rakun/track"],
       },
     ]);
   });

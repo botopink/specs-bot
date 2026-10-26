@@ -23,7 +23,7 @@ describe("addedLines", () => {
 });
 
 describe("textRules", () => {
-  const plan = (after: string, path = "specs/1.0.12-beta/status.md") => ({
+  const plan = (after: string, path = "specs/milestone/status.md") => ({
     op: "doc.replace",
     refs: [],
     message: "",

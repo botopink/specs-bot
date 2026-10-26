@@ -1,27 +1,18 @@
-// The current milestone's documents need no version in their URL: `/docs/machine-1/144-botopink-lang/README`
-// is the current one's, whatever milestone is current. A versioned URL (`/docs/1.0.12-beta/…`) keeps working and
-// stays the permalink — the short one always means "the latest", which is what a reader of the work in progress
-// wants; a frozen milestone has no short form.
+// Document URLs are the refs themselves (`/docs/150-rakun/README`): the tree has no version or machine folders.
+// A link from before the flattening (`/docs/1.0.12-beta/machine-1/150-rakun/README`, or the short form without
+// the version) still lands: the data's moved.json maps old refs to new ones, or to a permalink of a removed file.
 
-const VERSION = /^\d+\.\d+\.\d+(-[a-z0-9.]+)?$/;
+import type { DocTree } from "@specs-bot/core";
 
-export function isVersion(segment: string): boolean {
-  return VERSION.test(segment);
+export function docHref(ref: string): string {
+  return `/docs/${ref}`;
 }
 
-/** The document ref a `/docs/` path means: a path that does not start with a version is the current milestone's. */
-export function refOfPath(path: string, current: string): string {
-  const first = path.split("/")[0] ?? "";
-  return isVersion(first) || !current ? path : `${current}/${path}`;
-}
-
-/** The site's URL for a document ref: short for the current milestone, versioned for a frozen one. */
-export function docHref(ref: string, current: string): string {
-  return current && ref.startsWith(`${current}/`) ? `/docs/${ref.slice(current.length + 1)}` : `/docs/${ref}`;
-}
-
-/** Every link of a page to a current-milestone document, in its short form. */
-export function shortenDocLinks(html: string, current: string): string {
-  if (!current) return html;
-  return html.replaceAll(`href="/docs/${current}/`, 'href="/docs/');
+/** Where an old document path goes now: a ref, a permalink (https://…), or undefined when it was never known. */
+export function movedTo(tree: DocTree, path: string): string | undefined {
+  const at = (p: string) => tree.moved.get(p) ?? tree.moved.get(`${p}/README`);
+  const direct = at(path);
+  if (direct) return direct;
+  // The short form of the old current milestone's paths: /docs/machine-1/150-rakun/README.
+  return at(`${tree.current}/${path}`);
 }

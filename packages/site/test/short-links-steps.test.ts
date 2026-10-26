@@ -5,36 +5,33 @@ import { dirname, join } from "node:path";
 import { Marked } from "marked";
 import { createSite, loadSiteData } from "../src/index.ts";
 import { buildProgress, type ProgressItem } from "../src/progress.ts";
-import { docHref, refOfPath, shortenDocLinks } from "../src/short-links.ts";
+import { docHref } from "../src/short-links.ts";
 import { groupOf, INDEX_ROWS, linkDecisions, renderStepTable, stepOf } from "../src/step-tables.ts";
 
 const status = async () => ({ ok: true as const, branch: "main", head: "abc1234" });
 
-describe("short links", () => {
-  test("a path without a version is the current milestone's", () => {
-    expect(refOfPath("machine-1/144-botopink-lang/README", "1.0.12-beta")).toBe("1.0.12-beta/machine-1/144-botopink-lang/README");
-    expect(refOfPath("1.0.5-beta/01-checker/README", "1.0.12-beta")).toBe("1.0.5-beta/01-checker/README");
-  });
-
-  test("the current milestone is linked short, a frozen one keeps its version", () => {
-    expect(docHref("1.0.12-beta/status", "1.0.12-beta")).toBe("/docs/status");
-    expect(docHref("1.0.5-beta/status", "1.0.12-beta")).toBe("/docs/1.0.5-beta/status");
-    expect(shortenDocLinks('<a href="/docs/1.0.12-beta/a">a</a><a href="/docs/1.0.5-beta/b">b</a>', "1.0.12-beta")).toBe(
-      '<a href="/docs/a">a</a><a href="/docs/1.0.5-beta/b">b</a>',
-    );
+describe("doc links", () => {
+  test("a document's URL is its ref", () => {
+    expect(docHref("150-rakun/README")).toBe("/docs/150-rakun/README");
+    expect(docHref("milestone/status")).toBe("/docs/milestone/status");
   });
 });
 
-// A small tree: a current milestone whose front README holds steps, a frozen one, and an index table of steps.
+// A small tree: current fronts whose README holds steps, a frozen front, an index table of steps, and the
+// moved.json that maps the refs from before the flattening.
 const STEP_ROWS = Array.from({ length: INDEX_ROWS + 2 }, (_, i) => i);
 const FILES: Record<string, string> = {
   "specs/decisions-taken-steps.md": "**The next free number is 435.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 434 | q-1 · (the maintainer) | A rule. | x |  |\n",
   "specs/decisions-pending.md": "the next free\nnumber, which is **435**.\n\n## Machine 1\n\nNone open.\n",
   "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 434\nBinds: x\n",
   "specs/retired.md": "# R\n",
-  "specs/1.0.12-beta/status.md": "# Status\n\n## Done\n\n- [x] a\n",
-  "specs/1.0.12-beta/machine-1/144-checker/README.md": [
+  "specs/milestone/README.md": "# Specs — 1.0.12-beta\n\n**Milestone:** 1.0.12-beta\n",
+  "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
+  "specs/144-checker/README.md": [
     "# Front 144 — machine 1",
+    "",
+    "**Milestone:** 1.0.12-beta",
+    "**Machine:** machine-1",
     "",
     "### B-00a — first",
     "",
@@ -50,8 +47,11 @@ const FILES: Record<string, string> = {
     "",
     ...STEP_ROWS.map((i) => `### B-${10 + i} — step ${i}\n\n- [${i % 2 ? "x" : " "}] box\n`),
   ].join("\n"),
-  "specs/1.0.12-beta/machine-1/144-botopink-lang/README.md": [
+  "specs/144-botopink-lang/README.md": [
     "# Front 144 — shared",
+    "",
+    "**Milestone:** 1.0.12-beta",
+    "**Machine:** machine-1",
     "",
     "## Steps",
     "",
@@ -64,8 +64,13 @@ const FILES: Record<string, string> = {
     "| B-999 | [1](../144-checker/README.md) | nowhere |",
     "",
   ].join("\n"),
-  "specs/1.0.5-beta/01-checker/README.md": "# Old checker\n\nSee [status](../status.md).\n",
-  "specs/1.0.5-beta/status.md": "# Old status\n",
+  "specs/01-checker/README.md": "# Old checker\n\n**Milestone:** 1.0.5-beta\n\nSee [notes](notes.md).\n",
+  "specs/01-checker/notes.md": "# Old notes\n",
+  "moved.json": JSON.stringify({
+    "1.0.12-beta/machine-1/144-botopink-lang/README": "144-botopink-lang/README",
+    "1.0.5-beta/01-checker/README": "01-checker/README",
+    "1.0.5-beta/status": "https://github.com/botopink/specs-data/blob/abc/specs/1.0.5-beta/status.md",
+  }),
 };
 
 function fixture(): string {
@@ -84,34 +89,42 @@ describe("the site over a fixture", () => {
     return { status: res.status, body: await res.text(), location: res.headers.get("location") };
   };
 
-  test("a document of the current milestone opens without its version, and with it", async () => {
-    expect((await get("/docs/machine-1/144-botopink-lang/README")).status).toBe(200);
-    expect((await get("/docs/1.0.12-beta/machine-1/144-botopink-lang/README")).status).toBe(200);
-    expect((await get("/docs/machine-1/144-botopink-lang")).location).toBe("/docs/machine-1/144-botopink-lang/README");
+  test("a document opens at its ref; a folder goes to its README", async () => {
+    expect((await get("/docs/144-botopink-lang/README")).status).toBe(200);
+    expect((await get("/docs/144-botopink-lang")).location).toBe("/docs/144-botopink-lang/README");
   });
 
-  test("a frozen milestone's document keeps its version, and its links too", async () => {
-    const old = await get("/docs/1.0.5-beta/01-checker/README");
+  test("a URL from before the flattening redirects: versioned, short, or to a removed file's permalink", async () => {
+    const versioned = await get("/docs/1.0.12-beta/machine-1/144-botopink-lang/README");
+    expect([versioned.status, versioned.location]).toEqual([301, "/docs/144-botopink-lang/README"]);
+    expect((await get("/docs/machine-1/144-botopink-lang/README")).location).toBe("/docs/144-botopink-lang/README");
+    expect((await get("/docs/1.0.5-beta/01-checker")).location).toBe("/docs/01-checker/README");
+    expect((await get("/docs/1.0.5-beta/status")).location).toBe("https://github.com/botopink/specs-data/blob/abc/specs/1.0.5-beta/status.md");
+    expect((await get("/docs/1.0.9-beta/nothing")).status).toBe(404);
+  });
+
+  test("a frozen front's document opens, its links relative to it", async () => {
+    const old = await get("/docs/01-checker/README");
     expect(old.status).toBe(200);
-    expect(old.body).toContain('href="/docs/1.0.5-beta/status"');
+    expect(old.body).toContain('href="/docs/01-checker/notes"');
   });
 
-  test("the site links current documents short", async () => {
+  test("the Fronts page links documents by their ref", async () => {
     const fronts = await get("/fronts");
-    expect(fronts.body).toContain('href="/docs/machine-1/144-checker/README"');
+    expect(fronts.body).toContain('href="/docs/144-checker/README"');
     expect(fronts.body).not.toContain('href="/docs/1.0.12-beta/');
   });
 
   test("the index of steps: states, places, groups, filters, decisions linked", async () => {
-    const { body } = await get("/docs/machine-1/144-botopink-lang/README");
+    const { body } = await get("/docs/144-botopink-lang/README");
     // B-00a and B-00b are one group, headed once.
     expect(body.match(/<tr class="group" data-group="B-00">/g)).toHaveLength(1);
     expect(body).toContain('<span translate="no">B-00</span> · 2 steps · 1 done');
     // A step is a link to where it is written, with its state; B-83 comes from the "B-82 … B-85" heading.
     // (The label sits in the translate guard's span: an id is never translated.)
     const label = (l: string) => `(<span class="notranslate" translate="no">)?${l}(</span>)?`;
-    expect(body).toMatch(new RegExp(`<a class="step" href="/docs/machine-1/144-checker/README#b-00a--first">${label("B-00a")}</a> <span class="state done"`));
-    expect(body).toMatch(new RegExp(`href="/docs/machine-1/144-checker/README#b-82--b-85--moved-to-front-164">${label("B-83")}</a>`));
+    expect(body).toMatch(new RegExp(`<a class="step" href="/docs/144-checker/README#b-00a--first">${label("B-00a")}</a> <span class="state done"`));
+    expect(body).toMatch(new RegExp(`href="/docs/144-checker/README#b-82--b-85--moved-to-front-164">${label("B-83")}</a>`));
     // The one label no README writes is counted as such.
     expect(body).toContain("1 not found in a README");
     expect(body).toContain('data-filter="state" data-value="open"');
@@ -149,16 +162,16 @@ if (realRoot && existsSync(join(realRoot, "specs")))
     for (const p of buildProgress(data, data.tree.current).values()) for (const s of p.steps) steps.set(s.label, s);
 
     test("resolves every step it lists to where a README writes it", () => {
-      const doc = data.docByRef.get(`${data.tree.current}/machine-1/144-botopink-lang/README`)!;
+      const doc = data.docByRef.get("144-botopink-lang/README")!;
       const sec = doc.sections.find((s) => s.anchor === "steps")!;
       const labels = doc.lines.slice(sec.start, sec.end).filter((l) => /^\| B-/.test(l)).map((l) => l.split("|")[1]!.trim());
       expect(labels.length).toBeGreaterThanOrEqual(150);
       expect(labels.filter((l) => !stepOf(l, { front: 144, steps }))).toEqual([]);
     });
 
-    test("the short URL serves it", async () => {
+    test("its URL serves it", async () => {
       const site = createSite({ dataPath: realRoot, status, version: "0.0.1", loaded });
-      const res = await site.request("/docs/machine-1/144-botopink-lang/README");
+      const res = await site.request("/docs/144-botopink-lang/README");
       expect(res.status).toBe(200);
       expect(await res.text()).toMatch(/<strong>\d+ steps<\/strong>/);
     });

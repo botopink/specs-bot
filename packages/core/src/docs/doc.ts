@@ -1,5 +1,7 @@
-// A milestone document: any .md under specs/<version>/. Its metadata comes from the path alone (2 of 597 files
-// have frontmatter): `<version>/[machine-N/]<NNN-front>/[<NNN-group>/]…/<name>.md`.
+// A spec document: any .md under specs/ except the decision files at its root. The tree is flat
+// (`<NNN-front>/[<NNN-group>/]…/<name>.md`, the milestone's own documents in `milestone/`); a front's milestone
+// and machine are fields of its README (`**Milestone:** 1.0.12-beta`, `**Machine:** machine-1`), which every
+// document under it inherits (load.ts).
 
 export interface Section {
   level: number;
@@ -15,9 +17,10 @@ export interface Section {
 export interface DocMeta {
   /** The path without `.md`, relative to specs/: the id the api speaks, never a file path. */
   ref: string;
+  /** The milestone it belongs to: the nearest `**Milestone:**` field from its folder up (load.ts). */
   version: string;
   machine?: string;
-  /** The first numbered directory, its name as written in `dir` ("04-rakun"). */
+  /** The first numbered directory, its name as written in `dir` ("150-rakun"). */
   front?: { num: number; slug: string; dir: string };
   group?: { num: number; slug: string; dir: string };
   /** The file name without `.md`: "README", "status", "track", "context", … */
@@ -29,24 +32,26 @@ export interface Doc extends DocMeta {
   lines: string[];
   sections: Section[];
   links: string[];
+  /** The document's own `**Milestone:**` / `**Machine:**` fields, before its first section. */
+  fields: { milestone?: string; machine?: string };
 }
 
 const NUMBERED = /^(\d+)-([a-z0-9][a-z0-9-]*)$/;
-const VERSION = /^\d+\.\d+\.\d+(-[a-z0-9.]+)?$/;
+const FIELD = /^\*\*(Milestone|Machine):\*\* *(\S+)/;
 
+/** Where a path sits in the tree; `version` and `machine` are filled by the loader from the fields. */
 export function docMeta(path: string): DocMeta {
   if (!path.endsWith(".md")) throw new Error(`not a markdown path: ${path}`);
   const ref = path.slice(0, -3);
   const parts = ref.split("/");
-  const version = parts[0]!;
-  if (!VERSION.test(version) || parts.length < 2) throw new Error(`not under a milestone: ${path}`);
+  if (parts.length < 2) throw new Error(`not in a folder under specs/: ${path}`);
   const name = parts.at(-1)!;
-  const dirs = parts.slice(1, -1);
-  const meta: DocMeta = { ref, version, name };
-  if (dirs[0]?.startsWith("machine-")) meta.machine = dirs.shift()!;
-  const numbered = dirs.map((d) => d.match(NUMBERED)).filter((m) => m !== null);
-  if (numbered[0]) meta.front = { num: Number(numbered[0][1]), slug: numbered[0][2]!, dir: numbered[0][0] };
-  if (numbered[1]) meta.group = { num: Number(numbered[1][1]), slug: numbered[1][2]!, dir: numbered[1][0] };
+  const meta: DocMeta = { ref, version: "", name };
+  const numbered = parts.slice(0, -1).map((d) => d.match(NUMBERED)).filter((m) => m !== null);
+  if (numbered[0] && parts[0] === numbered[0][0]) {
+    meta.front = { num: Number(numbered[0][1]), slug: numbered[0][2]!, dir: numbered[0][0] };
+    if (numbered[1]) meta.group = { num: Number(numbered[1][1]), slug: numbered[1][2]!, dir: numbered[1][0] };
+  }
   return meta;
 }
 
@@ -54,13 +59,14 @@ export function parseDoc(path: string, text: string): Doc {
   const lines = text.split("\n");
   const sections = sectionsOf(lines);
   const h1 = sections.find((s) => s.level === 1);
-  return {
-    ...docMeta(path),
-    title: h1?.heading ?? docMeta(path).name,
-    lines,
-    sections,
-    links: linksOf(lines),
-  };
+  const fields: Doc["fields"] = {};
+  const until = sections.find((s) => s.level > 1)?.start ?? lines.length;
+  for (const line of lines.slice(0, until)) {
+    const m = line.match(FIELD);
+    if (m) fields[m[1] === "Milestone" ? "milestone" : "machine"] = m[2]!;
+  }
+  const meta = docMeta(path);
+  return { ...meta, title: h1?.heading ?? meta.name, lines, sections, links: linksOf(lines), fields };
 }
 
 const HEADING = /^(#{1,6}) +(.+?) *#* *$/;

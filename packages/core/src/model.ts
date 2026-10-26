@@ -15,7 +15,7 @@ export interface Front {
   machine?: string;
   num: number;
   slug: string;
-  /** The front's directory ref: "1.0.12-beta/machine-1/150-rakun". */
+  /** The front's directory ref: "150-rakun". */
   ref: string;
   title: string;
   readme?: string;
@@ -88,7 +88,7 @@ export function buildModel(store: Store): Model {
   };
 }
 
-/** A front is the first numbered directory under a milestone (or its machine); its README titles it. */
+/** A front is a numbered directory at the top of specs/; its README titles it and names its milestone. */
 function frontsOf(docs: Doc[]): Front[] {
   const byRef = new Map<string, Front>();
   for (const d of docs) {
@@ -103,8 +103,12 @@ function frontsOf(docs: Doc[]): Front[] {
     }
     f.docs.push(d.ref);
     if (d.ref === `${ref}/README`) {
+      // The front's own milestone and machine are its README's; a group under it may be older.
       f.readme = d.ref;
       f.title = d.title;
+      f.version = d.version;
+      if (d.machine) f.machine = d.machine;
+      else delete f.machine;
     }
   }
   return [...byRef.values()].sort((a, b) => a.version.localeCompare(b.version) || a.num - b.num || a.ref.localeCompare(b.ref));
