@@ -31,7 +31,7 @@ type Opened = { ws: WebSocket; hello: Record<string, unknown> } | { code: number
 
 /** The websocket to the api: the party's lease while it is open, and the events it brings. */
 export class Link {
-  readonly party: string | undefined;
+  party: string | undefined;
   /** The lease's session id (the hello's), while this process holds the party. */
   session: string | undefined;
   since: string | undefined;
@@ -46,11 +46,40 @@ export class Link {
   #connecting: Promise<void> | undefined;
   #closed = false;
 
+  // The party is the session's, never the folder's: two sessions in one folder (the maintainer and machine-1 on the
+  // host) are two parties. A session names its own with the `as` tool; nothing is taken until it does.
   constructor(
     readonly config: ClientConfig,
     readonly label: string,
-  ) {
-    this.party = config.as;
+  ) {}
+
+  /** Takes `party` for this session, letting go of the one it held; resolves once the api has answered. */
+  async take(party: string): Promise<void> {
+    if (this.party === party && this.session) return;
+    this.#drop();
+    this.party = party;
+    this.refused = undefined;
+    await this.connect();
+  }
+
+  /** Lets go of this session's party and goes on as a reader. */
+  async release(): Promise<void> {
+    this.#drop();
+    this.party = undefined;
+    this.refused = undefined;
+    await this.connect();
+  }
+
+  /** Closes the socket that holds the party (the api frees it at once). */
+  #drop(): void {
+    const old = this.#ws;
+    this.#ws = undefined;
+    this.session = undefined;
+    this.since = undefined;
+    if (old) {
+      old.onclose = null;
+      old.close(1000, "letting go");
+    }
   }
 
   get online(): boolean {
@@ -98,7 +127,7 @@ export class Link {
     const r = await this.#open(false);
     if ("ws" in r) {
       this.#adopt(r.ws);
-      if (!this.party) log(`reading ${this.config.api} as nobody (no SPECS_BOT_AS): writes are refused`);
+      if (!this.party) log(`reading ${this.config.api} as nobody: writes wait for the as tool`);
     } else {
       log(`✗ ${r.reason}; trying again in ${this.#backoff / 1000} s`);
       this.#later();
@@ -312,14 +341,14 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     inputSchema: { type: "object", properties: { ...properties, ...COMMON }, required },
     run: async (a) => {
       if (!link.party) {
-        throw new Refused("read-only: this MCP server names no party", "set SPECS_BOT_AS=<party> in this folder's .env.local (one party per session), then restart the MCP server");
+        throw new Refused("this session holds no party yet", "call the as tool with yours first (maintainer, machine-1, machine-2, machine-3); it is held until the session ends");
       }
       if (link.refused) {
         throw new Refused(
           link.refused.reason,
           link.refused.code === 4409
             ? `one session per party: ${link.party} comes back when that session ends; the next call tries again`
-            : "SPECS_BOT_AS names a party the api does not know (maintainer, machine-1, machine-2, machine-3)",
+            : "as names a party the api does not know (maintainer, machine-1, machine-2, machine-3)",
         );
       }
       if (!link.session) throw new Refused(`the specs-bot api at ${config.api} is unreachable, so ${link.party} is not taken`, "the next call tries again");
@@ -335,7 +364,28 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     blocks: str("what waits on the answer"),
   };
 
+  const who = () => render({ party: link.party ?? null, session: link.session ? "held" : null, since: link.since ?? null }, "toon");
   return [
+    {
+      name: "as",
+      description: "take a party for this session (call it first): held until the session ends; refused while another session holds it",
+      inputSchema: { type: "object", properties: { party: str("maintainer, machine-1, machine-2 or machine-3") }, required: ["party"] },
+      run: async (a) => {
+        await link.take(s(a.party) ?? "");
+        if (link.refused) throw new Refused(link.refused.reason, link.refused.code === 4409 ? "one session per party: it comes back when that session ends; a write tries again" : "one of maintainer, machine-1, machine-2, machine-3");
+        if (!link.session) throw new Refused(`the specs-bot api at ${config.api} is unreachable`, "call as again");
+        return who();
+      },
+    },
+    {
+      name: "logout",
+      description: "let go of this session's party (another session can take it); reads go on",
+      inputSchema: { type: "object", properties: {} },
+      run: async () => {
+        await link.release();
+        return who();
+      },
+    },
     {
       name: "whoami",
       description: "who this MCP server acts as: party, session, since, the api and its health",
@@ -343,7 +393,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       run: async () => {
         const health = await call("health", {}).catch((e: Error) => ({ error: e.message }));
         const state = !link.party
-          ? "read-only (no SPECS_BOT_AS)"
+          ? "no party: call as with yours"
           : link.session
             ? "holding the party"
             : link.refused
@@ -613,7 +663,7 @@ export function errorText(e: unknown): string {
 
 const INSTRUCTIONS = `The botopink specs, through the specs-bot api (the only way to read or change them).
 Answers are TOON. Writes are dry runs that return the diff unless apply: true; edits carry the etag a read showed.
-This server acts as one party (SPECS_BOT_AS), held for the whole session; whoami says which.
+Start by calling as with this session's party (maintainer, machine-1, …): it is held until the session ends, one session per party; whoami says which.
 Each result ends, after a --- line, with the events since the previous call (writes by others, chat to this party, machines coming and going); wait blocks until the next one.`;
 
 /** Runs the MCP server on stdio until stdin closes or a signal comes. */

@@ -111,7 +111,8 @@ describe("specs-bot mcp", () => {
     server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch, websocket });
     project = mkdtempSync(join(tmpdir(), "specs-bot-mcp-project-"));
     writeFileSync(join(project, ".env"), `SPECS_BOT_API_URL=http://127.0.0.1:${server.port}/api\n`);
-    writeFileSync(join(project, ".env.local"), "SPECS_BOT_AS=machine-2\n");
+    // A folder's SPECS_BOT_AS is not the session's party: the maintainer and machine-1 may share a folder.
+    writeFileSync(join(project, ".env.local"), "SPECS_BOT_AS=maintainer\n");
     env = { XDG_STATE_HOME: mkdtempSync(join(tmpdir(), "specs-bot-mcp-state-")) };
     first = spawnMcp(project, env);
   });
@@ -127,12 +128,14 @@ describe("specs-bot mcp", () => {
     expect(init.result.serverInfo.name).toBe("specs-bot");
     expect(init.result.capabilities.tools).toBeDefined();
     const names = ((await first.rpc("tools/list")).result.tools as { name: string; inputSchema: { type: string } }[]).map((t) => t.name);
-    for (const n of ["whoami", "search", "doc", "chat", "sessions", "wait", "edit", "append", "add_section", "new_doc", "meta", "answer", "send", "mark_read", "claim", "release", "assign"]) {
+    for (const n of ["as", "logout", "whoami", "search", "doc", "chat", "sessions", "wait", "edit", "append", "add_section", "new_doc", "meta", "answer", "send", "mark_read", "claim", "release", "assign"]) {
       expect(names).toContain(n);
     }
   });
 
-  test("whoami: the party taken over the websocket, with its session", async () => {
+  test("no party until the session names one with as; then it is held over the websocket", async () => {
+    expect(text(await first.tool("whoami"))).toContain("party: null");
+    expect(text(await first.tool("as", { party: "machine-2" }))).toContain("party: machine-2");
     const t = text(await first.tool("whoami"));
     expect(t).toContain("party: machine-2");
     expect(t).toMatch(/session: [0-9a-f]{32}/);
@@ -199,8 +202,9 @@ describe("specs-bot mcp", () => {
   test("a second server naming the same party reads, but its writes name the holder", async () => {
     second = spawnMcp(project, env);
     await second.init();
-    const who = text(await second.tool("whoami"));
-    expect(who).toContain("machine-2 is in use by another session");
+    const taken = await second.tool("as", { party: "machine-2" });
+    expect(taken.isError).toBe(true);
+    expect(text(taken)).toContain("machine-2 is in use by another session");
     expect(text(await second.tool("overview"))).not.toContain("error");
     const w = await second.tool("append", { ref: "milestone/status", section: "done", text: "- [x] e" });
     expect(w.isError).toBe(true);
@@ -239,9 +243,39 @@ describe("specs-bot mcp without a party", () => {
       expect(text(await mcp.tool("whoami"))).toContain("party: null");
       const w = await mcp.tool("send", { to: "all", purpose: "report", subject: "x", text: "y" });
       expect(w.isError).toBe(true);
-      expect(text(w)).toContain("SPECS_BOT_AS");
+      expect(text(w)).toContain("call the as tool");
     } finally {
       mcp.proc.kill();
+      void server.stop(true);
+    }
+  }, 15000);
+});
+
+describe("two sessions in one folder", () => {
+  test("are two parties: each names its own with as, the folder's token and SPECS_BOT_AS are not used", async () => {
+    const app = createApp({ host: "127.0.0.1", port: 0, dataPath: "/nowhere", tokens: new Map([["tm", "maintainer"]]) });
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch, websocket });
+    const project = mkdtempSync(join(tmpdir(), "specs-bot-mcp-shared-"));
+    writeFileSync(join(project, ".env"), `SPECS_BOT_API_URL=http://127.0.0.1:${server.port}/api\n`);
+    writeFileSync(join(project, ".env.local"), "SPECS_BOT_TOKEN=tm\nSPECS_BOT_AS=maintainer\n");
+    const maintainer = spawnMcp(project, { XDG_STATE_HOME: project });
+    const m1 = spawnMcp(project, { XDG_STATE_HOME: project });
+    try {
+      await maintainer.init();
+      await m1.init();
+      expect(text(await m1.tool("whoami"))).toContain("party: null");
+      expect(text(await maintainer.tool("as", { party: "maintainer" }))).toContain("party: maintainer");
+      expect(text(await m1.tool("as", { party: "machine-1" }))).toContain("party: machine-1");
+      const held = (await (await fetch(`http://127.0.0.1:${server.port}/api/sessions`)).json()) as { sessions: { party: string }[] };
+      expect(held.sessions.map((x) => x.party).sort()).toEqual(["machine-1", "maintainer"]);
+      // logout lets go; the other session could take it now.
+      expect(text(await m1.tool("logout"))).toContain("party: null");
+      await Bun.sleep(100);
+      const after = (await (await fetch(`http://127.0.0.1:${server.port}/api/sessions`)).json()) as { sessions: { party: string }[] };
+      expect(after.sessions.map((x) => x.party)).toEqual(["maintainer"]);
+    } finally {
+      maintainer.proc.kill();
+      m1.proc.kill();
       void server.stop(true);
     }
   }, 15000);

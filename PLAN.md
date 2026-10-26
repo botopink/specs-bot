@@ -272,14 +272,15 @@ Decisão do mantenedor (2026-10-26): os agentes (sessões do Claude Code em cada
 servidor MCP que fica conectado a sessão inteira, em vez de um processo da CLI por comando. É um subcomando da
 própria CLI (o mesmo binário compilado), MCP sobre stdio; stdout é o protocolo, logs vão para stderr.
 
-- **Identidade**: lê a configuração do diretório de trabalho como a CLI (`SPECS_BOT_API_URL` do `.env`,
-  `SPECS_BOT_AS` do `.env.local` / ambiente / `--as`). Com uma parte nomeada, abre `ws://<host>:7165/api/ws?as=<parte>&label=<host · pasta>`:
+- **Identidade**: é da sessão, nunca da pasta — o mantenedor e a machine-1 às vezes trabalham na mesma pasta
+  (2026-10-26). O `.env` dá só o `SPECS_BOT_API_URL`; `SPECS_BOT_AS` e tokens do `.env.local` são ignorados. A sessão
+  chama a ferramenta `as {party}` primeiro (`logout` larga); então o servidor abre `ws://<host>:7165/api/ws?as=<parte>&label=<host · pasta>`:
   o servidor amarra a sessão à conexão (dura enquanto ela estiver aberta) e responde `hello` com o `session`, que
   vai no `X-Specs-Bot-Session` de toda chamada HTTP do processo (não usa o arquivo de sessão por pasta da CLI).
   Caiu a conexão → reconecta com espera crescente (1 s a 30 s) e toma a parte de novo.
   - Parte presa por outra sessão (4409): o servidor continua; leituras funcionam, escritas respondem erro com o
     dono, e cada chamada seguinte tenta tomar a parte de novo. Parte desconhecida (4422): idem, com a dica.
-  - Sem parte nomeada: só leitura; escritas recusadas com a dica (`SPECS_BOT_AS` no `.env.local`).
+  - Antes do `as`: só leitura; escritas recusadas com a dica (chamar `as`).
   - O processo terminar (fim do stdin, sinal) fecha a conexão e libera a parte na hora.
 - **Ferramentas**: uma por comando da CLI. Leitura: `whoami`, `overview`, `next`, `search`, `step`, `steps`,
   `pending`, `review`, `subject`, `retired`, `fronts`, `front`, `doc` (inteiro / `outline` / `section`), `chat`
@@ -293,7 +294,7 @@ própria CLI (o mesmo binário compilado), MCP sobre stdio; stdout é o protocol
   entrando e saindo) — e o buffer recomeça. `wait {types, to, all, timeout}` bloqueia até o próximo evento que casa
   com o filtro (padrão: chat para a própria parte), ou o timeout (600 s; no máximo 1800), como `watch --once`.
 - **Configuração** no `projects` (versionado): `.mcp.json` com `{"mcpServers":{"specs-bot":{"command":"specs-bot","args":["mcp"]}}}`.
-  Cada worktree de tarefa nomeia a sua parte no próprio `.env.local` (`SPECS_BOT_AS=machine-1`); uma parte por sessão.
+  Cada sessão diz quem é com `as` (o prompt da sessão nomeia a parte); uma parte por sessão, uma sessão por parte.
 
 ---
 
