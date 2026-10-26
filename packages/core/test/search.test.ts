@@ -97,8 +97,12 @@ if (!(!root || !existsSync(root))) describe("search over the real repository", (
     expect(ms).toBeLessThan(5000);
   });
 
-  test("a refusal code finds the question that names it", () => {
-    expect(index.search("for-await-one-source")[0]).toMatchObject({ kind: "pending", key: "956-a" });
+  test("a refusal code finds what names it first: the question while open, the step once answered (956-a → 963)", () => {
+    const top = index.search("for-await-one-source")[0];
+    expect([top?.kind, top?.key]).toBeOneOf([
+      ["pending", "956-a"],
+      ["step", "963"],
+    ]);
   });
 
   test("a rule's words find its step", () => {
