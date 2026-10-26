@@ -7,6 +7,7 @@ import { type ClientConfig, loadClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 import { registerRealtime } from "./watch.ts";
 import { registerExport } from "./export.ts";
+import { serveMcp } from "./mcp.ts";
 import { registerWrites } from "./write.ts";
 
 const program = new Command()
@@ -162,6 +163,12 @@ registerRealtime(program, config);
 
 // Writes: edit, append, add-section, new-doc (PLAN.md § 5.2).
 registerWrites(program, config);
+
+// The agents' way in for a whole session: an MCP server over stdio (PLAN.md § 5.7).
+program
+  .command("mcp")
+  .description("serve the commands as MCP tools over stdio, holding this folder's party (SPECS_BOT_AS / --as) while connected")
+  .action(async () => serveMcp(config(), program.version() ?? "0.0.1"));
 
 // For the scripts that still read spec files (botopink/projects' gate): export <set> --to <dir>.
 registerExport(program, config);
