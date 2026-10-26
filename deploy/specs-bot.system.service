@@ -1,0 +1,25 @@
+[Unit]
+Description=specs-bot API (PLAN.md § 2) — runs as its own OS user, so agents on this host cannot read specs-data
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=specs-bot
+Group=specs-bot
+WorkingDirectory=/var/lib/specs-bot
+EnvironmentFile=/etc/specs-bot/env
+ExecStart=/usr/local/lib/specs-bot/specs-bot-server
+Restart=on-failure
+RestartSec=3
+
+# The service sees only its own state; /home is hidden from it.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/specs-bot
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

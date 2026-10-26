@@ -275,7 +275,7 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [x] `specs-data` de desenvolvimento em `~/develop/specs-data`: `git filter-repo --path specs/` sobre um clone do `projects`, 2380 commits, branch `main`
 - [x] Host = esta máquina, `192.168.1.15:7165`; API Hono com `GET /api/health`; config em `specs-bot/.env` (modelo em `.env.example`)
 - [x] Repos públicos `github.com/botopink/specs-bot` e `github.com/botopink/specs-data` (criados com `gh`)
-- [x] Serviço systemd de usuário `deploy/specs-bot.service` (`systemctl --user status specs-bot`); vira usuário de SO próprio na fase 4
+- [x] Serviço systemd de usuário `deploy/specs-bot.service` (`systemctl --user status specs-bot`); substituído na fase 4 pela unit de sistema
 
 ### Fase 1 — Core: parse + round-trip + índice
 - [x] Parsers: steps, pending, review, taken, retired, docs (seções por heading), chat (`conversation-chat` entrou no `specs-data` como subtree, com histórico)
@@ -307,9 +307,10 @@ o entrega na hora a quem está conectado. Não há conexão máquina a máquina.
 - [x] `.env` no `projects` com `SPECS_BOT_API_URL`; `.env.local` no `.gitignore`; tokens de maintainer e machine-2
 - [x] `AGENTS.md` com § Specs — through specs-bot; `.claude/settings.json` libera `specs-bot`, bloqueia clonar/ler o `specs-data`
 - [x] `conversation-chat` arquivado no GitHub (README aponta para o `specs-data`)
-- [x] Push do `specs-data` depois de cada escrita (fila em segundo plano, estado no `/api/health`) — hoje com a chave SSH do usuário do host
-- [x] **Deploy key** de escrita só do host (`~/.config/specs-bot/deploy_key`, `SPECS_DATA_PUSH_KEY`) + ruleset na `main` do `specs-data` (update/deletion/non-fast-forward; só a deploy key passa) — 2026-10-26; deploy keys ligadas na org via `gh api`; push com a chave do mantenedor confirmado recusado
-- [ ] **Usuário de SO `specs-bot`** dono do `specs-data`, serviço do sistema (precisa de `sudo` do mantenedor)
+- [x] Push do `specs-data` depois de cada escrita (fila em segundo plano, estado no `/api/health`) — com a deploy key do host
+- [x] **Deploy key** de escrita só do host (`/var/lib/specs-bot/.ssh/deploy_key`, `SPECS_DATA_PUSH_KEY`) + ruleset na `main` do `specs-data` (update/deletion/non-fast-forward; só a deploy key passa) — 2026-10-26; deploy keys ligadas na org via `gh api`; push com a chave do mantenedor confirmado recusado
+- [x] **Usuário de SO `specs-bot`** (2026-10-26): dono de `/var/lib/specs-bot` (700: `specs-data`, `.ssh/`); unit de sistema `deploy/specs-bot.system.service` (`ProtectHome`, `ProtectSystem=strict`); binário `bun run build:server` → `/usr/local/lib/specs-bot/specs-bot-server`; config em `/etc/specs-bot/env` (root 600). Conferido: o usuário do mantenedor não lê `/var/lib/specs-bot`; escrita real (mt-0058) commitada e empurrada pela deploy key
+  - atualizar: `bun run build:server && sudo install -m 755 dist/specs-bot-server /usr/local/lib/specs-bot/ && sudo systemctl restart specs-bot`
 - [ ] Rede: TLS se a API sair da LAN
 - [ ] Ledgers: o `HEADER` gerado ainda diz "Generated from botopink/projects · specs/…" — trocar exige regenerar os 14 ledgers dos repositórios
 
