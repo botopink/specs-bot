@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createApp } from "../src/app.ts";
 import { EventBus, type SpecEvent } from "../src/events.ts";
-import { parseLog } from "../src/now.ts";
+import type { NowTask } from "@specs-bot/site";
+import { Activity, parseLog } from "../src/now.ts";
 import { Sessions } from "../src/sessions.ts";
 import { websocket } from "../src/ws.ts";
 
@@ -62,7 +63,7 @@ describe("/api/now and /api/doing", () => {
   beforeAll(async () => {
     ({ root, seeded } = await dataRepo());
     clock = Date.now();
-    app = createApp({ host: "127.0.0.1", port: 0, dataPath: root, tokens: new Map([["tok-m3", "machine-3"]]) }, { sessions: new Sessions(60_000, () => clock) });
+    app = createApp({ host: "127.0.0.1", port: 0, dataPath: root, tokens: new Map([["tok-mt", "maintainer"]]) }, { sessions: new Sessions(60_000, () => clock) });
     app.bus.subscribe((e) => events.push(e));
     await app.activity.ready;
   });
@@ -81,7 +82,7 @@ describe("/api/now and /api/doing", () => {
 
   test("every known party, with its fronts, its messages and its writes from the log", async () => {
     const n = await now();
-    expect(n.parties.map((p) => p.party)).toEqual(["maintainer", "machine-1", "machine-2", "machine-3"]);
+    expect(n.parties.map((p) => p.party)).toEqual(["maintainer", "machine-1", "machine-2"]);
     expect(Date.parse(n.at)).not.toBeNaN();
     expect(of(n, "machine-1")).toMatchObject({ online: false, session: null, doing: null, fronts: ["150-rakun"], recent: [] });
     expect(of(n, "machine-1").chat.map((m: { id: string }) => m.id)).toEqual(["mt-0002", "mt-0001"]);
@@ -99,7 +100,7 @@ describe("/api/now and /api/doing", () => {
   test("doing needs a party and a session", async () => {
     expect((await call("POST", "/api/doing", { text: "x" })).status).toBe(401);
     // A token names a party, but a doing belongs to a session.
-    const r = await call("POST", "/api/doing", { text: "x" }, undefined, "tok-m3");
+    const r = await call("POST", "/api/doing", { text: "x" }, undefined, "tok-mt");
     expect(r.status).toBe(401);
     expect(r.body.hint).toContain("specs-bot as");
     expect((await call("DELETE", "/api/doing")).status).toBe(401);
@@ -215,7 +216,7 @@ describe("the websocket relays doing and session to whoever asks for them", () =
 
     const post = (path: string, body: unknown, session?: string, method = "POST") =>
       app.request(path, { method, headers: { "content-type": "application/json", ...(session ? { "x-specs-bot-session": session } : {}) }, body: JSON.stringify(body) });
-    const { session } = (await (await post("/api/session", { party: "machine-3", label: "box" })).json()) as { session: string };
+    const { session } = (await (await post("/api/session", { party: "maintainer", label: "box" })).json()) as { session: string };
     // No model here: a doing without a front still works.
     expect((await post("/api/doing", { text: "porting the gate" }, session)).status).toBe(200);
     expect((await post("/api/doing", { text: "porting", front: "150" }, session)).status).toBe(503);
@@ -224,10 +225,10 @@ describe("the websocket relays doing and session to whoever asks for them", () =
 
     const seen = reader.got.filter((m) => m.type !== "hello").map((m) => [m.type, m.party, m.held ?? m.text]);
     expect(seen).toEqual([
-      ["session", "machine-3", true],
-      ["doing", "machine-3", "porting the gate"],
-      ["session", "machine-3", false],
-      ["doing", "machine-3", null],
+      ["session", "maintainer", true],
+      ["doing", "maintainer", "porting the gate"],
+      ["session", "maintainer", false],
+      ["doing", "maintainer", null],
     ]);
     expect(old.got.map((m) => m.type)).toEqual(["hello"]);
     reader.ws.close();
@@ -252,5 +253,50 @@ describe("the websocket relays doing and session to whoever asks for them", () =
       ["doing", null],
     ]);
     reader.ws.close();
+  });
+});
+
+describe("the task journal", () => {
+  const dir = () => {
+    const d = mkdtempSync(join(tmpdir(), "specs-bot-journal-"));
+    mkdirSync(join(d, ".git"));
+    return d;
+  };
+  const lease = (sessions: Sessions, party: string) => {
+    const r = sessions.take(party, "t");
+    if (!("lease" in r)) throw new Error("not taken");
+    return r.lease.id;
+  };
+  const board = (a: Activity) => a.snapshot(undefined).tasks.map((t) => [t.state, t.party, t.text]);
+
+  test("a new line ends the last as done; done --paused pauses; the same line again resumes; a lost session pauses", () => {
+    const sessions = new Sessions();
+    const a = new Activity(new EventBus(), sessions, dir());
+    const m1 = lease(sessions, "machine-1");
+    a.set("machine-1", m1, "phase 1", null);
+    a.set("machine-1", m1, "phase 2", null);
+    expect(board(a)).toEqual([["running", "machine-1", "phase 2"], ["done", "machine-1", "phase 1"]]);
+    a.clear("machine-1", true);
+    a.set("machine-1", m1, "961 (2)", null);
+    expect(board(a)).toEqual([["running", "machine-1", "961 (2)"], ["paused", "machine-1", "phase 2"], ["done", "machine-1", "phase 1"]]);
+    a.clear("machine-1");
+    a.set("machine-1", m1, "phase 2", null);
+    expect(board(a).map((t) => t.join(" "))).toEqual(["running machine-1 phase 2", "done machine-1 961 (2)", "done machine-1 phase 1"]);
+    sessions.release(m1);
+    expect(board(a)[0]).toEqual(["paused", "machine-1", "phase 2"]);
+  });
+
+  test("kept across a restart: what was running comes back paused; done lines older than 24 h are dropped", () => {
+    const data = dir();
+    const sessions = new Sessions();
+    const a = new Activity(new EventBus(), sessions, data);
+    const m2 = lease(sessions, "machine-2");
+    a.set("machine-2", m2, "old", null);
+    a.set("machine-2", m2, "cell check", null);
+    const file = join(data, ".git", "specs-bot-now.json");
+    const j = JSON.parse(readFileSync(file, "utf8")) as { tasks: NowTask[] };
+    j.tasks[0]!.at = new Date(Date.now() - 25 * 3600_000).toISOString();
+    writeFileSync(file, JSON.stringify(j));
+    expect(board(new Activity(new EventBus(), new Sessions(), data))).toEqual([["paused", "machine-2", "cell check"]]);
   });
 });

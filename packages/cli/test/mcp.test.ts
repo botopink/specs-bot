@@ -182,7 +182,7 @@ describe("specs-bot mcp", () => {
     expect(now.parties.find((p) => p.party === "machine-2")!.doing!.text).toBe("appending to the status");
 
     // Another party's doing (and its session) is not appended to this session's results.
-    const m1 = ((await (await app.request("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ party: "machine-3", label: "t" }) })).json()) as { session: string }).session;
+    const m1 = ((await (await app.request("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ party: "maintainer", label: "t" }) })).json()) as { session: string }).session;
     await app.request("/api/doing", { method: "POST", headers: { "content-type": "application/json", "x-specs-bot-session": m1 }, body: JSON.stringify({ text: "elsewhere" }) });
     await app.request("/api/session", { method: "DELETE", headers: { "x-specs-bot-session": m1 } });
     await Bun.sleep(150);

@@ -60,11 +60,11 @@ describe("parseMessage", () => {
 
 describe("parseRead", () => {
   test("a message to all has one mark per machine", () => {
-    expect(parseRead("m1 [x] · m2 [x] · m3 [ ]", "all")).toEqual({
-      "machine-1": true,
-      "machine-2": true,
-      "machine-3": false,
-    });
+    expect(parseRead("m1 [x] · m2 [ ]", "all")).toEqual({ "machine-1": true, "machine-2": false });
+  });
+
+  test("an old mark of a party that never was (m3) is dropped", () => {
+    expect(parseRead("m1 [x] · m2 [x] · m3 [ ]", "all")).toEqual({ "machine-1": true, "machine-2": true });
   });
 });
 

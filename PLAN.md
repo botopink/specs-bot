@@ -49,8 +49,7 @@ O specs-bot é **a única porta** para specs, decisões, formas aposentadas e co
                  HTTP + token por máquina
 machine-1 ─ CLI ─┐
 machine-2 ─ CLI ─┼──────────► specs-bot API ──► core ──► specs-data (git, só o servidor acessa)
-machine-3 ─ CLI ─┤                  │
-mantenedor ─ site┘                  └──► export ──► ledgers / snapshot para CI
+mantenedor ─ site┘                  │                  └──► export ──► ledgers / snapshot para CI
 ```
 
 **São dois projetos, e só dois:**
@@ -130,7 +129,7 @@ roda `specs-bot admin reindex`; o `check` aponta o que ficou inconsistente.
 interface Doc {            // qualquer .md de milestone: README, status, track, deep dive
   ref: string;             // "150-rakun/04-rakun/track", "milestone/status"  (id estável, não caminho)
   version: string; frozen: boolean;
-  machine?: 'machine-1' | 'machine-2' | 'machine-3';
+  owner?: 'machine-1' | 'machine-2';   // só no README da frente, quando reivindicada
   front?: { num: number; slug: string }; group?: string;
   kind: 'readme' | 'overview' | 'status' | 'fronts' | 'track' | 'closure' | 'other';
   title: string;
@@ -307,10 +306,17 @@ Pedido do mantenedor (2026-10-26): ver no site, em tempo real, o que cada máqui
   (pasta ou número de uma frente do milestone corrente, validada como no `front.claim`). Fica **em memória** na API e
   pertence à **sessão** que segura a parte: some quando a sessão termina (`logout`, 30 min de silêncio, WebSocket
   fechado). `POST /api/doing {text, front?}` define (precisa de sessão); `DELETE /api/doing` limpa. CLI:
-  `specs-bot doing <texto> [--front f]` e `specs-bot done`; MCP: `doing` e `done`. O agente define ao começar uma
-  tarefa e atualiza quando ela muda.
+  `specs-bot doing <texto> [--front f]` e `specs-bot done [--paused]`; MCP: `doing` e `done {paused?}`. O agente
+  define ao começar uma tarefa e atualiza quando ela muda.
+- **Diário de tarefas** (pedido do mantenedor, 2026-10-26: "organizar o que está executando, pausado e feito nas
+  últimas 24h"): cada linha "doing" termina **feita** (`done`, ou trocada por outra linha) ou **pausada**
+  (`done --paused`, ou a sessão caiu com ela rodando); dizer de novo uma linha pausada a retoma. `tasks:
+  [{party, text, front, state: running|paused|done, since, at}]` — rodando, depois pausadas, depois feitas, mais
+  novas primeiro. Feitas ficam 24 h; pausadas, 7 dias. Gravado em `<data>/.git/specs-bot-now.json` (fora do
+  histórico); num restart, o que rodava volta como pausado.
 - **`GET /api/now`**: `{at, parties: [{party, online, session: {label, since, bound} | null, doing: {text, front,
-  since} | null, fronts[], recent[], chat[]}]}` para maintainer e machine-1..3. `fronts`: as frentes que a parte é
+  since} | null, fronts[], recent[], chat[]}]}` para maintainer, machine-1 e machine-2 (não há machine-3; marcas `m3` antigas no chat são ignoradas), e
+  `tasks` (o diário, abaixo). `fronts`: as frentes que a parte é
   dona no milestone corrente. `recent`: as últimas 10 escritas da parte (`op, summary, refs, commit, at`), de um anel
   em memória alimentado pelos eventos `write` e semeado na partida com os ~50 últimos commits do `specs-data`
   (trailers `Op`/`Party`; autor = parte; `refs` vêm dos arquivos tocados). `chat`: as 5 últimas mensagens de, para ou
@@ -319,7 +325,8 @@ Pedido do mantenedor (2026-10-26): ver no site, em tempo real, o que cada máqui
   encerrada) e `session` (`party, held, label, since, at`; uma sessão tomou ou largou a parte). Só chegam a quem os
   pede em `types`; sem `types`, o padrão continua `write, chat, presence` — clientes antigos (`watch --once`, o MCP)
   não acordam com eles.
-- **Site**: `/now` ("Now", em destaque na navegação) — um cartão por parte: ponto online, desde quando, onde (o
+- **Site**: `/now` ("Now", em destaque na navegação) — no topo, o quadro **Running / Paused / Done — last 24 h**
+  (cada tarefa com a parte, a frente, desde quando e quanto durou); abaixo, um cartão por parte: ponto online, desde quando, onde (o
   `label` da sessão, `mcp`/`cli`), a linha "doing" grande (com a frente → `/fronts#<frente>` e o README dela), as
   frentes como chips, as últimas escritas (refs com link para doc, step, pending ou frente) e as últimas mensagens.
   Renderizado no servidor; um script abre `ws(s)://<host>/api/ws?types=…` como leitor anônimo e, a cada evento

@@ -43,7 +43,7 @@ export interface MilestoneNode {
 }
 
 /** A milestone's own documents in reading order; the rest by name. */
-const MILESTONE_ORDER = ["README", "overview", "status", "fronts", "contracts", "deferred", "language-gaps", "closure", "machine-1", "machine-2", "machine-3"];
+const MILESTONE_ORDER = ["README", "overview", "status", "fronts", "contracts", "deferred", "language-gaps", "closure", "machine-1", "machine-2"];
 
 export function milestoneOf(data: SiteData, version: string): MilestoneNode {
   const docs = data.tree.docs.filter((d) => d.version === version);

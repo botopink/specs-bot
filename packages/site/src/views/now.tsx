@@ -3,7 +3,7 @@
 // api's websocket and, on any event, fetches the cards again (as HTML from /now/cards, rendered by these same
 // components) without reloading; relative times tick in the browser.
 import type { SiteData } from "../data.ts";
-import { type NowData, type NowParty, relTime } from "../now.ts";
+import { type NowData, type NowParty, type NowTask, relTime } from "../now.ts";
 import { Layout } from "./layout.tsx";
 
 /** Where a ref of a write goes on the site: a document (with its section), a step, a question, a front. */
@@ -132,14 +132,87 @@ function PartyCard(props: { p: NowParty; data: SiteData | undefined; now: number
   );
 }
 
-/** The cards alone: the page's body, and what /now/cards answers to the page's script. */
+/** "45 min", "2 h 10 min": how long a task ran. */
+export function took(since: string, until: string): string {
+  const m = Math.max(0, Math.round((Date.parse(until) - Date.parse(since)) / 60_000));
+  if (m < 60) return `${m} min`;
+  return m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`;
+}
+
+const COLUMNS: { state: NowTask["state"]; title: string; empty: string }[] = [
+  { state: "running", title: "Running", empty: "Nobody says they are on something." },
+  { state: "paused", title: "Paused", empty: "Nothing paused." },
+  { state: "done", title: "Done — last 24 h", empty: "Nothing done in the last 24 h." },
+];
+
+function TaskItem(props: { t: NowTask; now: number }) {
+  const { t, now } = props;
+  return (
+    <li class={`now-task is-${t.state}`}>
+      <span class="now-task-text">{t.text}</span>
+      <span class="now-doing-meta">
+        <a class="now-task-party" href={`#now-${t.party}`} translate="no">
+          {t.party}
+        </a>
+        {t.front ? (
+          <a class="chip" href={frontLink(t.front)} translate="no">
+            {t.front}
+          </a>
+        ) : null}
+        {t.state === "running" ? (
+          <span>
+            since <Ago at={t.since} now={now} />
+          </span>
+        ) : (
+          <span>
+            {t.state === "done" ? "done" : "paused"} <Ago at={t.at} now={now} /> · took {took(t.since, t.at)}
+          </span>
+        )}
+      </span>
+    </li>
+  );
+}
+
+/** The tasks by state: what is running, what is paused, what was done in the last 24 h. */
+export function NowBoard(props: { now: NowData }) {
+  const at = Date.parse(props.now.at) || Date.now();
+  return (
+    <section class="now-board" aria-label="Tasks">
+      {COLUMNS.map((c) => {
+        const tasks = props.now.tasks.filter((t) => t.state === c.state);
+        return (
+          <section class={`now-col is-${c.state}`} id={`now-${c.state}`}>
+            <h2>
+              {c.title} <span class="count">{tasks.length}</span>
+            </h2>
+            {tasks.length ? (
+              <ul class="now-tasks">
+                {tasks.map((t) => (
+                  <TaskItem t={t} now={at} />
+                ))}
+              </ul>
+            ) : (
+              <p class="muted">{c.empty}</p>
+            )}
+          </section>
+        );
+      })}
+    </section>
+  );
+}
+
+/** The board and the cards: the page's body, and what /now/cards answers to the page's script. */
 export function NowCards(props: { now: NowData; data: SiteData | undefined }) {
   const at = Date.parse(props.now.at) || Date.now();
   return (
     <>
-      {props.now.parties.map((p) => (
-        <PartyCard p={p} data={props.data} now={at} />
-      ))}
+      <NowBoard now={props.now} />
+      <h2 class="now-parties-title">Who</h2>
+      <div class="now-grid">
+        {props.now.parties.map((p) => (
+          <PartyCard p={p} data={props.data} now={at} />
+        ))}
+      </div>
     </>
   );
 }
@@ -194,10 +267,10 @@ export function NowPage(props: { now: NowData | undefined; data: SiteData | unde
         <h1>Now</h1>
         {props.now ? <LiveBadge /> : null}
       </div>
-      <p class="muted">What each machine and the maintainer are doing, as they say it, with their last writes and messages.</p>
+      <p class="muted">What each machine and the maintainer are on, as they say it (`doing` / `done` / `done --paused`): running, paused, and done in the last 24 h; then each one with its last writes and messages.</p>
       {props.now ? (
         <>
-          <div class="now-grid" id="now-cards" data-now="/now/cards">
+          <div id="now-cards" data-now="/now/cards">
             <NowCards now={props.now} data={props.data} />
           </div>
           <script dangerouslySetInnerHTML={{ __html: NOW_SCRIPT }} />

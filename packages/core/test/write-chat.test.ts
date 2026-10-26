@@ -61,7 +61,7 @@ describe("chatSend", () => {
   test("the maintainer to all: one mark per machine", () => {
     const p = chatSend(model, { to: "all", purpose: "rule", subject: "Another rule", text: "x", at: AT }, "maintainer");
     expect(file(p).path).toBe("conversation-chat/all/20261025-0905-another-rule-mt-0036.md");
-    expect(file(p).after).toContain("read: m1 [ ] · m2 [ ] · m3 [ ]\n");
+    expect(file(p).after).toContain("read: m1 [ ] · m2 [ ]\n");
   });
 
   test("refuses a purpose, a party or an answer that does not exist", () => {
@@ -78,7 +78,7 @@ describe("chatRead", () => {
   });
 
   test("only the addressee, and only once", () => {
-    expect(refused(() => chatRead(model, { id: "m1-0024" }, "machine-3")).code).toBe("forbidden");
+    expect(refused(() => chatRead(model, { id: "m1-0024" }, "maintainer")).code).toBe("forbidden");
     expect(refused(() => chatRead(model, { id: "mt-0035" }, "machine-1")).message).toContain("already read");
   });
 });

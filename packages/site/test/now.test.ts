@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createSite, type NowData } from "../src/index.ts";
 import { relTime } from "../src/now.ts";
-import { NOW_SCRIPT } from "../src/views/now.tsx";
+import { NOW_SCRIPT, took } from "../src/views/now.tsx";
 
 const FILES: Record<string, string> = {
   "decisions-taken-steps.md": "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
@@ -42,7 +42,11 @@ const NOW: NowData = {
       chat: [{ id: "mt-0001", from: "maintainer", to: "machine-1", subject: "Hello there", at: "2026-10-21T11:44" }],
     },
     { party: "machine-2", online: true, session: { label: "host", since: minutesBefore(1), bound: false }, doing: null, fronts: [], recent: [], chat: [] },
-    { party: "machine-3", online: false, session: null, doing: null, fronts: [], recent: [], chat: [] },
+  ],
+  tasks: [
+    { party: "machine-1", text: "Porting the <router> to rakun", front: "150-rakun", state: "running", since: minutesBefore(5), at: minutesBefore(5) },
+    { party: "machine-2", text: "The escape in cell docs", front: null, state: "paused", since: minutesBefore(130), at: minutesBefore(60) },
+    { party: "machine-1", text: "982 box", front: "150-rakun", state: "done", since: minutesBefore(200), at: minutesBefore(70) },
   ],
 };
 
@@ -59,7 +63,7 @@ describe("/now", () => {
     const { status, body, res } = await get("/now");
     expect(status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    for (const p of ["maintainer", "machine-1", "machine-2", "machine-3"]) expect(body).toContain(`id="now-${p}"`);
+    for (const p of ["maintainer", "machine-1", "machine-2"]) expect(body).toContain(`id="now-${p}"`);
     const m1 = body.slice(body.indexOf('id="now-machine-1"'), body.indexOf('id="now-machine-2"'));
     expect(m1).toContain('class="dot on"');
     expect(m1).toContain("online since");
@@ -78,9 +82,32 @@ describe("/now", () => {
     expect(m1).toContain("3 min ago");
     // Identifiers stay out of the translator.
     expect(m1).toContain('<h2 translate="no">machine-1</h2>');
-    const m3 = body.slice(body.indexOf('id="now-machine-3"'));
-    expect(m3).toContain('class="dot off"');
-    expect(m3).toContain("offline");
+    const mt = body.slice(body.indexOf('id="now-maintainer"'), body.indexOf('id="now-machine-1"'));
+    expect(mt).toContain('class="dot off"');
+    expect(mt).toContain("offline");
+    expect(body).not.toContain("machine-3");
+  });
+
+  test("the board: running, paused, done in the last 24 h, each task with its party, front and times", async () => {
+    const { body } = await get("/now");
+    const col = (state: string, next?: string) => body.slice(body.indexOf(`id="now-${state}"`), next ? body.indexOf(`id="now-${next}"`) : body.indexOf("now-parties-title"));
+    const running = col("running", "paused");
+    expect(running).toContain('<span class="count">1</span>');
+    expect(running).toContain("Porting the &lt;router&gt; to rakun");
+    expect(running).toContain('href="#now-machine-1"');
+    expect(running).toContain('href="/fronts#150-rakun"');
+    const paused = col("paused", "done");
+    expect(paused).toContain("The escape in cell docs");
+    expect(paused).toContain("took 1 h 10 min");
+    const done = col("done");
+    expect(done).toContain("982 box");
+    expect(done).toContain("Done — last 24 h");
+    expect(done).toContain("took 2 h 10 min");
+    // The board comes before the cards, in the block the script fetches again.
+    expect(body.indexOf('id="now-running"')).toBeGreaterThan(body.indexOf('data-now="/now/cards"'));
+    expect(body.indexOf('id="now-running"')).toBeLessThan(body.indexOf('id="now-maintainer"'));
+    expect(took(minutesBefore(45), AT)).toBe("45 min");
+    expect(took(minutesBefore(120), AT)).toBe("2 h");
   });
 
   test("the page carries the live script: a reader on the websocket asking for the /now events, fetching the cards again", async () => {
@@ -110,7 +137,7 @@ describe("/now", () => {
     expect(body).toContain("Porting the &lt;router&gt; to rakun");
     expect(body).toContain(NOW_SCRIPT);
     const strip = await get("/now/strip");
-    expect(strip.body).toContain('href="/now#now-machine-3"');
+    expect(strip.body).toContain('href="/now#now-maintainer"');
   });
 
   test("without the api's live status the page says so, and the overview has no strip", async () => {

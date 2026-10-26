@@ -1,9 +1,9 @@
 // conversation-chat — one file per message: `<dir>/<YYYYMMDD-HHMM>-<slug>-<id>.md`, a `---` head with
-// from / to / purpose / subject / read / in-reply-to, then the body. `<dir>` is machine-1|2|3 or all.
+// from / to / purpose / subject / read / in-reply-to, then the body. `<dir>` is machine-1|2 or all.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export type Party = "maintainer" | "machine-1" | "machine-2" | "machine-3";
+export type Party = "maintainer" | "machine-1" | "machine-2";
 export type Purpose = "report" | "question" | "answer" | "digest" | "rule";
 
 export interface ChatMessage {
@@ -30,7 +30,7 @@ export interface ChatMessage {
 }
 
 const NAME = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})-([a-z0-9-]+)-([a-z0-9]+-\d{4})\.md$/;
-const SHORT: Record<string, string> = { m1: "machine-1", m2: "machine-2", m3: "machine-3", mt: "maintainer" };
+const SHORT: Record<string, string> = { m1: "machine-1", m2: "machine-2", mt: "maintainer" };
 
 export function isMessageFile(name: string): boolean {
   return NAME.test(name);
@@ -84,10 +84,10 @@ export function replyIds(raw: string): string[] {
     .filter((id): id is string => id !== undefined);
 }
 
-/** "[x]" for one addressee; "m1 [x] · m2 [x] · m3 [ ]" for a message to all. */
+/** "[x]" for one addressee; "m1 [x] · m2 [x]" for a message to all; marks of a party that is not one (m3) are dropped. */
 export function parseRead(raw: string, to: string): Record<string, boolean> {
   const each = [...raw.matchAll(/\b(m\d|mt) \[( |x)\]/g)];
-  if (each.length) return Object.fromEntries(each.map((m) => [SHORT[m[1]!] ?? m[1]!, m[2] === "x"]));
+  if (each.length) return Object.fromEntries(each.filter((m) => SHORT[m[1]!]).map((m) => [SHORT[m[1]!]!, m[2] === "x"]));
   const one = raw.match(/^\[( |x)\]/);
   if (!one) throw new Error(`read is "[ ]", "[x]" or "m1 [ ] · m2 [ ] · …": ${raw}`);
   return { [to]: one[1] === "x" };

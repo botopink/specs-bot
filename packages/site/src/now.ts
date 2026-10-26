@@ -46,9 +46,23 @@ export interface NowParty {
   chat: NowChat[];
 }
 
+/** A doing line in the journal: running now, paused (to resume), or done (kept 24 h). */
+export interface NowTask {
+  party: string;
+  text: string;
+  front: string | null;
+  state: "running" | "paused" | "done";
+  /** When it started. */
+  since: string;
+  /** When it reached its state (running: since). */
+  at: string;
+}
+
 export interface NowData {
   at: string;
   parties: NowParty[];
+  /** Running (newest first), then paused, then done in the last 24 h. */
+  tasks: NowTask[];
 }
 
 export type NowFn = () => NowData;

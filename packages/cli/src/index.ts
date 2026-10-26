@@ -42,7 +42,7 @@ program.command("whoami").description("check the connection and the party this m
 
 program
   .command("as")
-  .argument("<party>", "maintainer, machine-1, machine-2 or machine-3")
+  .argument("<party>", "maintainer, machine-1 or machine-2")
   .description("take a party for this folder's session; refused while another session holds it")
   .action(async (party: string) => {
     const r = await takeParty(config(), party);
@@ -66,7 +66,7 @@ program
   .command("doing")
   .argument("<text...>", "what this party is doing now, one line (at most 200 characters)")
   .option("--front <front>", "the current front it is about (its folder or number)")
-  .description("say what this party is doing now (the site's /now page); set it when a task starts, again when it changes")
+  .description("say what this party is doing now (the site's /now page); set it when a task starts — a new line ends the last one as done")
   .action(async (words: string[], o) => {
     const r = (await post(config(), "doing", { text: words.join(" "), ...(o.front ? { front: o.front } : {}) })) as Parameters<typeof printDoing>[0];
     console.log(printDoing(r, program.opts().format as Format));
@@ -74,9 +74,10 @@ program
 
 program
   .command("done")
-  .description("clear what this party said it is doing")
-  .action(async () => {
-    const r = (await del(config(), "doing")) as { party: string };
+  .option("--paused", "stopped for now, to resume later (saying the same line again resumes it)")
+  .description("end what this party said it is doing: done (the /now page keeps it 24 h), or paused")
+  .action(async (o: { paused?: boolean }) => {
+    const r = (await del(config(), o.paused ? "doing?paused=1" : "doing")) as { party: string };
     console.log(printDoing({ party: r.party, doing: null }, program.opts().format as Format));
   });
 

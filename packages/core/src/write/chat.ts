@@ -4,10 +4,10 @@ import type { ChatMessage } from "../chat/chat.ts";
 import type { Model } from "../model.ts";
 import { type Plan, WriteError } from "./plan.ts";
 
-export const PARTIES = ["maintainer", "machine-1", "machine-2", "machine-3"] as const;
+export const PARTIES = ["maintainer", "machine-1", "machine-2"] as const;
 export const PURPOSES = ["report", "question", "answer", "digest", "rule"] as const;
 
-const SHORT: Record<string, string> = { maintainer: "mt", "machine-1": "m1", "machine-2": "m2", "machine-3": "m3" };
+const SHORT: Record<string, string> = { maintainer: "mt", "machine-1": "m1", "machine-2": "m2" };
 
 /** Where a message is filed: to all → all/; else the machine's conversation (machine-N/) it is to or from. */
 function dirOf(from: string, to: string): string {

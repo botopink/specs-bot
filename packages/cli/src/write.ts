@@ -191,7 +191,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
     program
       .command("assign")
       .argument("<front>", "the front's folder or its number")
-      .requiredOption("--to <machine>", "machine-1, machine-2 or machine-3")
+      .requiredOption("--to <machine>", "machine-1 or machine-2")
       .description("give a front to a machine, whoever held it (the maintainer only)"),
   ).action(async (front: string, o) => write("assign", { ...o, front }));
 
@@ -278,7 +278,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
   common(
     program
       .command("send")
-      .requiredOption("--to <party>", "maintainer | machine-1 | machine-2 | machine-3 | all")
+      .requiredOption("--to <party>", "maintainer | machine-1 | machine-2 | all")
       .requiredOption("--purpose <p>", "report | question | answer | digest | rule")
       .requiredOption("--subject <text>", "one line saying what the message is for")
       .requiredOption("-t, --text <text|@file|->", "the message (a report: Done, Running, Next, Blocking)")

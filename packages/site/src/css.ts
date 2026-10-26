@@ -268,6 +268,23 @@ header.top nav a.nav-now::before { content: ""; display: inline-block; width: 7p
 .live[data-live="live"] .live-dot { background: var(--ok); animation: live-pulse 2s ease-in-out infinite; }
 @keyframes live-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .live[data-live="live"] .live-dot { animation: none; } }
+.now-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin: 16px 0 8px; }
+.now-col { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--gone); border-radius: 14px; padding: 12px 16px; }
+.now-col.is-running { border-top-color: var(--ok); }
+.now-col.is-paused { border-top-color: var(--warn); }
+.now-col.is-done { border-top-color: var(--accent); }
+.now-col h2 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.now-col h2 .count { font-family: var(--mono); color: var(--fg); margin-left: 4px; }
+.now-col .muted { margin: 4px 0; font-size: 14px; font-style: italic; }
+.now-tasks { list-style: none; padding: 0; margin: 0; }
+.now-task { padding: 8px 0; border-bottom: 1px dashed var(--line); overflow-wrap: anywhere; }
+.now-task:last-child { border-bottom: 0; }
+.now-task-text { font-size: 15px; line-height: 1.4; }
+.now-task.is-running .now-task-text { font-weight: 650; }
+.now-task.is-done .now-task-text { color: var(--muted); }
+.now-task .now-doing-meta { margin-top: 4px; font-size: 12px; }
+.now-task-party { font: 600 12px var(--mono); }
+.now-parties-title { margin: 20px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .now-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 16px; margin: 16px 0; }
 .now-card { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px 18px; scroll-margin-top: 64px; }
 .now-card.is-off { opacity: .78; }

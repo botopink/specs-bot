@@ -342,14 +342,14 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
   /** A write goes only with the party this session holds; otherwise why not, said once. */
   const holding = () => {
     if (!link.party) {
-      throw new Refused("this session holds no party yet", "call the as tool with yours first (maintainer, machine-1, machine-2, machine-3); it is held until the session ends");
+      throw new Refused("this session holds no party yet", "call the as tool with yours first (maintainer, machine-1, machine-2); it is held until the session ends");
     }
     if (link.refused) {
       throw new Refused(
         link.refused.reason,
         link.refused.code === 4409
           ? `one session per party: ${link.party} comes back when that session ends; the next call tries again`
-          : "as names a party the api does not know (maintainer, machine-1, machine-2, machine-3)",
+          : "as names a party the api does not know (maintainer, machine-1, machine-2)",
       );
     }
     if (!link.session) throw new Refused(`the specs-bot api at ${config.api} is unreachable, so ${link.party} is not taken`, "the next call tries again");
@@ -383,10 +383,10 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     {
       name: "as",
       description: "take a party for this session (call it first): held until the session ends; refused while another session holds it",
-      inputSchema: { type: "object", properties: { party: str("maintainer, machine-1, machine-2 or machine-3") }, required: ["party"] },
+      inputSchema: { type: "object", properties: { party: str("maintainer, machine-1 or machine-2") }, required: ["party"] },
       run: async (a) => {
         await link.take(s(a.party) ?? "");
-        if (link.refused) throw new Refused(link.refused.reason, link.refused.code === 4409 ? "one session per party: it comes back when that session ends; a write tries again" : "one of maintainer, machine-1, machine-2, machine-3");
+        if (link.refused) throw new Refused(link.refused.reason, link.refused.code === 4409 ? "one session per party: it comes back when that session ends; a write tries again" : "one of maintainer, machine-1, machine-2");
         if (!link.session) throw new Refused(`the specs-bot api at ${config.api} is unreachable`, "call as again");
         return who();
       },
@@ -418,7 +418,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     },
     {
       name: "doing",
-      description: "say what you are doing now (shown live on the site); set it when a task starts, again when it changes",
+      description: "say what you are doing now (shown live on the site); a new line ends the last as done",
       inputSchema: { type: "object", properties: { text: str("one line, ≤200 chars"), front: str("front folder or number") }, required: ["text"] },
       run: async (a) => {
         holding();
@@ -428,11 +428,11 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     },
     {
       name: "done",
-      description: "clear what you said you are doing",
-      inputSchema: { type: "object", properties: {} },
-      run: async () => {
+      description: "end what you said you are doing: done, or paused to resume",
+      inputSchema: { type: "object", properties: { paused: { type: "boolean", description: "stopped for now" } } },
+      run: async (a) => {
         holding();
-        const r = (await call("doing", { method: "DELETE" })) as { party: string };
+        const r = (await call("doing", { method: "DELETE", ...(a.paused === true ? { query: { paused: true } } : {}) })) as { party: string };
         return printDoing({ party: r.party, doing: null }, "toon");
       },
     },
@@ -710,7 +710,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       "send",
       "write a message in the conversation; the machines hear it at once",
       {
-        to: oneOf(["maintainer", "machine-1", "machine-2", "machine-3", "all"], "who it is for"),
+        to: oneOf(["maintainer", "machine-1", "machine-2", "all"], "who it is for"),
         purpose: oneOf(["report", "question", "answer", "digest", "rule"], "what kind of message"),
         subject: str("one line saying what the message is for"),
         text: str("the message (a report: Done, Running, Next, Blocking)"),
@@ -721,7 +721,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     write("mark_read", "mark-read", "mark a message to this party read", { id: str("the message") }, ["id"]),
     write("claim", "claim", "claim a front for this party", { front: str("the front's number") }, ["front"]),
     write("release", "release", "let go of a front this party claimed", { front: str("the front's number") }, ["front"]),
-    write("assign", "assign", "give a front to a machine, whoever held it (the maintainer only)", { front: str("the front's folder (150-rakun) or its number"), to: str("the machine (machine-1, machine-2, machine-3)") }, ["front", "to"]),
+    write("assign", "assign", "give a front to a machine, whoever held it (the maintainer only)", { front: str("the front's folder (150-rakun) or its number"), to: str("the machine (machine-1, machine-2)") }, ["front", "to"]),
   ];
 }
 
