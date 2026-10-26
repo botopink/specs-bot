@@ -13,10 +13,11 @@ const program = new Command()
   .description("Read the botopink specs through the specs-bot api. Output is TOON unless --format says otherwise.")
   .version("0.0.1")
   .addOption(new Option("-f, --format <format>", "output format").choices(["toon", "json", "text"]).default("toon"))
-  .option("--api <url>", "the api's URL (overrides SPECS_BOT_API_URL)");
+  .option("--api <url>", "the api's URL (overrides SPECS_BOT_API_URL)")
+  .option("--as <party>", "act as this party, with its SPECS_BOT_TOKEN_<PARTY> (overrides SPECS_BOT_AS)");
 
 function config(): ClientConfig {
-  const c = loadClientConfig(process.cwd());
+  const c = loadClientConfig(process.cwd(), process.env, program.opts().as as string | undefined);
   const api = program.opts().api as string | undefined;
   return api ? { ...c, api: api.replace(/\/+$/, "") } : c;
 }
@@ -34,7 +35,7 @@ const enc = encodeURIComponent;
 program.command("whoami").description("check the connection and the party this machine's token names").action(async () => {
   const c = config();
   const [who, health] = await Promise.all([get(c, "whoami"), get(c, "health")]);
-  console.log(render({ api: c.api, config: c.source, ...(who as object), health }, program.opts().format as Format));
+  console.log(render({ api: c.api, config: c.source, ...(c.as ? { as: c.as } : {}), ...(who as object), health }, program.opts().format as Format));
 });
 
 program.command("overview").description("counts of the current milestone").action(read("overview"));
