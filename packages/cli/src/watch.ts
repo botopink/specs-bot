@@ -1,5 +1,6 @@
 // `specs-bot watch` and `specs-bot online` (PLAN.md § 5.6): the api's events as they happen, over its websocket.
 // `watch --once` lets an agent wait for the next message to it; `--timeout` bounds the wait.
+import { whoHeaders } from "./client.ts";
 import { encode } from "@toon-format/toon";
 import type { Command } from "commander";
 import { get } from "./client.ts";
@@ -59,7 +60,7 @@ const CONTROL = new Set(["hello", "subscribed", "pong", "error"]);
 
 export async function watch(config: ClientConfig, opts: WatchOptions, out: (s: string) => void = console.log): Promise<number> {
   const url = wsUrl(config.api, opts);
-  const headers = config.token ? { authorization: `Bearer ${config.token}` } : {};
+  const headers = await whoHeaders(config);
   let backoff = 1000;
 
   return new Promise<number>((resolve) => {
@@ -102,7 +103,7 @@ export async function watch(config: ClientConfig, opts: WatchOptions, out: (s: s
       ws.onclose = (e) => {
         if (done) return;
         if (e.code === 4401) {
-          console.error("✗ the api refused this machine's token\n  check SPECS_BOT_TOKEN in the projects .env.local");
+          console.error("✗ the api refused the party this machine names\n  check SPECS_BOT_AS (a known party) or the token in the projects .env.local");
           finish(EXIT.refused);
           return;
         }

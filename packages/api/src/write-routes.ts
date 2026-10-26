@@ -23,7 +23,7 @@ import {
   type Writer,
 } from "@specs-bot/core";
 import { Hono } from "hono";
-import type { Vars } from "./auth.ts";
+import type { Vars } from "./sessions.ts";
 import { type EventBus, now } from "./events.ts";
 
 type Body = Record<string, unknown>;
@@ -117,7 +117,7 @@ export function writeRoutes(deps: WriteDeps) {
 
   api.post("/write/:op", async (c) => {
     const party = c.get("party");
-    if (!party) return c.json({ error: "a write needs this machine's token", hint: "SPECS_BOT_TOKEN in the projects .env.local" }, 401);
+    if (!party) return c.json({ error: "a write needs a party", hint: "specs-bot as <party> (or SPECS_BOT_AS=<party> in the projects .env.local)" }, 401);
     const op = c.req.param("op");
     const make = OPS[op];
     if (!make) return c.json({ error: `no write ${op}`, hint: `GET /api/write lists them: ${Object.keys(OPS).join(", ")}` }, 404);

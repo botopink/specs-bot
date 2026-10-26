@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { createApp } from "../src/app.ts";
 import { EventBus, type SpecEvent } from "../src/events.ts";
+import { Sessions } from "../src/sessions.ts";
 import { matches, mountRealtime, parseFilter, websocket } from "../src/ws.ts";
 
 const TOKENS = new Map([
@@ -162,7 +163,7 @@ describe("heartbeat", () => {
   test("a client answering the protocol pings stays connected across beats", async () => {
     const bus = new EventBus();
     const app = new Hono();
-    const hub = mountRealtime(app, TOKENS, bus, { heartbeatMs: 40 });
+    const hub = mountRealtime(app, new Sessions(), TOKENS, bus, { heartbeatMs: 40 });
     const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch, websocket });
     const c = connect(`ws://127.0.0.1:${server.port}`, "?token=t1");
     await c.nextOf("hello");

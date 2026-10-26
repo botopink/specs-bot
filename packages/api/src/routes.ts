@@ -1,7 +1,7 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
 import { check, etagOf, type Kind, MILESTONE_DIR, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
-import type { Vars } from "./auth.ts";
+import type { Vars } from "./sessions.ts";
 
 const KINDS: Kind[] = ["step", "pending", "subject", "retired", "section", "message"];
 

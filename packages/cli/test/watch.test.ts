@@ -56,7 +56,7 @@ describe("watch against a running api", () => {
 
   test("--once returns after the first message to this machine, skipping the others", async () => {
     const out: string[] = [];
-    const done = watch({ api, token: "t2", timeoutMs: 1000, source: "test" }, { once: true, format: "json", types: ["chat"], to: "machine-2" }, (s) =>
+    const done = watch({ api, token: "t2", timeoutMs: 1000, source: "test", root: "/tmp/specs-bot-watch-test" }, { once: true, format: "json", types: ["chat"], to: "machine-2" }, (s) =>
       out.push(s),
     );
     await Bun.sleep(100);
@@ -68,12 +68,12 @@ describe("watch against a running api", () => {
   });
 
   test("--timeout gives up with exit 5", async () => {
-    const code = await watch({ api, timeoutMs: 1000, source: "test" }, { once: true, format: "json", types: ["write"], timeoutS: 0.2 }, () => {});
+    const code = await watch({ api, timeoutMs: 1000, source: "test", root: "/tmp/specs-bot-watch-test" }, { once: true, format: "json", types: ["write"], timeoutS: 0.2 }, () => {});
     expect(code).toBe(EXIT.timeout);
   });
 
   test("an unknown token is refused with exit 1", async () => {
-    const code = await watch({ api, token: "nope", timeoutMs: 1000, source: "test" }, { once: true, format: "json", timeoutS: 2 }, () => {});
+    const code = await watch({ api, token: "nope", timeoutMs: 1000, source: "test", root: "/tmp/specs-bot-watch-test" }, { once: true, format: "json", timeoutS: 2 }, () => {});
     expect(code).toBe(EXIT.refused);
   });
 });

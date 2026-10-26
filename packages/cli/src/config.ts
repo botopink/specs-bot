@@ -3,18 +3,19 @@
 // farther one, so a task worktree inside the checkout (.tasks/meta-m1) reads the checkout's tokens and can add its
 // own. The process environment overrides the files.
 //
-// One machine may hold several parties' tokens (the host runs the maintainer and machine-1):
-//   SPECS_BOT_TOKEN_MAINTAINER=…   SPECS_BOT_TOKEN_MACHINE_1=…
-// and a session picks one with SPECS_BOT_AS=machine-1 (a worktree's .env.local, the environment) or --as machine-1.
-// A plain SPECS_BOT_TOKEN still works when SPECS_BOT_AS is not set.
+// The party a folder acts as is SPECS_BOT_AS (its .env.local, the environment) or --as: the api gives the folder a
+// session holding that party, one session per party (session.ts). No token is needed; an old SPECS_BOT_TOKEN
+// (or SPECS_BOT_TOKEN_<PARTY>) is still sent when set.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export interface ClientConfig {
   api: string;
   token?: string;
-  /** The party the token was picked for (SPECS_BOT_AS), when one was. */
+  /** The party this folder acts as (SPECS_BOT_AS / --as), when one is named. */
   as?: string;
+  /** The project folder: the nearest with a .env naming the api (a session is kept per folder). */
+  root: string;
   timeoutMs: number;
   /** Where the settings came from, for `specs-bot config`. */
   source: string;
@@ -69,18 +70,15 @@ export function loadClientConfig(cwd: string, env: Record<string, string | undef
     );
   }
   const as = asFlag ?? pick("SPECS_BOT_AS");
-  let token: string | undefined;
-  if (as) {
-    token = pick(tokenVar(as));
-    if (!token) throw new Error(`no token for ${as}: set ${tokenVar(as)} in the checkout's .env.local (SPECS_BOT_AS / --as picked ${as})`);
-  } else {
-    token = pick("SPECS_BOT_TOKEN");
-  }
+  // The party is declared (SPECS_BOT_AS / --as) and the api takes it as said; a token is optional — the party's own
+  // (SPECS_BOT_TOKEN_<PARTY>) when one is set, never another party's.
+  const token = as ? pick(tokenVar(as)) : pick("SPECS_BOT_TOKEN");
   const timeout = Number(pick("SPECS_BOT_TIMEOUT_MS") ?? 10000);
   return {
     api: api.replace(/\/+$/, ""),
     ...(token ? { token } : {}),
     ...(as ? { as } : {}),
+    root: root ?? cwd,
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 10000,
     // Bun loads the working directory's .env into the environment by itself, so a value equal to the file's
     // came from the file.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 // `specs-bot` — the agents' door to the specs (PLAN.md § 5.1). A thin client: every answer comes from the api.
 import { Command, Option } from "commander";
-import { ApiError, get, type Query } from "./client.ts";
+import { ApiError, get, type Query, releaseParty, takeParty } from "./client.ts";
+import { savedSession } from "./session.ts";
 import { type ClientConfig, loadClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 import { registerRealtime } from "./watch.ts";
@@ -14,7 +15,7 @@ const program = new Command()
   .version("0.0.1")
   .addOption(new Option("-f, --format <format>", "output format").choices(["toon", "json", "text"]).default("toon"))
   .option("--api <url>", "the api's URL (overrides SPECS_BOT_API_URL)")
-  .option("--as <party>", "act as this party, with its SPECS_BOT_TOKEN_<PARTY> (overrides SPECS_BOT_AS)");
+  .option("--as <party>", "act as this party (overrides SPECS_BOT_AS); one party per session, one session per party");
 
 function config(): ClientConfig {
   const c = loadClientConfig(process.cwd(), process.env, program.opts().as as string | undefined);
@@ -37,6 +38,27 @@ program.command("whoami").description("check the connection and the party this m
   const [who, health] = await Promise.all([get(c, "whoami"), get(c, "health")]);
   console.log(render({ api: c.api, config: c.source, ...(c.as ? { as: c.as } : {}), ...(who as object), health }, program.opts().format as Format));
 });
+
+program
+  .command("as")
+  .argument("<party>", "maintainer, machine-1, machine-2 or machine-3")
+  .description("take a party for this folder's session; refused while another session holds it")
+  .action(async (party: string) => {
+    const r = await takeParty(config(), party);
+    console.log(render({ party: r.party, since: r.since, note: "this folder acts as it until specs-bot logout or 30 min of silence" }, program.opts().format as Format));
+  });
+
+program
+  .command("logout")
+  .description("let go of this folder's party, so another session can take it")
+  .action(async () => {
+    const c = config();
+    const held = savedSession(c);
+    const released = await releaseParty(c);
+    console.log(render({ released, ...(held ? { party: held.party } : {}) }, program.opts().format as Format));
+  });
+
+program.command("sessions").description("which session holds which party now").action(read("sessions"));
 
 program.command("overview").description("counts of the current milestone").action(read("overview"));
 program.command("next").description("the next free decision number, and whether the files agree").action(read("next"));

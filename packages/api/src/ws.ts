@@ -1,5 +1,6 @@
 // Real-time events between the machines (PLAN.md § 5.6): `/api/ws` relays every bus event to the connected
 // clients whose filter matches, and tells who is online. `GET /api/presence` answers the same over HTTP.
+import { partyOf, type Sessions } from "./sessions.ts";
 import type { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
 import type { WSContext } from "hono/ws";
@@ -131,7 +132,7 @@ export class Hub {
  * Mounts `/api/ws` and `/api/presence` on the app. Registered before the api's own routes, so an unknown token
  * closes the socket with 4401 instead of failing the handshake.
  */
-export function mountRealtime(app: Hono, tokens: Map<string, string>, bus: EventBus, opts: HubOptions = {}): Hub {
+export function mountRealtime(app: Hono, sessions: Sessions, tokens: Map<string, string>, bus: EventBus, opts: HubOptions = {}): Hub {
   const hub = new Hub(bus, opts.heartbeatMs);
 
   app.get("/api/presence", (c) => c.json({ online: hub.presence(), listeners: hub.size }));
@@ -140,10 +141,14 @@ export function mountRealtime(app: Hono, tokens: Map<string, string>, bus: Event
     "/api/ws",
     bun.upgradeWebSocket((c) => {
       const header = c.req.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
-      const token = header ?? c.req.query("token");
-      const known = token === undefined || tokens.has(token);
+      const named = partyOf(sessions, tokens, c.req.header("x-specs-bot-session") ?? c.req.query("session"), header ?? c.req.query("token"));
+      const known = !named.error;
+      // ?as=<party>: the connection takes the party for itself, held while it is open (the MCP server's way).
+      const as = c.req.query("as");
+      const label = (c.req.query("label") ?? "").slice(0, 120);
+      let bound: string | undefined;
       const client: Omit<Client, "ws"> = {
-        party: token !== undefined ? (tokens.get(token) ?? null) : null,
+        party: named.party ?? null,
         filter: parseFilter(c.req.query("types"), c.req.query("to")),
         alive: true,
       };
@@ -151,12 +156,25 @@ export function mountRealtime(app: Hono, tokens: Map<string, string>, bus: Event
       return {
         onOpen(_e, ws) {
           if (!known) {
-            ws.close(4401, "unknown token");
+            ws.close(4401, named.error!);
             return;
           }
           me = { ...client, ws };
+          if (as) {
+            const r = sessions.take(as, label, undefined, true);
+            if ("unknown" in r) {
+              ws.close(4422, `unknown party ${as}`);
+              return;
+            }
+            if ("held" in r) {
+              ws.close(4409, `${as} is in use by another session (${r.held.label}, since ${r.held.since})`.slice(0, 120));
+              return;
+            }
+            bound = r.lease.id;
+            me.party = as;
+          }
           // The greeting first, then the arrival: a client's first message is always its hello.
-          ws.send(JSON.stringify({ type: "hello", party: me.party, at: now() }));
+          ws.send(JSON.stringify({ type: "hello", party: me.party, ...(bound ? { session: bound } : {}), at: now() }));
           hub.open(me);
         },
         onMessage(e, ws) {
@@ -180,6 +198,8 @@ export function mountRealtime(app: Hono, tokens: Map<string, string>, bus: Event
         },
         onClose() {
           if (me) hub.close(me);
+          // The party goes back the moment the connection does.
+          if (bound) sessions.release(bound);
         },
       };
     }),

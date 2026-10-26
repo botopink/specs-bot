@@ -20,7 +20,7 @@ describe("loadClientConfig", () => {
 
   test("finds the projects .env from a task folder below it", () => {
     expect(findProjectRoot(deep)).toBe(root);
-    expect(loadClientConfig(deep, {})).toEqual({ api: "http://host:7165/api", token: "abc", timeoutMs: 5000, source: join(root, ".env") });
+    expect(loadClientConfig(deep, {})).toEqual({ api: "http://host:7165/api", token: "abc", root, timeoutMs: 5000, source: join(root, ".env") });
   });
 
   test("the environment overrides the files", () => {
@@ -58,8 +58,10 @@ describe("several parties on one machine", () => {
     expect(loadClientConfig(checkout, { SPECS_BOT_AS: "machine-1" })).toMatchObject({ token: "t1", as: "machine-1" });
   });
 
-  test("a party with no token is an error, never another party's token", () => {
-    expect(() => loadClientConfig(checkout, {}, "machine-2")).toThrow("no token for machine-2: set SPECS_BOT_TOKEN_MACHINE_2");
+  test("a party needs no token, and never gets another party's", () => {
+    const c = loadClientConfig(checkout, {}, "machine-2");
+    expect(c.as).toBe("machine-2");
+    expect(c.token).toBeUndefined();
   });
 });
 

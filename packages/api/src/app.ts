@@ -1,7 +1,7 @@
 import { type Model, Writer } from "@specs-bot/core";
 import { createSite, loadSiteData } from "@specs-bot/site";
 import { Hono } from "hono";
-import { identify, type Vars } from "./auth.ts";
+import { identify, mountSessions, Sessions, type Vars } from "./sessions.ts";
 import type { ServerConfig } from "./config.ts";
 import { dataState } from "./data.ts";
 import { EventBus } from "./events.ts";
@@ -17,18 +17,22 @@ export interface AppOptions {
   warm?: boolean;
   /** Where writes publish their events; the websocket relays them. One is made when absent. */
   bus?: EventBus;
+  /** Which session holds which party. One is made when absent. */
+  sessions?: Sessions;
 }
 
 export function createApp(config: ServerConfig, opts: AppOptions = {}) {
   const bus = opts.bus ?? new EventBus();
+  const sessions = opts.sessions ?? new Sessions();
   const app = new Hono();
   // Real-time events between the machines (/api/ws, /api/presence); before the api's routes (PLAN.md § 5.6).
-  mountRealtime(app, config.tokens, bus);
+  mountRealtime(app, sessions, config.tokens, bus);
   const api = new Hono<{ Variables: Vars }>();
   // One read model for the api and the site, loaded once (PLAN.md § 2).
   const loaded = loadSiteData(config.dataPath);
 
-  api.use("*", identify(config.tokens));
+  api.use("*", identify(sessions, config.tokens));
+  mountSessions(api, sessions);
   const pusher = new Pusher(config.dataPath, config.push ?? { enabled: false });
 
   // Never reveals the data path: the abstraction hides where the specs live (PLAN.md § 3).
