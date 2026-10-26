@@ -50,8 +50,15 @@ async function sessionFor(config: ClientConfig): Promise<string | undefined> {
     throw new ApiError(`this folder's session holds ${held.party}, and SPECS_BOT_AS / --as names ${config.as}`, 0, `one identity at a time: specs-bot logout, then specs-bot as ${config.as}`);
   }
   if (held) return held.session;
-  if (config.as) return (await takeParty(config, config.as)).session;
-  return undefined;
+  if (!config.as) return undefined;
+  try {
+    return (await takeParty(config, config.as)).session;
+  } catch (e) {
+    // Two commands of one folder taking its party at the same moment: the other one won and kept the id.
+    const now = e instanceof ApiError && e.status === 409 ? savedSession(config) : undefined;
+    if (now?.party === config.as) return now.session;
+    throw e;
+  }
 }
 
 /** The headers that say who is asking: the folder's session, else an old token (the websocket uses them too). */
