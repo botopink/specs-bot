@@ -21,16 +21,27 @@ const SCRATCH: [string, RegExp][] = [
   ["worktree", /\bworktree `(?!<|-)[^`]+`/],
 ];
 
-/** The findings over the lines a plan adds under specs/. A commit hash belongs in the commit (--landed), never the text. */
+/**
+ * The findings over the lines a plan adds under specs/. A commit hash belongs in the commit (--landed), never the
+ * text. Only what the write brings counts: a line rewritten in place (a row marked overtaken) keeps the hashes and
+ * paths it already had — a match found in the lines the write takes out is not the write's; anywhere else it is.
+ */
 export function textRules(plan: Plan): TextFinding[] {
   const out: TextFinding[] = [];
   for (const c of plan.changes) {
     if (!c.path.startsWith("specs/")) continue;
+    const kept = new Set(c.after.split("\n"));
+    const removed = (c.before ?? "").split("\n").filter((l) => !kept.has(l)).join("\n");
+    const isNew = (m: string) => !removed.includes(m);
     for (const line of addedLines(c.before, c.after)) {
-      const h = line.match(HASH);
-      if (h) out.push({ rule: "commit-hash", path: c.path, text: line, match: h[0] });
+      for (const h of line.matchAll(new RegExp(HASH.source, "g"))) {
+        if (isNew(h[0])) {
+          out.push({ rule: "commit-hash", path: c.path, text: line, match: h[0] });
+          break;
+        }
+      }
       for (const [rule, rx] of SCRATCH) {
-        const m = line.match(rx);
+        const m = [...line.matchAll(new RegExp(rx.source, `${rx.flags}g`))].find((x) => isNew(x[0]));
         if (m) out.push({ rule, path: c.path, text: line, match: m[0] });
       }
     }

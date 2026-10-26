@@ -23,6 +23,17 @@ describe("addedLines", () => {
 });
 
 describe("textRules", () => {
+  test("a line rewritten in place keeps its old hashes and paths; a new one is still refused", () => {
+    const row = "| 54 | rule | see [the fix](https://github.com/o/r/commit/1a2b3c4d5e) and /tmp/x |";
+    const was = { op: "supersede", refs: [], message: "m", summary: "s", changes: [{ path: "specs/decisions-taken-steps.md", before: `# R\n${row}\n`, after: `# R\n${row.replace("rule", "Overtaken by 980; rule")}\n` }] };
+    expect(textRules(was)).toEqual([]);
+    const more = { ...was, changes: [{ ...was.changes[0]!, after: `# R\n${row.replace("rule", "rule 9f8e7d6c")}\n` }] };
+    expect(textRules(more).map((f) => [f.rule, f.match])).toEqual([["commit-hash", "9f8e7d6c"]]);
+    // A path already elsewhere in the file is no excuse for a new line.
+    const elsewhere = { ...was, changes: [{ path: "specs/x.md", before: "a /tmp/y\n", after: "a /tmp/y\nb /tmp/z\n" }] };
+    expect(textRules(elsewhere).map((f) => f.rule)).toEqual(["tmp-path"]);
+  });
+
   const plan = (after: string, path = "specs/milestone/status.md") => ({
     op: "doc.replace",
     refs: [],
