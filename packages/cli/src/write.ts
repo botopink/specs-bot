@@ -1,5 +1,8 @@
 // The write commands (PLAN.md § 5.2): each is a dry run that prints the diff unless --apply is given.
 // Long text comes from a file (`@path`) or standard input (`-`).
+//
+// WRITES is the one table of request bodies: the CLI's commands and the MCP server's tools (mcp.ts) both build
+// the body of `POST /api/write/<op>` with it, from arguments named as the CLI's options are (commander's camelCase).
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { post } from "./client.ts";
@@ -19,7 +22,7 @@ export async function textArg(value: string): Promise<string> {
   return value.replace(/\\n/g, "\n");
 }
 
-interface WriteAnswer {
+export interface WriteAnswer {
   applied: boolean;
   op: string;
   refs: string[];
@@ -29,17 +32,77 @@ interface WriteAnswer {
   commit?: string;
 }
 
-export function printWrite(a: WriteAnswer, format: Format): string {
+export function printWrite(a: WriteAnswer, format: Format, applyHint = "add --apply to write it"): string {
   if (format === "json") return JSON.stringify(a, null, 2);
   const head = a.applied
     ? render({ applied: true, commit: a.commit, op: a.op, refs: a.refs }, format)
-    : render({ applied: false, op: a.op, refs: a.refs, note: "dry run — nothing written; add --apply to write it" }, format);
+    : render({ applied: false, op: a.op, refs: a.refs, note: `dry run — nothing written; ${applyHint}` }, format);
   return `${head}\n---\n${a.diff}`;
 }
 
+// ── the request bodies ───────────────────────────────────────────────────────────────────────────────────
+
+export type WriteArgs = Record<string, unknown>;
+
+const s = (v: unknown) => (v === undefined ? undefined : String(v));
+/** Only the keys whose value is set. */
+const some = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+
+/** The decision fields of a pending question, from --measured, --options, --recommendation and --blocks. */
+export const FIELDS = [
+  ["measured", "Measured"],
+  ["options", "Options"],
+  ["recommendation", "Recommendation"],
+  ["blocks", "Blocks"],
+] as const;
+const fieldsOf = (a: WriteArgs) => some(Object.fromEntries(FIELDS.map(([arg, name]) => [name, s(a[arg])])));
+
+/** command or tool name → the api's op and the body it sends (without `apply` and `landed`). */
+export const WRITES: Record<string, { op: string; body: (a: WriteArgs) => Record<string, unknown> }> = {
+  edit: { op: "doc.replace", body: (a) => ({ ref: a.ref, section: a.section, text: a.text, etag: a.etag }) },
+  append: { op: "doc.append", body: (a) => ({ ref: a.ref, section: a.section, text: a.text }) },
+  "add-section": {
+    op: "doc.add-section",
+    body: (a) => ({ ref: a.ref, after: a.after, heading: a.heading, text: a.text, ...(a.level !== undefined ? { level: Number(a.level) } : {}) }),
+  },
+  "new-doc": { op: "doc.new", body: (a) => ({ ref: a.ref, text: a.text }) },
+  meta: { op: "doc.meta", body: (a) => ({ ref: a.ref, set: a.set ?? {}, unset: a.unset ?? [] }) },
+  "pending-add": { op: "pending.add", body: (a) => ({ id: a.id, section: a.section, title: a.title, fields: fieldsOf(a) }) },
+  "pending-edit": { op: "pending.edit", body: (a) => ({ id: a.id, etag: a.etag, ...some({ title: a.title }), fields: fieldsOf(a) }) },
+  "pending-withdraw": { op: "pending.withdraw", body: (a) => ({ id: a.id, reason: a.reason }) },
+  answer: {
+    op: "answer",
+    body: (a) => ({ id: a.id, rule: a.rule, binds: a.binds, ...some({ cell: a.cell, by: a.by, subject: a.subject, subjectText: a.subjectText }), process: a.process === true }),
+  },
+  supersede: { op: "supersede", body: (a) => ({ num: Number(a.n), by: Number(a.by), kind: a.kind }) },
+  reviewed: { op: "review", body: (a) => ({ num: Number(a.n) }) },
+  retire: {
+    op: "retired.add",
+    body: (a) => ({ area: a.area, retired: a.retired, replacedBy: a.replacedBy, decisions: a.decisions, ...some({ note: a.note }) }),
+  },
+  send: { op: "chat.send", body: (a) => ({ to: a.to, purpose: a.purpose, subject: a.subject, text: a.text, ...some({ inReplyTo: a.replyTo }) }) },
+  "mark-read": { op: "chat.read", body: (a) => ({ id: a.id }) },
+  claim: { op: "front.claim", body: (a) => ({ front: s(a.front) }) },
+  release: { op: "front.release", body: (a) => ({ front: s(a.front) }) },
+  assign: { op: "front.assign", body: (a) => ({ front: s(a.front), to: a.to }) },
+};
+
+/** The body of one write: the table's, plus whether to apply it and the code commits it goes with. */
+export function writeBody(name: string, a: WriteArgs): { op: string; body: Record<string, unknown> } {
+  const w = WRITES[name];
+  if (!w) throw new Error(`no write ${name}`);
+  return { op: w.op, body: { ...w.body(a), apply: a.apply === true, landed: Array.isArray(a.landed) ? a.landed : [] } };
+}
+
+// ── the commands ─────────────────────────────────────────────────────────────────────────────────────────
+
 export function registerWrites(program: Command, config: () => ClientConfig) {
-  const write = async (op: string, body: Record<string, unknown>, o: { apply?: boolean; landed?: string[] }) => {
-    const answer = (await post(config(), `write/${op}`, { ...body, apply: o.apply === true, landed: o.landed ?? [] })) as WriteAnswer;
+  /** Reads the `@file` / `-` arguments among `keys`, then posts the write named `name`. */
+  const write = async (name: string, a: WriteArgs, texts: string[] = []) => {
+    const resolved: WriteArgs = { ...a };
+    for (const k of texts) if (typeof a[k] === "string") resolved[k] = await textArg(a[k]);
+    const { op, body } = writeBody(name, resolved);
+    const answer = (await post(config(), `write/${op}`, body)) as WriteAnswer;
     console.log(printWrite(answer, program.opts().format as Format));
   };
   const common = (cmd: Command) =>
@@ -55,7 +118,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("-t, --text <text|@file|->", "the section's new text, starting with its heading")
       .requiredOption("-e, --etag <etag>", "the etag `specs-bot doc <ref> -s <anchor>` showed; a section changed since is refused")
       .description("replace one section of a document"),
-  ).action(async (ref: string, o) => write("doc.replace", { ref, section: o.section, text: await textArg(o.text), etag: o.etag }, o));
+  ).action((ref: string, o) => write("edit", { ...o, ref }, ["text"]));
 
   common(
     program
@@ -64,7 +127,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("-s, --section <anchor>", "the section to add to (at its end)")
       .requiredOption("-t, --text <text|@file|->", "what to add; a list item joins the list the section ends with")
       .description("add text at the end of a section"),
-  ).action(async (ref: string, o) => write("doc.append", { ref, section: o.section, text: await textArg(o.text) }, o));
+  ).action((ref: string, o) => write("append", { ...o, ref }, ["text"]));
 
   common(
     program
@@ -75,9 +138,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("-t, --text <text|@file|->", "the new section's body")
       .option("--level <n>", "2 to 6 (default: the level of --after)")
       .description("insert a new section into a document"),
-  ).action(async (ref: string, o) =>
-    write("doc.add-section", { ref, after: o.after, heading: o.heading, text: await textArg(o.text), ...(o.level ? { level: Number(o.level) } : {}) }, o),
-  );
+  ).action((ref: string, o) => write("add-section", { ...o, ref }, ["text"]));
 
   common(
     program
@@ -85,7 +146,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .argument("<ref>", "the new document's ref, in the current milestone, beside existing documents")
       .requiredOption("-t, --text <text|@file|->", "the document, starting with its title (# …)")
       .description("create a document"),
-  ).action(async (ref: string, o) => write("doc.new", { ref, text: await textArg(o.text) }, o));
+  ).action((ref: string, o) => write("new-doc", { ...o, ref }, ["text"]));
 
   common(
     program
@@ -101,7 +162,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       if (at < 1) throw new Error(`--set wants key=value: ${kv}`);
       set[kv.slice(0, at)] = kv.slice(at + 1).replace(/\\n/g, "\n");
     }
-    await write("doc.meta", { ref, set, unset: o.unset ?? [] }, o);
+    await write("meta", { ...o, ref, set });
   });
 
   // ── decisions ──────────────────────────────────────────────────────────────────────────────────────────
@@ -112,13 +173,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .option("--options <text|@file|->", "(a) … (b) …")
       .option("--recommendation <text|@file|->", "the most restrictive reading (decision 67)")
       .option("--blocks <text|@file|->", "what waits on the answer");
-  const fields = async (o: Record<string, string | undefined>) => {
-    const out: Record<string, string> = {};
-    for (const [opt, name] of [["measured", "Measured"], ["options", "Options"], ["recommendation", "Recommendation"], ["blocks", "Blocks"]] as const) {
-      if (o[opt] !== undefined) out[name] = await textArg(o[opt]!);
-    }
-    return out;
-  };
+  const fieldTexts = FIELDS.map(([arg]) => arg);
 
   common(
     fieldOptions(
@@ -129,7 +184,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
         .requiredOption("--title <text>", "the question in one line")
         .description("open a question in decisions-pending.md (Measured, Options, Recommendation and Blocks all required)"),
     ),
-  ).action(async (o) => write("pending.add", { id: o.id, section: o.section, title: o.title, fields: await fields(o) }, o));
+  ).action((o) => write("pending-add", o, fieldTexts));
 
   common(
     fieldOptions(
@@ -140,7 +195,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
         .option("--title <text>", "a new title")
         .description("revise an open question's title or fields; the others are kept"),
     ),
-  ).action(async (id: string, o) => write("pending.edit", { id, etag: o.etag, ...(o.title ? { title: o.title } : {}), fields: await fields(o) }, o));
+  ).action((id: string, o) => write("pending-edit", { ...o, id }, fieldTexts));
 
   common(
     program
@@ -148,7 +203,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .argument("<id>", "the open question")
       .requiredOption("--reason <text>", "why it leaves without an answer (kept in the commit)")
       .description("remove a question nobody will answer"),
-  ).action((id: string, o) => write("pending.withdraw", { id, reason: o.reason }, o));
+  ).action((id: string, o) => write("pending-withdraw", { ...o, id }));
 
   common(
     program
@@ -162,22 +217,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .option("--subject <slug>", "the subject of decisions-taken.md the row joins (its Steps and Binds)")
       .option("--subject-text <text|@file|->", "the sentence the subject gains")
       .description("record a decision: the next free number, in the record; a machine's decision is marked for review"),
-  ).action(async (id: string, o) =>
-    write(
-      "answer",
-      {
-        id,
-        rule: await textArg(o.rule),
-        binds: o.binds,
-        ...(o.cell ? { cell: o.cell } : {}),
-        ...(o.by ? { by: o.by } : {}),
-        ...(o.subject ? { subject: o.subject } : {}),
-        ...(o.subjectText ? { subjectText: await textArg(o.subjectText) } : {}),
-        process: o.process === true,
-      },
-      o,
-    ),
-  );
+  ).action((id: string, o) => write("answer", { ...o, id }, ["rule", "subjectText"]));
 
   common(
     program
@@ -186,10 +226,10 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("--by <m>", "the later row in force")
       .requiredOption("--kind <kind>", "overtaken | replaced | reversed")
       .description("mark a row overtaken, replaced or reversed by a later one (its text is kept)"),
-  ).action((n: string, o) => write("supersede", { num: Number(n), by: Number(o.by), kind: o.kind }, o));
+  ).action((n: string, o) => write("supersede", { ...o, n }));
 
   common(program.command("reviewed").argument("<n>", "the step in the To review table").description("mark a delegated decision reviewed (the maintainer)")).action(
-    (n: string, o) => write("review", { num: Number(n) }, o),
+    (n: string, o) => write("reviewed", { ...o, n }),
   );
 
   common(
@@ -201,7 +241,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("--decisions <text>", "the rows it comes from (\"606 (1), 609\")")
       .option("--note <text>", "since when, or a note")
       .description("add a retired form"),
-  ).action((o) => write("retired.add", { area: o.area, retired: o.retired, replacedBy: o.replacedBy, decisions: o.decisions, ...(o.note ? { note: o.note } : {}) }, o));
+  ).action((o) => write("retire", o));
 
   // ── conversation ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -214,11 +254,9 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("-t, --text <text|@file|->", "the message (a report: Done, Running, Next, Blocking)")
       .option("--reply-to <id>", "the message it answers (m1-0024)")
       .description("write a message in the conversation; the machines hear it at once (specs-bot watch)"),
-  ).action(async (o) =>
-    write("chat.send", { to: o.to, purpose: o.purpose, subject: o.subject, text: await textArg(o.text), ...(o.replyTo ? { inReplyTo: o.replyTo } : {}) }, o),
-  );
+  ).action((o) => write("send", o, ["text"]));
 
   common(program.command("mark-read").argument("<id>", "a message to this machine").description("mark a message read")).action((id: string, o) =>
-    write("chat.read", { id }, o),
+    write("mark-read", { ...o, id }),
   );
 }

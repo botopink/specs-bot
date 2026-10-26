@@ -16,25 +16,39 @@ export class ApiError extends Error {
 
 export type Query = Record<string, string | number | boolean | undefined>;
 
-export async function get(config: ClientConfig, path: string, query: Query = {}): Promise<unknown> {
+function urlOf(config: ClientConfig, path: string, query: Query = {}): URL {
   const url = new URL(`${config.api}/${path.replace(/^\//, "")}`);
   for (const [k, v] of Object.entries(query)) {
     if (v === undefined || v === false) continue;
     url.searchParams.set(k, v === true ? "1" : String(v));
   }
-  return send(config, url, { method: "GET" });
+  return url;
+}
+
+const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+
+export async function get(config: ClientConfig, path: string, query: Query = {}): Promise<unknown> {
+  return send(config, urlOf(config, path, query), { method: "GET" });
 }
 
 export async function post(config: ClientConfig, path: string, body: unknown): Promise<unknown> {
-  const url = new URL(`${config.api}/${path.replace(/^\//, "")}`);
-  return send(config, url, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+  return send(config, urlOf(config, path), json(body));
+}
+
+/**
+ * One GET (no body) or POST (a body) with the session id the caller holds — the MCP server's, bound to its
+ * websocket — instead of this folder's session file; none means a reader (or the old token, when set).
+ */
+export async function request(config: ClientConfig, session: string | undefined, path: string, opts: { query?: Query; body?: unknown } = {}): Promise<unknown> {
+  const url = urlOf(config, path, opts.query);
+  return raw(config, url, opts.body === undefined ? { method: "GET" } : json(opts.body), session);
 }
 
 /** Takes `party` for this folder's session (letting go of the one it held) and keeps the id. */
 export async function takeParty(config: ClientConfig, party: string): Promise<{ session: string; party: string; since: string }> {
   const held = savedSession(config);
   const url = new URL(`${config.api}/session`);
-  const r = (await raw(config, url, { method: "POST", body: JSON.stringify({ party, label: sessionLabel(config) }), headers: { "content-type": "application/json" } }, held?.session)) as {
+  const r = (await raw(config, url, json({ party, label: sessionLabel(config) }), held?.session)) as {
     session: string;
     party: string;
     since: string;
