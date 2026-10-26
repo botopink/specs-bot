@@ -323,11 +323,20 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     }
   };
 
-  const read = (name: string, description: string, properties: Record<string, Schema>, required: string[], path: (a: Args) => string, query: (a: Args) => Query = () => ({})): Tool => ({
+  const read = (
+    name: string,
+    description: string,
+    properties: Record<string, Schema>,
+    required: string[],
+    path: (a: Args) => string,
+    query: (a: Args) => Query = () => ({}),
+    // What the agent is shown of the answer: the api's, trimmed where it is long (tokens are the agent's budget).
+    shape: (v: unknown, a: Args) => unknown = (v) => v,
+  ): Tool => ({
     name,
     description,
     inputSchema: { type: "object", properties, ...(required.length ? { required } : {}) },
-    run: async (a) => render(await call(path(a), { query: query(a) }), "toon"),
+    run: async (a) => render(shape(await call(path(a), { query: query(a) }), a), "toon"),
   });
 
   /** A write goes only with the party this session holds; otherwise why not, said once. */
@@ -453,12 +462,12 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
         section: str("the ## section of the record"),
         status: oneOf(["in-force", "overtaken", "replaced", "reversed", "superseded"], "only rows of this status"),
         q: str("rows whose id, rule or binds contain it"),
-        limit: int("how many (50)"),
-        offset: int("skip this many (0)"),
+        limit: int("how many (20)"),
+        offset: int("skip this many"),
       },
       [],
       () => "steps",
-      (a) => ({ section: s(a.section), status: s(a.status), q: s(a.q), limit: s(a.limit), offset: s(a.offset) }),
+      (a) => ({ section: s(a.section), status: s(a.status), q: s(a.q), limit: s(a.limit) ?? "20", offset: s(a.offset) }),
     ),
     read(
       "pending",
@@ -468,7 +477,14 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       (a) => (s(a.id) ? `pending/${enc(String(a.id))}` : "pending"),
       (a) => (s(a.id) ? {} : { section: s(a.section) }),
     ),
-    read("review", "the To review table", { open: bool("only the items not yet reviewed") }, [], () => "review", (a) => ({ open: a.open === true })),
+    read(
+      "review",
+      "the To review table, 20 at a time",
+      { open: bool("only the items not yet reviewed"), limit: int("how many (20)"), offset: int("skip this many") },
+      [],
+      () => "review",
+      (a) => ({ open: a.open === true, limit: s(a.limit) ?? "20", offset: s(a.offset) }),
+    ),
     read("subject", "the subjects of the rules in force, or one of them whole", { slug: str("one subject of decisions-taken") }, [], (a) => (s(a.slug) ? `subjects/${enc(String(a.slug))}` : "subjects")),
     read("retired", "forms the language, std, libraries or process retired, and what replaced each", { q: str("retired forms whose text contains it") }, [], () => "retired", (a) => ({ q: s(a.q) })),
     read(
@@ -489,15 +505,39 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     ),
     read(
       "doc",
-      "a document: whole, its outline (headings, anchors, sizes), or one section (with its etag)",
+      "a document: its outline by default, one section (with its etag), or whole",
       {
-        ref: str("a document ref, e.g. 150-rakun/README or milestone/status (a folder means its README)"),
-        section: str("only this section (anchors from outline)"),
-        outline: bool("only the headings, with their anchors and sizes"),
+        ref: str("e.g. 150-rakun/README, milestone/status"),
+        section: str("an anchor from the outline"),
+        whole: bool("the whole text (refused past ~8k tokens unless force)"),
+        force: bool("whole, however long"),
+        depth: int("outline down to this heading level (2)"),
       },
       ["ref"],
       (a) => `docs/${String(a.ref).split("/").map(enc).join("/")}`,
-      (a) => ({ section: s(a.section), outline: a.outline === true }),
+      // Without a section the outline: a whole README can be 30k tokens.
+      (a) => (s(a.section) ? { section: s(a.section) } : a.whole === true ? {} : { outline: true }),
+      (v, a) => {
+        const d = v as { ref: string; title: string; meta?: unknown; outline?: { level: number; heading: string; anchor: string }[]; text?: string };
+        if (s(a.section)) return v;
+        // The outline down to depth (## by default): each section's anchor (the heading, spelled as a link) and how many
+        // deeper ones it holds — a README of 150 steps is a few hundred tokens, not thousands.
+        const all = d.outline ?? [];
+        const depth = Number(a.depth ?? 2);
+        const outline = all.flatMap((o, i) => {
+          if (o.level > depth) return [];
+          let deeper = 0;
+          for (let j = i + 1; j < all.length && all[j]!.level > o.level; j++) if (all[j]!.level > depth) deeper++;
+          return [{ level: o.level, anchor: o.anchor, deeper }];
+        });
+        if (a.whole === true && d.text !== undefined) {
+          if (d.text.length > 32_000 && a.force !== true) {
+            return { ref: d.ref, title: d.title, refused: `whole is ~${Math.round(d.text.length / 4)} tokens: read sections, or whole with force: true`, outline };
+          }
+          return { ref: d.ref, title: d.title, ...(d.meta ? { meta: d.meta } : {}), text: d.text };
+        }
+        return { ref: d.ref, title: d.title, outline };
+      },
     ),
     read(
       "chat",
@@ -506,13 +546,27 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
         id: str("one message, whole"),
         to: str("messages to this party (machine-1, machine-2, maintainer, …)"),
         unread: str("messages this party has not read"),
-        limit: int("how many (20)"),
+        limit: int("how many (10)"),
       },
       [],
       (a) => (s(a.id) ? `chat/${enc(String(a.id))}` : "chat"),
-      (a) => (s(a.id) ? {} : { to: s(a.to), unread: s(a.unread), limit: s(a.limit) }),
+      (a) => (s(a.id) ? {} : { to: s(a.to), unread: s(a.unread), limit: s(a.limit) ?? "10" }),
+      // The list without who has read what: one line a message.
+      (v, a) => (s(a.id) ? v : { messages: ((v as { messages: Record<string, unknown>[] }).messages ?? []).map(({ read: _, ...m }) => m) }),
     ),
-    read("check", "the conventions' rules over the whole repository", { severity: oneOf(["error", "warning"], "only findings of this severity") }, [], () => "check", (a) => ({ severity: s(a.severity) })),
+    read(
+      "check",
+      "the conventions' rules over the repository: counts, and the errors (warnings with severity)",
+      { severity: oneOf(["error", "warning"], "list this severity's findings") },
+      [],
+      () => "check",
+      (a) => ({ severity: s(a.severity) }),
+      // The warnings are known and many (70): only counted unless asked for.
+      (v, a) => {
+        const c = v as { summary: unknown; findings: { severity: string }[] };
+        return s(a.severity) ? v : { summary: c.summary, errors: c.findings.filter((f) => f.severity === "error") };
+      },
+    ),
     read("sessions", "which session holds which party now", {}, [], () => "sessions"),
     read("online", "the machines connected to the api's websocket now", {}, [], () => "presence"),
     {
@@ -672,9 +726,50 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
 }
 
 /** The answer, then what happened since the previous call. */
+/** The first clause of a description, at most `max` characters: "a document: its outline …" stays whole when short. */
+export function brief(text: string, max: number): string {
+  let t = text.replace(/\s+/g, " ").trim();
+  for (const cut of [" — ", "; ", ". "]) {
+    const i = t.indexOf(cut);
+    if (i >= 12) t = t.slice(0, i);
+  }
+  return t.length <= max ? t : `${t.slice(0, max - 1).replace(/\s+\S*$/, "")}…`;
+}
+
+/** Fields whose name says it all carry no description in the list. */
+const PLAIN = new Set(["ref", "id", "text", "q", "n", "num", "front", "party", "to", "subject", "title", "etag", "apply", "landed", "limit", "offset", "version", "slug", "heading", "after", "level", "reason", "purpose"]);
+
+function briefSchema(schema: Tool["inputSchema"]): Tool["inputSchema"] {
+  const properties = Object.fromEntries(
+    Object.entries(schema.properties ?? {}).map(([k, v]) => {
+      const p = { ...(v as Record<string, unknown>) };
+      if (PLAIN.has(k)) delete p.description;
+      else if (typeof p.description === "string") p.description = brief(p.description.replace(/\s*\([^)]*\)/g, ""), 40);
+      if (p.items && typeof p.items === "object") p.items = { type: (p.items as { type?: string }).type };
+      return [k, p];
+    }),
+  );
+  return { ...schema, properties };
+}
+
+/** One short line an event: the agent reads what happened, and asks for more only when it needs it. */
+export function eventLine(e: Event): string {
+  const r = e as unknown as Record<string, unknown>;
+  if (e.type === "chat") return `chat ${r.id} ${r.from}→${r.to}: ${r.subject}`;
+  if (e.type === "write") return `write ${r.party} ${r.op}: ${String(r.summary ?? "").slice(0, 100)}`;
+  if (e.type === "presence") return `${r.party} ${r.online ? "online" : "offline"}`;
+  return `${e.type} ${JSON.stringify(r).slice(0, 100)}`;
+}
+
+const EVENT_LINES = 10;
+
 export function withEvents(text: string, drained: { events: Event[]; dropped: number }): string {
-  if (!drained.events.length && !drained.dropped) return text;
-  return `${text}\n\n---\n${encode({ events: drained.events, ...(drained.dropped ? { dropped: drained.dropped } : {}) })}`;
+  // A message's own chat event says it; the write that filed it (chat.send, chat.read) would say it twice.
+  const events = drained.events.filter((e) => !(e.type === "write" && String((e as unknown as { op?: string }).op).startsWith("chat.")));
+  if (!events.length && !drained.dropped) return text;
+  const shown = events.slice(-EVENT_LINES).map(eventLine);
+  const more = events.length - shown.length + drained.dropped;
+  return `${text}\n\n---\nevents:\n${shown.map((l) => `  ${l}`).join("\n")}${more ? `\n  +${more} more (wait or chat for them)` : ""}`;
 }
 
 export function errorText(e: unknown): string {
@@ -698,9 +793,10 @@ export async function serveMcp(config: ClientConfig, version: string): Promise<v
   const byName = new Map(list.map((t) => [t.name, t]));
 
   const server = new Server({ name: "specs-bot", version }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: list.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
-  }));
+  // The list every session carries in its context: each description cut to its first clause, each field's to a
+  // short hint — the long forms stay here as the code's documentation.
+  const listed = list.map(({ name, description, inputSchema }) => ({ name, description: brief(description, 90), inputSchema: briefSchema(inputSchema) }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: listed }));
   server.setRequestHandler(CallToolRequestSchema, async (req, extra): Promise<CallToolResult> => {
     const tool = byName.get(req.params.name);
     if (!tool) return { isError: true, content: [{ type: "text", text: render({ error: `no tool ${req.params.name}` }, "toon") }] };

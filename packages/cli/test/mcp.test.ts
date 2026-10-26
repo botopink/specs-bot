@@ -151,6 +151,16 @@ describe("specs-bot mcp", () => {
     expect(text(r)).toContain("---\n## Done\n\n- [x] a\n");
   });
 
+  test("doc without a section is its outline (anchors and how many deeper), whole only when asked", async () => {
+    const outline = text(await first.tool("doc", { ref: "milestone/status" }));
+    expect(outline).toContain("outline[");
+    expect(outline).toContain("{level,anchor,deeper}");
+    expect(outline).not.toContain("etag");
+    expect(outline).not.toContain("- [x] a");
+    const whole = text(await first.tool("doc", { ref: "milestone/status", whole: true }));
+    expect(whole).toContain("- [x] a");
+  });
+
   test("a write is a dry run unless apply: true; applied, it lands as a commit by the party", async () => {
     const dry = text(await first.tool("append", { ref: "milestone/status", section: "done", text: "- [x] c" }));
     expect(dry).toContain("applied: false");
@@ -194,11 +204,10 @@ describe("specs-bot mcp", () => {
     const t = text(await first.tool("next"));
     const [answer, events] = t.split("\n\n---\n");
     expect(answer).toContain("next");
-    expect(events).toContain("events[");
-    expect(events).toContain("op: chat.send");
-    expect(events).toContain("subject: Ping from m1");
+    // One short line an event; a message is its chat line alone, not also the write that filed it.
+    expect(events).toBe("events:\n  chat m1-0001 machine-1→machine-2: Ping from m1");
     // Read once: the next call has none.
-    expect(text(await first.tool("next"))).not.toContain("events[");
+    expect(text(await first.tool("next"))).not.toContain("events:");
   }, 15000);
 
   test("wait returns the next event", async () => {

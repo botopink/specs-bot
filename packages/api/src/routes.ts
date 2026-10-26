@@ -132,7 +132,9 @@ export function readRoutes(current: () => Model) {
   api.get("/review", (c) => {
     const open = c.req.query("open") === "1" || c.req.query("open") === "true";
     const items = model.pending.review.filter((r) => !open || !r.reviewed);
-    return c.json({ total: items.length, items: items.map(({ line: _, ...r }) => r) });
+    const offset = int(c.req.query("offset"), 0);
+    const limit = c.req.query("limit") === undefined ? items.length : Math.min(int(c.req.query("limit"), 50), 500);
+    return c.json({ total: items.length, offset, items: items.slice(offset, offset + limit).map(({ line: _, ...r }) => r) });
   });
 
   api.get("/subjects", (c) =>
