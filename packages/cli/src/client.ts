@@ -57,14 +57,17 @@ export async function takeParty(config: ClientConfig, party: string): Promise<{ 
   return r;
 }
 
-/** The session id this request goes with: the folder's, taken first when SPECS_BOT_AS names a party it does not hold yet. */
-async function sessionFor(config: ClientConfig): Promise<string | undefined> {
+/**
+ * The session id a request goes with: the folder's when it holds one. Only a write takes SPECS_BOT_AS's party
+ * for a folder that holds none — a read never does, so `specs-bot logout` stays done until the next write.
+ */
+async function sessionFor(config: ClientConfig, take: boolean): Promise<string | undefined> {
   const held = savedSession(config);
   if (held && config.as && held.party !== config.as) {
     throw new ApiError(`this folder's session holds ${held.party}, and SPECS_BOT_AS / --as names ${config.as}`, 0, `one identity at a time: specs-bot logout, then specs-bot as ${config.as}`);
   }
   if (held) return held.session;
-  if (!config.as) return undefined;
+  if (!config.as || !take) return undefined;
   try {
     return (await takeParty(config, config.as)).session;
   } catch (e) {
@@ -77,7 +80,7 @@ async function sessionFor(config: ClientConfig): Promise<string | undefined> {
 
 /** The headers that say who is asking: the folder's session, else an old token (the websocket uses them too). */
 export async function whoHeaders(config: ClientConfig): Promise<Record<string, string>> {
-  const session = await sessionFor(config);
+  const session = await sessionFor(config, false);
   return session ? { "x-specs-bot-session": session } : config.token ? { authorization: `Bearer ${config.token}` } : {};
 }
 
@@ -92,7 +95,7 @@ export async function releaseParty(config: ClientConfig): Promise<boolean> {
 }
 
 async function send(config: ClientConfig, url: URL, init: RequestInit): Promise<unknown> {
-  const session = await sessionFor(config);
+  const session = await sessionFor(config, init.method !== "GET");
   try {
     return await raw(config, url, init, session);
   } catch (e) {
@@ -100,6 +103,8 @@ async function send(config: ClientConfig, url: URL, init: RequestInit): Promise<
     if (!(e instanceof ApiError && e.status === 401 && e.message === "unknown session")) throw e;
     const party = config.as ?? savedSession(config)?.party;
     forgetSession(config);
+    // A read goes on without a party; a write takes it again.
+    if (init.method === "GET") return raw(config, url, init, undefined);
     if (!party) throw e;
     return raw(config, url, init, (await takeParty(config, party)).session);
   }

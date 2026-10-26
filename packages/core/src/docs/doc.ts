@@ -20,7 +20,7 @@ export interface DocMeta {
   ref: string;
   /** The milestone it belongs to: the nearest `**Milestone:**` field from its folder up (load.ts). */
   version: string;
-  machine?: string;
+  owner?: string;
   /** The first numbered directory, its name as written in `dir` ("150-rakun"). */
   front?: { num: number; slug: string; dir: string };
   group?: { num: number; slug: string; dir: string };
@@ -35,7 +35,7 @@ export interface Doc extends DocMeta {
   links: string[];
   /** The YAML block at its top (meta.ts): every key, and the two the tree places it by. */
   meta: Meta;
-  fields: { milestone?: string; machine?: string };
+  fields: { milestone?: string; owner?: string };
   /** Why the block could not be read, when it could not. */
   metaError?: string;
 }
@@ -66,7 +66,7 @@ export function parseDoc(path: string, text: string): Doc {
   const { meta, error } = path.includes("/examples/") ? { meta: {} as Meta, error: undefined } : splitMeta(lines);
   const fields: Doc["fields"] = {};
   if (meta.milestone) fields.milestone = meta.milestone;
-  if (meta.owner) fields.machine = meta.owner;
+  if (meta.owner) fields.owner = meta.owner;
   const where = docMeta(path);
   return { ...where, title: h1?.heading ?? where.name, lines, sections, links: linksOf(lines), meta, fields, ...(error ? { metaError: error } : {}) };
 }

@@ -126,7 +126,7 @@ describe("the read api", () => {
 
   test("a front with the in-force rows that bind it", async () => {
     const f = (await get("/api/fronts/150")).body;
-    expect(f.fronts[0]).toMatchObject({ ref: "150-rakun", machine: "machine-1", title: "Front 150 — rakun" });
+    expect(f.fronts[0]).toMatchObject({ ref: "150-rakun", owner: "machine-1", title: "Front 150 — rakun" });
     expect(f.binds).toEqual([3]);
   });
 

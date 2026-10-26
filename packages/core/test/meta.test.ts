@@ -63,7 +63,7 @@ describe("metadata block", () => {
   test("a parsed document reads its block: milestone, owner; sections and title follow the block", () => {
     const d = parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\nwave: \"3\"\n---\n# Front 150\n\n## Steps\n");
     expect(d.meta).toEqual({ milestone: "1.0.12-beta", owner: "machine-1", wave: "3" });
-    expect(d.fields).toEqual({ milestone: "1.0.12-beta", machine: "machine-1" });
+    expect(d.fields).toEqual({ milestone: "1.0.12-beta", owner: "machine-1" });
     expect(d.title).toBe("Front 150");
     expect(d.sections.map((s) => [s.heading, s.start])).toEqual([["Front 150", 5], ["Steps", 7]]);
   });

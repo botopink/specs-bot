@@ -40,11 +40,11 @@ describe("buildModel", () => {
     expect(model.statedNextFree).toEqual({ steps: 4, pending: 4 });
   });
 
-  test("a front is a numbered folder at the top, titled by its README, its milestone and machine its README's", () => {
+  test("a front is a numbered folder at the top, titled by its README, its milestone and owner its README's", () => {
     expect(model.fronts).toEqual([
       {
         version: "1.0.12-beta",
-        machine: "machine-1",
+        owner: "machine-1",
         num: 150,
         slug: "rakun",
         ref: "150-rakun",

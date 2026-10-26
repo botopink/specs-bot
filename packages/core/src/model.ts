@@ -12,7 +12,7 @@ import { loadStore, type Store } from "./store.ts";
 
 export interface Front {
   version: string;
-  machine?: string;
+  owner?: string;
   num: number;
   slug: string;
   /** The front's directory ref: "150-rakun". */
@@ -133,7 +133,7 @@ function frontsOf(docs: Doc[]): Front[] {
     const ref = parts.slice(0, at + 1).join("/");
     let f = byRef.get(ref);
     if (!f) {
-      f = { version: d.version, num: d.front.num, slug: d.front.slug, ref, title: parts[at]!, docs: [], ...(d.machine ? { machine: d.machine } : {}) };
+      f = { version: d.version, num: d.front.num, slug: d.front.slug, ref, title: parts[at]!, docs: [], ...(d.owner ? { owner: d.owner } : {}) };
       byRef.set(ref, f);
     }
     f.docs.push(d.ref);
@@ -142,8 +142,8 @@ function frontsOf(docs: Doc[]): Front[] {
       f.readme = d.ref;
       f.title = d.title;
       f.version = d.version;
-      if (d.machine) f.machine = d.machine;
-      else delete f.machine;
+      if (d.owner) f.owner = d.owner;
+      else delete f.owner;
     }
   }
   return [...byRef.values()].sort((a, b) => a.version.localeCompare(b.version) || a.num - b.num || a.ref.localeCompare(b.ref));

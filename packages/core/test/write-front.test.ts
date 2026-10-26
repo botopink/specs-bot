@@ -86,7 +86,7 @@ describe("releaseFront and assignFront", () => {
 
 describe("the owner belongs on the front's README", () => {
   test("documents under a front inherit it; check refuses it anywhere else", () => {
-    expect(model.docByRef.get("163-meta-ci/README")!.machine).toBe("machine-2");
+    expect(model.docByRef.get("163-meta-ci/README")!.owner).toBe("machine-2");
     const stray = buildModel({
       ...model,
       tree: placeDocs([

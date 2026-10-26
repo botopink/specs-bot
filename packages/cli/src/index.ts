@@ -70,12 +70,13 @@ program
   .description("full-text search over steps, pending questions, subjects, retired forms, doc sections and messages")
   .option("-k, --kind <kinds>", "step,pending,subject,retired,section,message (comma-separated)")
   .option("--version <v>", "only this milestone's sections")
-  .option("--machine <m>", "only this machine's sections")
+  .option("--owner <m>", "only the sections of fronts this machine owns")
+  .addOption(new Option("--machine <m>").hideHelp())
   .option("--front <n>", "only this front's sections")
   .option("--frozen", "include closed milestones' sections")
   .option("-n, --limit <n>", "how many hits", "10")
   .action(async (words: string[], o) => {
-    await read("search", () => ({ q: words.join(" "), kind: o.kind, version: o.version, machine: o.machine, front: o.front, frozen: o.frozen, limit: o.limit }))();
+    await read("search", () => ({ q: words.join(" "), kind: o.kind, version: o.version, owner: o.owner ?? o.machine, front: o.front, frozen: o.frozen, limit: o.limit }))();
   });
 
 program
@@ -123,8 +124,9 @@ program
   .command("fronts")
   .description("the fronts of a milestone")
   .option("--version <v>", "the milestone (the current one by default)")
-  .option("--machine <m>", "only this machine's")
-  .action((o) => read("fronts", () => ({ version: o.version, machine: o.machine }))());
+  .option("--owner <m>", "only the fronts this machine owns (none: the unassigned)")
+  .addOption(new Option("--machine <m>").hideHelp())
+  .action((o) => read("fronts", () => ({ version: o.version, owner: o.owner ?? o.machine }))());
 
 program
   .command("front")

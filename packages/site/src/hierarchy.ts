@@ -66,7 +66,7 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
       if (d.ref === `${d.front.dir}/README`) {
         f.readme = d;
         f.title = shortTitle(d.title, d.front.num, d.front.slug);
-        f.owner = d.machine ?? "";
+        f.owner = d.owner ?? "";
       } else {
         f.docs.push(d);
       }

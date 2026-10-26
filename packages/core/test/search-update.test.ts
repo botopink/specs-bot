@@ -73,7 +73,7 @@ const WRITES: [string, (m: Model) => Plan, string][] = [
 function sameAnswers(a: SearchIndex, b: SearchIndex, m: Model) {
   const words = [...new Set(units(m).flatMap((u) => `${u.title} ${u.text}`.toLowerCase().split(/[^\p{L}\p{N}]+/u)))].filter((w) => w.length > 1);
   const queries = [...words, ...words.slice(1).map((w, i) => `${words[i]} ${w}`), "for-await-one-source", "opaque rout", "zyxwq"];
-  const filters = [{}, { frozen: true }, { version: "1.0.5-beta" }, { machine: "machine-2" }, { front: 150 }, { kinds: ["section" as const, "message" as const] }];
+  const filters = [{}, { frozen: true }, { version: "1.0.5-beta" }, { owner: "machine-2" }, { front: 150 }, { kinds: ["section" as const, "message" as const] }];
   for (const q of queries) for (const f of filters) expect([q, f, a.search(q, { ...f, limit: 1000 })]).toEqual([q, f, b.search(q, { ...f, limit: 1000 })]);
 }
 

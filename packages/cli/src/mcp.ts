@@ -361,14 +361,14 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
         q: str("what to look for; a code like for-await-one-source is matched word for word first"),
         kind: str("step,pending,subject,retired,section,message (comma-separated)"),
         version: str("only this milestone's sections"),
-        machine: str("only this machine's sections"),
+        owner: str("only the sections of fronts this machine owns (machine-1, …)"),
         front: str("only this front's sections"),
         frozen: bool("include closed milestones' sections"),
         limit: int("how many hits (10)"),
       },
       ["q"],
       () => "search",
-      (a) => ({ q: s(a.q), kind: s(a.kind), version: s(a.version), machine: s(a.machine), front: s(a.front), frozen: a.frozen === true, limit: s(a.limit) }),
+      (a) => ({ q: s(a.q), kind: s(a.kind), version: s(a.version), owner: s(a.owner), front: s(a.front), frozen: a.frozen === true, limit: s(a.limit) }),
     ),
     read("step", "one decision row whole: rule, binds, cell, who supersedes it, subjects and retired forms citing it", { n: int("the decision number") }, ["n"], (a) => `steps/${enc(String(a.n))}`),
     read(
@@ -399,10 +399,10 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     read(
       "fronts",
       "the fronts of a milestone",
-      { version: str("the milestone (the current one by default)"), machine: str("only this machine's") },
+      { version: str("the milestone (the current one by default)"), owner: str("only the fronts this machine owns (machine-1, …); none for the unassigned") },
       [],
       () => "fronts",
-      (a) => ({ version: s(a.version), machine: s(a.machine) }),
+      (a) => ({ version: s(a.version), owner: s(a.owner) }),
     ),
     read(
       "front",
@@ -592,7 +592,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     write("mark_read", "mark-read", "mark a message to this party read", { id: str("the message") }, ["id"]),
     write("claim", "claim", "claim a front for this party", { front: str("the front's number") }, ["front"]),
     write("release", "release", "let go of a front this party claimed", { front: str("the front's number") }, ["front"]),
-    write("assign", "assign", "assign a front to a party", { front: str("the front's number"), to: str("the party (machine-1, machine-2, machine-3, maintainer)") }, ["front", "to"]),
+    write("assign", "assign", "give a front to a machine, whoever held it (the maintainer only)", { front: str("the front's folder (150-rakun) or its number"), to: str("the machine (machine-1, machine-2, machine-3)") }, ["front", "to"]),
   ];
 }
 

@@ -11,8 +11,8 @@ export interface DocTree {
   versions: string[];
   /** The milestone being worked on; every other is frozen. */
   current: string;
-  /** The milestone and machine of a path under specs/ (a folder or a file). */
-  placeOf(path: string): { version: string; machine?: string };
+  /** The milestone and owner of a path under specs/ (a folder or a file). */
+  placeOf(path: string): { version: string; owner?: string };
   /** Old refs (`1.0.12-beta/machine-1/150-rakun/README`) → their ref now, or a permalink when the file is gone. */
   moved: Map<string, string>;
 }
@@ -32,32 +32,32 @@ export function loadDocs(specsDir: string): DocTree {
   return placeDocs(docs, moved);
 }
 
-/** Fills each document's version and machine from the fields above it (also for trees built in memory). */
+/** Fills each document's version and owner from the fields above it (also for trees built in memory). */
 export function placeDocs(docs: Doc[], moved = new Map<string, string>()): DocTree {
   const readmes = new Map(docs.filter((d) => d.name === "README").map((d) => [d.ref.slice(0, -"/README".length), d]));
   const current = readmes.get(MILESTONE_DIR)?.fields.milestone ?? "";
 
-  const placeOf = (path: string): { version: string; machine?: string } => {
+  const placeOf = (path: string): { version: string; owner?: string } => {
     const parts = path.replace(/\.md$/, "").split("/");
     let version: string | undefined;
-    let machine: string | undefined;
-    for (let i = parts.length; i > 0 && (!version || !machine); i--) {
+    let owner: string | undefined;
+    for (let i = parts.length; i > 0 && (!version || !owner); i--) {
       const f = readmes.get(parts.slice(0, i).join("/"))?.fields;
       version ??= f?.milestone;
-      machine ??= f?.machine;
+      owner ??= f?.owner;
     }
     // The milestone's own documents: machine-N.md is that machine's page.
-    if (parts[0] === MILESTONE_DIR && /^machine-\d+$/.test(parts[1] ?? "")) machine ??= parts[1];
-    return { version: version ?? current, ...(machine ? { machine } : {}) };
+    if (parts[0] === MILESTONE_DIR && /^machine-\d+$/.test(parts[1] ?? "")) owner ??= parts[1];
+    return { version: version ?? current, ...(owner ? { owner } : {}) };
   };
 
   for (const d of docs) {
     const own = d.fields;
     const at = placeOf(d.ref.split("/").slice(0, -1).join("/"));
     d.version = own.milestone ?? at.version;
-    const machine = own.machine ?? at.machine ?? (d.ref.startsWith(`${MILESTONE_DIR}/machine-`) ? d.name : undefined);
-    if (machine) d.machine = machine;
-    else delete d.machine;
+    const owner = own.owner ?? at.owner ?? (d.ref.startsWith(`${MILESTONE_DIR}/machine-`) ? d.name : undefined);
+    if (owner) d.owner = owner;
+    else delete d.owner;
   }
   const versions = [...new Set(docs.map((d) => d.version).filter(Boolean))].sort(compareVersions);
   return { docs, versions, current: current || (versions.at(-1) ?? ""), placeOf, moved };

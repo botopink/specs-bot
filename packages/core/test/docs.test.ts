@@ -16,7 +16,7 @@ describe("docMeta", () => {
 
   test("a front's README has a front and no group", () => {
     const m = docMeta("01-checker/README.md");
-    expect([m.machine, m.front, m.group, m.name]).toEqual([undefined, { num: 1, slug: "checker", dir: "01-checker" }, undefined, "README"]);
+    expect([m.owner, m.front, m.group, m.name]).toEqual([undefined, { num: 1, slug: "checker", dir: "01-checker" }, undefined, "README"]);
   });
 
   test("a milestone's own file has neither", () => {
@@ -48,18 +48,18 @@ describe("placeDocs", () => {
   });
 
   test("a document inherits the nearest fields above it; a field inside a section is not one", () => {
-    expect([at("150-rakun/04-rakun/track").version, at("150-rakun/04-rakun/track").machine]).toEqual(["1.0.12-beta", "machine-1"]);
-    expect([at("150-rakun/07-old/notes").version, at("150-rakun/07-old/notes").machine]).toEqual(["1.0.11-beta", "machine-1"]);
-    expect([at("01-checker/README").version, at("01-checker/README").machine]).toEqual(["1.0.5-beta", undefined]);
+    expect([at("150-rakun/04-rakun/track").version, at("150-rakun/04-rakun/track").owner]).toEqual(["1.0.12-beta", "machine-1"]);
+    expect([at("150-rakun/07-old/notes").version, at("150-rakun/07-old/notes").owner]).toEqual(["1.0.11-beta", "machine-1"]);
+    expect([at("01-checker/README").version, at("01-checker/README").owner]).toEqual(["1.0.5-beta", undefined]);
   });
 
   test("the milestone's documents are the current milestone's; machine-N.md is that machine's", () => {
-    expect([at("milestone/status").version, at("milestone/status").machine]).toEqual(["1.0.12-beta", undefined]);
-    expect(at("milestone/machine-1").machine).toBe("machine-1");
+    expect([at("milestone/status").version, at("milestone/status").owner]).toEqual(["1.0.12-beta", undefined]);
+    expect(at("milestone/machine-1").owner).toBe("machine-1");
   });
 
   test("placeOf answers for a path that holds no document", () => {
-    expect(tree.placeOf("150-rakun/04-rakun/examples/x.bp")).toEqual({ version: "1.0.12-beta", machine: "machine-1" });
+    expect(tree.placeOf("150-rakun/04-rakun/examples/x.bp")).toEqual({ version: "1.0.12-beta", owner: "machine-1" });
     expect(tree.placeOf("01-checker/a.bp")).toEqual({ version: "1.0.5-beta" });
   });
 });

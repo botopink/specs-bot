@@ -46,14 +46,14 @@ export function readRoutes(current: () => Model) {
     if (!q) return c.json({ error: "q is required", hint: "GET /api/search?q=<words>" }, 400);
     const kinds = c.req.query("kind")?.split(",").filter((k): k is Kind => KINDS.includes(k as Kind));
     const front = c.req.query("front");
-    const machine = c.req.query("machine");
+    const owner = c.req.query("owner") ?? c.req.query("machine");
     const version = c.req.query("version");
     const hits = model.index.search(q, {
       limit: Math.min(int(c.req.query("limit"), 10), 50),
       frozen: c.req.query("frozen") === "1" || c.req.query("frozen") === "true",
       ...(kinds?.length ? { kinds } : {}),
       ...(version ? { version } : {}),
-      ...(machine ? { machine } : {}),
+      ...(owner ? { owner } : {}),
       ...(front ? { front: int(front, -1) } : {}),
     });
     return c.json({ q, hits });
@@ -156,11 +156,11 @@ export function readRoutes(current: () => Model) {
 
   api.get("/fronts", (c) => {
     const version = c.req.query("version") ?? model.tree.current;
-    const machine = c.req.query("machine");
-    const fronts = model.fronts.filter((f) => f.version === version && (!machine || f.machine === machine));
+    const owner = c.req.query("owner") ?? c.req.query("machine");
+    const fronts = model.fronts.filter((f) => f.version === version && (!owner || (owner === "none" ? !f.owner : f.owner === owner)));
     return c.json({
       version,
-      fronts: fronts.map((f) => ({ num: f.num, ref: f.ref, machine: f.machine ?? null, title: f.title, docs: f.docs.length })),
+      fronts: fronts.map((f) => ({ num: f.num, ref: f.ref, owner: f.owner ?? null, title: f.title, docs: f.docs.length })),
     });
   });
 
@@ -172,7 +172,7 @@ export function readRoutes(current: () => Model) {
     const mention = new RegExp(`(^|[^\\d])${num}([^\\d]|$)`);
     return c.json({
       version,
-      fronts: fronts.map((f) => ({ ref: f.ref, machine: f.machine ?? null, title: f.title, docs: f.docs })),
+      fronts: fronts.map((f) => ({ ref: f.ref, owner: f.owner ?? null, title: f.title, docs: f.docs })),
       // Rows whose Binds name the front's number (`machine-1/150`, "front 150", "150 s31").
       binds: model.steps.rows.filter((r) => r.status === "in-force" && mention.test(r.binds)).map((r) => r.num),
     });

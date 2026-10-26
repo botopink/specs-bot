@@ -72,7 +72,7 @@ describe("buildIndex", () => {
   });
 
   test("scope filters leave out what has no scope", () => {
-    expect(index.search("opaque", { machine: "machine-1" }).every((h) => h.kind === "section")).toBe(true);
+    expect(index.search("opaque", { owner: "machine-1" }).every((h) => h.kind === "section")).toBe(true);
   });
 });
 

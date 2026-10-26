@@ -16,7 +16,7 @@ export interface Unit {
   title: string;
   text: string;
   version?: string;
-  machine?: string;
+  owner?: string;
   front?: number;
   frozen?: boolean;
   /** The file it is read from, relative to the data repository: "specs/retired.md", "conversation-chat/all/….md". */
@@ -30,14 +30,14 @@ export interface Hit {
   snippet: string;
   score: number;
   version?: string;
-  machine?: string;
+  owner?: string;
   front?: number;
 }
 
 export interface SearchOptions {
   kinds?: Kind[];
   version?: string;
-  machine?: string;
+  owner?: string;
   front?: number;
   /** Sections of closed milestones are left out unless asked for. */
   frozen?: boolean;
@@ -76,7 +76,7 @@ export function units(store: Store): Unit[] {
       version: d.version,
       frozen,
       file: `specs/${d.ref}.md`,
-      ...(d.machine ? { machine: d.machine } : {}),
+      ...(d.owner ? { owner: d.owner } : {}),
       ...(d.front ? { front: d.front.num } : {}),
     };
     d.sections.forEach((s, k) => {
@@ -187,9 +187,9 @@ function search(core: Core, query: string, opts: SearchOptions = {}): Hit[] {
       if (u.kind === "section") {
         if (u.frozen && !opts.frozen && !opts.version) return false;
         if (opts.version && u.version !== opts.version) return false;
-        if (opts.machine && u.machine !== opts.machine) return false;
+        if (opts.owner && u.owner !== opts.owner) return false;
         if (opts.front !== undefined && u.front !== opts.front) return false;
-      } else if (opts.version || opts.machine || opts.front !== undefined) {
+      } else if (opts.version || opts.owner || opts.front !== undefined) {
         return false;
       }
       return true;
@@ -212,7 +212,7 @@ function search(core: Core, query: string, opts: SearchOptions = {}): Hit[] {
       snippet: snippet(u.text, r.terms),
       score: Math.round(score * 100) / 100,
       ...(u.version ? { version: u.version } : {}),
-      ...(u.machine ? { machine: u.machine } : {}),
+      ...(u.owner ? { owner: u.owner } : {}),
       ...(u.front !== undefined ? { front: u.front } : {}),
     };
   });

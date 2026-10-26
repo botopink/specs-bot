@@ -172,14 +172,14 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .command("claim")
       .argument("<front>", "the front's folder (150-rakun) or its number")
       .description("take a free front to work it: this machine becomes its owner"),
-  ).action(async (front: string, o) => write("front.claim", { front }, o));
+  ).action(async (front: string, o) => write("claim", { ...o, front }));
 
   common(
     program
       .command("release")
       .argument("<front>", "the front's folder or its number")
       .description("let a front go: it has no owner again (its owner or the maintainer)"),
-  ).action(async (front: string, o) => write("front.release", { front }, o));
+  ).action(async (front: string, o) => write("release", { ...o, front }));
 
   common(
     program
@@ -187,7 +187,7 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .argument("<front>", "the front's folder or its number")
       .requiredOption("--to <machine>", "machine-1, machine-2 or machine-3")
       .description("give a front to a machine, whoever held it (the maintainer only)"),
-  ).action(async (front: string, o) => write("front.assign", { front, to: o.to }, o));
+  ).action(async (front: string, o) => write("assign", { ...o, front }));
 
   // ── decisions ──────────────────────────────────────────────────────────────────────────────────────────
 
