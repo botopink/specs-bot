@@ -157,6 +157,7 @@ interface ChatMessage { id: string; from: string; to: string; purpose: string; s
 `specs/<NNN-frente>/[<NNN-grupo>/]…/<nome>.md` — sem pastas de versão nem de máquina. Os documentos do marco
 corrente ficam em `specs/milestone/` (`README`, `status`, `fronts`, `contracts`, `deferred`, `language-gaps`,
 `machine-N`).
+
 Uma frente nova abre com `specs-bot new-front <NNN-slug> --text <README>` (MCP `new_front`; op `front.new`, qualquer parte): o número nunca usado por outra frente, em nenhum marco; o README ganha `milestone` do marco corrente e abre sem `owner` (quem for trabalhá-la faz `claim`).
 
 **Metadados em YAML** (2026-10-26): todo `.md` de spec abre com um bloco YAML — `milestone` e `owner` (a máquina
