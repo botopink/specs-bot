@@ -99,7 +99,7 @@ export function addSection(model: Model, input: { ref: string; after: string; he
 }
 
 /** A new document in the current milestone, inside a folder that already holds documents. */
-export function newDoc(model: Model, input: { ref: string; text: string }): Plan {
+export function newDoc(model: Model, input: { ref: string; text: string }, opening = false): Plan {
   const ref = input.ref.replace(/\.md$/, "");
   if (model.docByRef.has(ref)) throw new WriteError("invalid", `doc ${ref} already exists`, "specs-bot doc edit changes it");
   let where;
@@ -114,8 +114,8 @@ export function newDoc(model: Model, input: { ref: string; text: string }): Plan
     throw new WriteError("invalid", `a document's name is lowercase words with hyphens: ${where.name}`);
   }
   const dir = ref.split("/").slice(0, -1).join("/");
-  if (![...model.docByRef.keys()].some((r) => r.startsWith(`${dir}/`))) {
-    throw new WriteError("invalid", `no document lives in ${dir}/ yet`, "a new front starts with its README (specs-bot front new, later)");
+  if (!opening && ![...model.docByRef.keys()].some((r) => r.startsWith(`${dir}/`))) {
+    throw new WriteError("invalid", `no document lives in ${dir}/ yet`, "a new front starts with its README: specs-bot new-front <NNN-slug> --text …");
   }
   // The YAML block: the one the text brings, with the milestone and the owner its folder gives (meta.ts).
   const given = bodyLines(input.text, "the document");

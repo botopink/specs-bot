@@ -6,6 +6,7 @@ import type { Doc } from "../docs/doc.ts";
 import { withMeta } from "../docs/meta.ts";
 import type { Front, Model } from "../model.ts";
 import { PARTIES } from "./chat.ts";
+import { newDoc } from "./doc.ts";
 import { type Plan, WriteError } from "./plan.ts";
 
 const MACHINES = PARTIES.filter((p) => p.startsWith("machine-"));
@@ -72,4 +73,21 @@ export function assignFront(model: Model, input: { front: string; to: string }, 
   const owner = readme.meta.owner;
   if (owner === input.to) throw new WriteError("invalid", `${front.ref} is already ${input.to}'s`);
   return setOwner(readme, front, input.to, "front.assign", owner ? `reassigned from ${owner} to ${input.to}` : `assigned to ${input.to}`);
+}
+
+/**
+ * Opens a front in the current milestone: `specs/<NNN-slug>/README.md`, from the README's text (its title first,
+ * a metadata block if it brings one; milestone is set, owner is refused — a front opens free). The number is
+ * one no front has had, in any milestone.
+ */
+export function newFront(model: Model, input: { front: string; text: string }): Plan {
+  const folder = input.front.trim().replace(/\/+$/, "");
+  const m = folder.match(/^(\d{3})-([a-z0-9]+(?:-[a-z0-9]+)*)$/);
+  if (!m) throw new WriteError("invalid", `a front's folder is its number and a slug: 168-library-check (got ${folder})`);
+  const num = Number(m[1]);
+  const next = Math.max(0, ...model.fronts.map((f) => f.num)) + 1;
+  const taken = model.fronts.find((f) => f.num === num);
+  if (taken) throw new WriteError("conflict", `front number ${num} is ${taken.ref}'s (${taken.version})`, `the next free number is ${next}`);
+  const plan = newDoc(model, { ref: `${folder}/README`, text: input.text }, true);
+  return { ...plan, op: "front.new", refs: [folder], message: `spec(${model.tree.current}): ${folder}: front opened`, summary: `${folder}: front opened` };
 }

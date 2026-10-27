@@ -88,6 +88,7 @@ export const WRITES: Record<string, { op: string; body: (a: WriteArgs) => Record
   },
   send: { op: "chat.send", body: (a) => ({ to: a.to, purpose: a.purpose, subject: a.subject, text: a.text, ...some({ inReplyTo: a.replyTo }) }) },
   "mark-read": { op: "chat.read", body: (a) => ({ id: a.id }) },
+  "new-front": { op: "front.new", body: (a) => ({ front: s(a.front), text: a.text }) },
   claim: { op: "front.claim", body: (a) => ({ front: s(a.front) }) },
   release: { op: "front.release", body: (a) => ({ front: s(a.front) }) },
   assign: { op: "front.assign", body: (a) => ({ front: s(a.front), to: a.to }) },
@@ -172,6 +173,14 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
   });
 
   // ── fronts ──
+
+  common(
+    program
+      .command("new-front")
+      .argument("<front>", "the new front's folder: a number no front has had, and a slug (168-library-check)")
+      .requiredOption("-t, --text <text|@file|->", "its README, starting with its title (# …); it opens free, with no owner")
+      .description("open a front in the current milestone"),
+  ).action((front: string, o) => write("new-front", { ...o, front }, ["text"]));
 
   common(
     program

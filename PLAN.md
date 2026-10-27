@@ -157,6 +157,7 @@ interface ChatMessage { id: string; from: string; to: string; purpose: string; s
 `specs/<NNN-frente>/[<NNN-grupo>/]…/<nome>.md` — sem pastas de versão nem de máquina. Os documentos do marco
 corrente ficam em `specs/milestone/` (`README`, `status`, `fronts`, `contracts`, `deferred`, `language-gaps`,
 `machine-N`).
+Uma frente nova abre com `specs-bot new-front <NNN-slug> --text <README>` (MCP `new_front`; op `front.new`, qualquer parte): o número nunca usado por outra frente, em nenhum marco; o README ganha `milestone` do marco corrente e abre sem `owner` (quem for trabalhá-la faz `claim`).
 
 **Metadados em YAML** (2026-10-26): todo `.md` de spec abre com um bloco YAML — `milestone` e `owner` (a máquina
 que trabalha a frente) primeiro, depois os campos que antes eram linhas `**Campo:**` sob o título (`priority`,
@@ -286,7 +287,7 @@ própria CLI (o mesmo binário compilado), MCP sobre stdio; stdout é o protocol
   `pending`, `review`, `subject`, `retired`, `fronts`, `front`, `doc` (inteiro / `outline` / `section`), `chat`
   (lista / um), `check`, `sessions`, `online`, `wait`. Escrita: `edit`, `append`, `add_section`, `new_doc`, `meta`,
   `pending_add`, `pending_edit`, `pending_withdraw`, `answer`, `supersede`, `reviewed`, `retire`, `send`,
-  `mark_read`, `claim`, `release`, `assign`. Toda escrita é dry-run (devolve o diff) a menos que `apply: true`; os
+  `mark_read`, `new_front`, `claim`, `release`, `assign`. Toda escrita é dry-run (devolve o diff) a menos que `apply: true`; os
   corpos das requisições vêm da mesma tabela da CLI (`WRITES` em `write.ts`).
 - **Saída**: TOON, como a CLI imprime. Erro da API → erro de ferramenta (`isError`) com `error` e `hint` em TOON.
 - **Eventos**: o mesmo WebSocket traz os eventos; cada resultado termina, depois de uma linha `---`, com

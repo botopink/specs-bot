@@ -19,6 +19,7 @@ import {
   type ApplyResult,
   type Model,
   newDoc,
+  newFront,
   setMeta,
   type Plan,
   replaceSection,
@@ -105,6 +106,7 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
   "chat.read": (m, b, party) => chatRead(m, { id: str(b, "id") }, party),
   "front.claim": (m, b, party) => claimFront(m, { front: str(b, "front") }, party),
   "front.release": (m, b, party) => releaseFront(m, { front: str(b, "front") }, party),
+  "front.new": (m, b) => newFront(m, { front: str(b, "front"), text: str(b, "text") }),
   "front.assign": (m, b, party) => assignFront(m, { front: str(b, "front"), to: str(b, "to") }, party),
 };
 

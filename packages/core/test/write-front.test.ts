@@ -11,6 +11,7 @@ import {
   parseTaken,
   placeDocs,
   type Plan,
+  newFront,
   releaseFront,
   splitMeta,
   WriteError,
@@ -96,5 +97,27 @@ describe("the owner belongs on the front's README", () => {
       ]),
     });
     expect(check(stray).filter((f) => f.code === "doc-owner-outside-front").map((f) => f.about)).toEqual(["150-rakun/04-rakun/track"]);
+  });
+});
+
+describe("newFront", () => {
+  test("opens specs/<NNN-slug>/README.md in the current milestone, free", () => {
+    const p = newFront(model, { front: "168-library-check", text: "# Front 168 — library check\n\nWhy.\n" });
+    expect(p.op).toBe("front.new");
+    expect(p.refs).toEqual(["168-library-check"]);
+    expect(p.message).toBe("spec(1.0.12-beta): 168-library-check: front opened");
+    expect(p.changes).toEqual([{ path: "specs/168-library-check/README.md", before: null, after: expect.any(String) }]);
+    expect(metaOf(p)).toEqual({ milestone: "1.0.12-beta" });
+    expect(after(p)).toContain("# Front 168 — library check\n\nWhy.\n");
+    // Its own metadata comes along.
+    expect(metaOf(newFront(model, { front: "169-x", text: "---\npriority: low\n---\n# X\n" }))).toEqual({ milestone: "1.0.12-beta", priority: "low" });
+  });
+
+  test("refuses a used number (any milestone), a bad folder, an owner, a text without a title", () => {
+    expect(refused(() => newFront(model, { front: "150-other", text: "# X\n" }))).toMatchObject({ code: "conflict", hint: "the next free number is 164" });
+    expect(refused(() => newFront(model, { front: "001-old", text: "# X\n" })).code).toBe("conflict");
+    for (const front of ["168", "168-Library", "milestone", "168-a/b", "68-short"]) expect(refused(() => newFront(model, { front, text: "# X\n" })).code).toBe("invalid");
+    expect(refused(() => newFront(model, { front: "168-x", text: "---\nowner: machine-1\n---\n# X\n" })).message).toContain("owner");
+    expect(refused(() => newFront(model, { front: "168-x", text: "no title\n" })).code).toBe("invalid");
   });
 });
