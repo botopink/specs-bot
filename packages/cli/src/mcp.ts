@@ -288,6 +288,8 @@ interface Tool {
   description: string;
   inputSchema: { type: "object"; properties: Record<string, Schema>; required?: string[] };
   write?: boolean;
+  /** A write's name in the WRITES table (write.ts). */
+  cli?: string;
   run: (a: Args, extra: { signal?: AbortSignal }) => Promise<string>;
 }
 
@@ -363,6 +365,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     name,
     description,
     write: true,
+    cli,
     inputSchema: { type: "object", properties: { ...properties, ...COMMON }, required },
     run: async (a) => {
       holding();
@@ -719,7 +722,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       ["to", "purpose", "subject", "text"],
     ),
     write("mark_read", "mark-read", "mark a message to this party read", { id: str("the message") }, ["id"]),
-    write("new-front", "new_front", "open a front in the current milestone", { front: str("folder: a new number and a slug (168-library-check)"), text: str("its README, title first") }, ["front", "text"]),
+    write("new_front", "new-front", "open a front in the current milestone", { front: str("folder: a new number and a slug (168-library-check)"), text: str("its README, title first") }, ["front", "text"]),
     write("claim", "claim", "claim a front for this party", { front: str("the front's number") }, ["front"]),
     write("release", "release", "let go of a front this party claimed", { front: str("the front's number") }, ["front"]),
     write("assign", "assign", "give a front to a machine, whoever held it (the maintainer only)", { front: str("the front's folder (150-rakun) or its number"), to: str("the machine (machine-1, machine-2)") }, ["front", "to"]),

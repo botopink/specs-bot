@@ -1,6 +1,7 @@
 // What the MCP server costs an agent in tokens: the tool list it carries, the events after each answer.
 import { describe, expect, test } from "bun:test";
-import { brief, eventLine, withEvents } from "../src/mcp.ts";
+import { brief, eventLine, tools, withEvents } from "../src/mcp.ts";
+import { WRITES } from "../src/write.ts";
 
 describe("brief", () => {
   test("a description is its first clause, cut at a word", () => {
@@ -29,5 +30,17 @@ describe("events after an answer", () => {
     const write = { type: "write", party: "machine-1", op: "chat.send", summary: "x", at: "t" } as never;
     expect(withEvents("answer", { events: [write], dropped: 0 })).toBe("answer");
     expect(eventLine({ type: "presence", party: "machine-2", online: false, at: "t" } as never)).toBe("machine-2 offline");
+  });
+});
+
+describe("the write tools", () => {
+  test("each names a write of the WRITES table, and is spelled with underscores", () => {
+    const writes = tools({} as never, {} as never).filter((t) => t.write);
+    expect(writes.length).toBeGreaterThan(10);
+    for (const t of writes) {
+      expect(WRITES[t.cli!] ? t.name : `${t.name} → ${t.cli}`).toBe(t.name);
+      expect(t.name).toMatch(/^[a-z_]+$/);
+    }
+    expect(writes.find((t) => t.name === "new_front")?.cli).toBe("new-front");
   });
 });
