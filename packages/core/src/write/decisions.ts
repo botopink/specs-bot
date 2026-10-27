@@ -16,6 +16,9 @@ export const PENDING_FIELDS = ["Measured", "Options", "Recommendation", "Blocks"
 
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 
+/** What a row's Cell may name (decision 1022): a conformance cell's slug, a test script, or the conformance self-test. */
+const CELL = /^(?:[a-z0-9]+(?:_[a-z0-9]+)*|tests\/[A-Za-z0-9_.-]+\.sh|conformance\/run\.sh --self-test)$/;
+
 function oneLine(text: string, what: string): string {
   const t = text.replace(/\s*\n\s*/g, " ").trim();
   if (!t) throw new WriteError("invalid", `${what} is empty`);
@@ -195,7 +198,7 @@ export function answer(model: Model, input: AnswerInput, party: string): Plan {
   const rule = cellText(oneLine(input.rule, "the rule"));
   const binds = cellText(oneLine(input.binds, "binds"));
   const cell = input.cell ? cellText(input.cell.trim()) : "";
-  if (cell && !/^[a-z0-9_]+$/.test(cell)) throw new WriteError("invalid", `a cell's slug is lowercase letters, digits and _: ${cell}`);
+  if (cell && !CELL.test(cell)) throw new WriteError("invalid", `a Cell is a cell slug (lowercase_with_underscores), tests/<name>.sh or conformance/run.sh --self-test: ${cell}`);
   const idCell = `${id} · (${by}, ${today(input.at)})${input.process ? " · (process)" : ""}`;
   const row = joinRow([` ${n} `, ` ${idCell} `, ` ${rule} `, ` ${binds} `, cell ? ` ${cell} ` : " "]);
 
@@ -324,3 +327,24 @@ export function retiredAdd(model: Model, input: { area: string; retired: string;
   };
 }
 
+
+
+/** Sets one row's Cell (decision 1022); its number, Id, rule and Binds stay as written. */
+export function setCell(model: Model, input: { num: number; value: string }): Plan {
+  const row = model.stepByNum.get(input.num);
+  if (!row) throw new WriteError("not-found", `step ${input.num} not found`);
+  const value = input.value.trim();
+  if (!CELL.test(value)) {
+    throw new WriteError("invalid", `a Cell is a cell slug (lowercase_with_underscores), tests/<name>.sh or conformance/run.sh --self-test: ${value}`);
+  }
+  if (row.cell === value) throw new WriteError("invalid", `step ${input.num}'s Cell is already ${value}`);
+  const steps = [...model.steps.lines];
+  steps[row.line] = joinRow([row.raw.num, row.raw.id, row.raw.rule, row.raw.binds, ` ${value} `]);
+  return {
+    op: "step.cell",
+    refs: [`step ${input.num}`],
+    message: `spec: row ${input.num} cell → ${value}`,
+    summary: `step ${input.num}'s Cell: ${row.cell || "(empty)"} → ${value}`,
+    changes: [{ path: STEPS, before: model.steps.lines.join("\n"), after: steps.join("\n") }],
+  };
+}

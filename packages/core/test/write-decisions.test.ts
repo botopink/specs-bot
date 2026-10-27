@@ -16,6 +16,7 @@ import {
   pendingWithdraw,
   placeDocs,
   retiredAdd,
+  setCell,
   supersede,
   type Plan,
   WriteError,
@@ -222,6 +223,23 @@ describe("supersede, review, retired", () => {
   test("refuses an earlier row, an unknown row, a row already superseded", () => {
     expect(refused(() => supersede(model(), { num: 2, by: 1, kind: "replaced" })).message).toContain("by a later one");
     expect(refused(() => supersede(model(), { num: 1, by: 9, kind: "replaced" })).code).toBe("not-found");
+  });
+
+  test("set-cell changes the Cell alone (1022)", () => {
+    for (const value of ["tests/runtime_reuse.sh", "conformance/run.sh --self-test", "a_cell"]) {
+      const p = setCell(model(), { num: 1, value });
+      expect(p.op).toBe("step.cell");
+      const row = applied(model(), p).stepByNum.get(1)!;
+      expect(row.cell).toBe(value);
+      expect(p.changes[0]!.after).toContain(`| 1 | q-1 · (the maintainer, 2026-10-01) | **A rule.** | \`machine-1/150\` s3 | ${value} |`);
+    }
+    expect(applied(model(), setCell(model(), { num: 2, value: "tests/x.sh" })).stepByNum.get(2)!.rule).toBe("**Another rule.**");
+  });
+
+  test("set-cell refuses an unknown row, a bad value, the same value", () => {
+    expect(refused(() => setCell(model(), { num: 9, value: "a" })).code).toBe("not-found");
+    for (const value of ["", "Bad", "a-b", "tests/x", "tests/a/b.sh", "conformance/run.sh", "x | y"]) expect(refused(() => setCell(model(), { num: 1, value })).code).toBe("invalid");
+    expect(refused(() => setCell(model(), { num: 2, value: "another_rule" })).message).toContain("already");
   });
 
   test("only the maintainer marks a review item", () => {

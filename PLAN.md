@@ -213,6 +213,7 @@ Escritas: **dry-run por padrão** (devolve o diff), `--apply` grava. Toda escrit
 | `pending add --id --section --title --text @f` · `pending edit <id>` · `pending withdraw <id> --reason` | pendentes |
 | `answer <id> --rule @f --binds "…" [--cell --process] [--subject <slug> --text @f]` | nova linha `N` em `steps`, remove o pendente, atualiza número livre, opcionalmente o parágrafo do assunto + `Steps:`/`Binds:`; o "by" vem do token (`†` para fable) |
 | `supersede <n> --by <m> --kind overtaken\|replaced\|reversed` | marca a linha |
+| `set-cell <n> <valor>` (MCP `set_cell`; op `step.cell`) | só a coluna Cell da linha (decisão 1022): slug de célula, `tests/<nome>.sh` ou `conformance/run.sh --self-test`; regra, Id e Binds intactos |
 | `review <n>` | `[x]` em "To review" (só mantenedor) |
 | `retired add --area --retired --replaced-by --decisions [--note]` | linha na tabela |
 | `chat send --to --purpose --subject --text @f [--in-reply-to]` · `chat read <id>` | conversas |

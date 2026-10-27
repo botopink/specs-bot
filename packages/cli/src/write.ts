@@ -80,6 +80,7 @@ export const WRITES: Record<string, { op: string; body: (a: WriteArgs) => Record
     op: "answer",
     body: (a) => ({ id: a.id, rule: a.rule, binds: a.binds, ...some({ cell: a.cell, by: a.by, subject: a.subject, subjectText: a.subjectText }), process: a.process === true }),
   },
+  "set-cell": { op: "step.cell", body: (a) => ({ num: Number(a.n), value: a.value }) },
   supersede: { op: "supersede", body: (a) => ({ num: Number(a.n), by: Number(a.by), kind: a.kind }) },
   reviewed: { op: "review", body: (a) => ({ num: Number(a.n) }) },
   retire: {
@@ -266,6 +267,14 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .requiredOption("--kind <kind>", "overtaken | replaced | reversed")
       .description("mark a row overtaken, replaced or reversed by a later one (its text is kept)"),
   ).action((n: string, o) => write("supersede", { ...o, n }));
+
+  common(
+    program
+      .command("set-cell")
+      .argument("<n>", "the decision row")
+      .argument("<value>", "a cell slug (lowercase_with_underscores), tests/<name>.sh, or conformance/run.sh --self-test")
+      .description("set one row's Cell column (decision 1022); its rule, Id and Binds stay"),
+  ).action((n: string, value: string, o) => write("set-cell", { ...o, n, value }));
 
   common(program.command("reviewed").argument("<n>", "the step in the To review table").description("mark a delegated decision reviewed (the maintainer)")).action(
     (n: string, o) => write("reviewed", { ...o, n }),

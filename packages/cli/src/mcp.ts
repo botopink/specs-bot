@@ -694,6 +694,13 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       { n: int("the row that stops being in force"), by: int("the later row in force"), kind: oneOf(["overtaken", "replaced", "reversed"], "how") },
       ["n", "by", "kind"],
     ),
+    write(
+      "set_cell",
+      "set-cell",
+      "set one row's Cell column (decision 1022); its rule, Id and Binds stay",
+      { n: int("the decision row"), value: str("a cell slug (lowercase_with_underscores), tests/<name>.sh, or conformance/run.sh --self-test") },
+      ["n", "value"],
+    ),
     write("reviewed", "reviewed", "mark a delegated decision reviewed (the maintainer)", { n: int("the step in the To review table") }, ["n"]),
     write(
       "retire",

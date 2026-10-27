@@ -15,6 +15,7 @@ import {
   pendingEdit,
   pendingWithdraw,
   retiredAdd,
+  setCell,
   supersede,
   type ApplyResult,
   type Model,
@@ -98,6 +99,7 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
     if (kind !== "overtaken" && kind !== "replaced" && kind !== "reversed") throw new WriteError("invalid", "kind is overtaken, replaced or reversed");
     return supersede(m, { num: num(b, "num"), by: num(b, "by"), kind });
   },
+  "step.cell": (m, b) => setCell(m, { num: num(b, "num"), value: str(b, "value") }),
   review: (m, b, party) => markReviewed(m, { num: num(b, "num") }, party),
   "retired.add": (m, b) =>
     retiredAdd(m, { area: str(b, "area"), retired: str(b, "retired"), replacedBy: str(b, "replacedBy"), decisions: str(b, "decisions"), ...opt(b, "note") }),
