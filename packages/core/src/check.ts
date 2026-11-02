@@ -3,6 +3,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { nextFree, statedNextFree } from "./decisions/steps.ts";
+import { frontReadmeRef } from "./docs/doc.ts";
 import { pendingEntries } from "./decisions/pending.ts";
 import { checkGapMarkers } from "./gaps.ts";
 import { groupFilesOnDisk, type Store } from "./store.ts";
@@ -129,7 +130,7 @@ function checkDocs(store: Store): Finding[] {
     if (d.metaError) out.push(err("doc-meta-invalid", d.ref, `its metadata block: ${d.metaError}`));
     else if (!d.meta.milestone) out.push(err("doc-meta-missing", d.ref, "has no metadata block with its milestone (---\nmilestone: …\n---)"));
     // owner is a front's: only its README holds it, and the documents under it inherit it.
-    if (d.meta.owner && !(d.front && d.ref === `${d.front.dir}/README`)) {
+    if (d.meta.owner && !(d.front && d.ref === frontReadmeRef(d.front))) {
       out.push(err("doc-owner-outside-front", d.ref, "owner belongs on the front's README alone (claim / assign set it there)"));
     }
     for (const link of d.links) {

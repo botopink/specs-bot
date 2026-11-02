@@ -3,15 +3,17 @@
 //
 // - the front's README: each step heading (`### 150 s1 — …`, `### B-162 — …`, `### 105 Conformance — …`) with the
 //   `- [x]` / `- [ ]` boxes under it — all boxed is done, any box open is open;
-// - the milestone's status.md: each top-level `- [x]` / `- [ ]` item, filed under a lane (`## L1` … `## L4` open,
-//   `## L5` blocked on a decision, `## Done` landed) and named for a front by its leading number
+// - the milestone's status items: each top-level `- [x]` / `- [ ]` item, filed under a lane (`## L1` … `## L4`
+//   open, `## L5` blocked on a decision, `## Done` landed) and named for a front by its leading number
 //   (`150 s25 — …`), else by its `###` heading's numbers (`### 151 json · 152 yaml`), else by the `NNN sN` /
-//   `NNN B-N` labels in its text;
+//   `NNN B-N` labels in its text — read from `milestone/status.md` whole, or (once fronts-move.ts's migration
+//   has run for good) from each front's own `README---status.md` companion plus `milestone/order.md` and
+//   `milestone/rules.md`; see currentStatusItems() below for the dual-layout read, temporary until the cut-over;
 // - the pending questions whose text names the front (`front 165`, `machine-1/150`, `150 s31`, `144 B-162`):
 //   the front waits on them; a README step a question names is blocked.
 //
 // Built once per model and milestone (the site is rebuilt on every write).
-import { MILESTONE_DIR } from "@specs-bot/core";
+import { frontReadmeRef, MILESTONE_DIR } from "@specs-bot/core";
 import type { Doc, PendingEntry } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
 
@@ -77,14 +79,13 @@ export function buildProgress(data: SiteData, version: string): Map<number, Fron
 
   // The README steps of each front folder (144 has three folders: their steps add up).
   for (const d of docs) {
-    if (!d.front || d.group || d.ref !== `${d.front.dir}/README`) continue;
+    if (!d.front || d.group || d.ref !== frontReadmeRef(d.front)) continue;
     out.get(d.front.num)!.steps.push(...readmeSteps(d, d.front.num, blockedLabels));
   }
 
-  // status.md's items.
-  const status = version === data.tree.current ? data.docByRef.get(`${MILESTONE_DIR}/status`) : undefined;
-  if (status) {
-    for (const item of statusItems(status, nums)) out.get(item.front)!.status.push(item.item);
+  // The milestone's status items (the current milestone only — an older one keeps no live status page).
+  if (version === data.tree.current) {
+    for (const item of currentStatusItems(data, nums)) out.get(item.front)!.status.push(item.item);
   }
 
   // In-force rows that bind each front.
@@ -154,7 +155,33 @@ function laneOf(heading: string): string | undefined {
   return m?.[1];
 }
 
-function statusItems(doc: Doc, nums: Set<number>): { front: number; item: ProgressItem }[] {
+// TEMPORARY — the two layouts scripts/fronts-move.ts (botopink/projects) migrates between: today the milestone's
+// status lives whole in `milestone/status.md`; once that script's migration has actually run over specs-data,
+// `milestone/status.md` is gone for good, dissolved into each front's own `README---status.md` companion
+// (`fronts/<dir>/README---status.md`) plus `milestone/order.md` (headings/items no single front owns: the old
+// `## L5` lane whole, a heading naming no front, a multi-front heading's item with no leading number of its
+// own) and `milestone/rules.md` (fronts.md's prose; never holds a checkbox, read anyway for safety). Both read
+// the same way: statusItems() below is run once per document and merged — it resolves an item to a front by
+// *number*, never by which file holds it, so a line that moved to order.md because its folder was ambiguous
+// still lands on the right front here. Detection is "does milestone/status.md exist": present → old layout;
+// absent → new layout. Drop this function (and go back to reading milestone/status.md alone) once the
+// migration has run in production and the old layout is no longer possible.
+const COMPANION = "---status";
+function currentStatusItems(data: SiteData, nums: Set<number>): { front: number; item: ProgressItem }[] {
+  const status = data.docByRef.get(`${MILESTONE_DIR}/status`);
+  if (status) return statusItems(status, nums);
+  const refs = new Set(
+    data.tree.docs.filter((d) => d.version === data.tree.current && d.front).map((d) => `${frontReadmeRef(d.front!)}${COMPANION}`),
+  );
+  refs.add(`${MILESTONE_DIR}/order`);
+  refs.add(`${MILESTONE_DIR}/rules`);
+  return [...refs].flatMap((r) => {
+    const doc = data.docByRef.get(r);
+    return doc ? statusItems(doc, nums) : [];
+  });
+}
+
+export function statusItems(doc: Doc, nums: Set<number>): { front: number; item: ProgressItem }[] {
   const out: { front: number; item: ProgressItem }[] = [];
   const headingAt = new Map(doc.sections.map((s) => [s.start, s]));
   let lane: string | undefined;

@@ -2,6 +2,7 @@
 // fronts, its last writes and messages — rendered here from the api's /api/now. The page's script listens on the
 // api's websocket and, on any event, fetches the cards again (as HTML from /now/cards, rendered by these same
 // components) without reloading; relative times tick in the browser.
+import { docAt } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
 import { type NowData, type NowParty, type NowTask, relTime } from "../now.ts";
 import { Layout } from "./layout.tsx";
@@ -14,7 +15,8 @@ export function refHref(ref: string, data: SiteData | undefined): string | undef
   if (pending) return `/pending/${encodeURIComponent(pending[1]!)}`;
   if (!data) return undefined;
   const [base = "", anchor] = ref.split("#");
-  if (data.docByRef.has(base)) return `/docs/${base}${anchor ? `#${anchor}` : ""}`;
+  const doc = docAt(data, base);
+  if (doc) return `/docs/${doc.ref}${anchor ? `#${anchor}` : ""}`;
   const front = data.fronts.find((f) => f.ref === base && f.version === data.tree.current);
   if (front) return `/fronts#${front.ref.split("/").pop()}`;
   return undefined;
@@ -38,7 +40,8 @@ function frontLink(front: string) {
 
 function PartyCard(props: { p: NowParty; data: SiteData | undefined; now: number }) {
   const { p, data, now } = props;
-  const readme = p.doing?.front && data?.docByRef.has(`${p.doing.front}/README`) ? `/docs/${p.doing.front}/README` : undefined;
+  const readmeDoc = p.doing?.front && data ? docAt(data, p.doing.front) : undefined;
+  const readme = readmeDoc ? `/docs/${readmeDoc.ref}` : undefined;
   return (
     <article class={`now-card ${p.online ? "is-on" : "is-off"}`} id={`now-${p.party}`} data-party={p.party}>
       <header>

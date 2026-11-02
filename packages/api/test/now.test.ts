@@ -18,8 +18,8 @@ const FILES: Record<string, string> = {
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n\n## Open\n\n- [ ] b\n",
-  "specs/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n",
-  "specs/163-meta-ci/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 163 — meta-ci\n",
+  "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n",
+  "specs/fronts/163-meta-ci/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 163 — meta-ci\n",
   "conversation-chat/machine-1/20261021-1144-hello-from-the-maintainer-mt-0001.md":
     "---\nfrom: maintainer\nto: machine-1\npurpose: rule\nsubject: Hello from the maintainer\nread: [ ]\n---\n\nHi.\n",
   "conversation-chat/all/20261021-1200-to-everyone-mt-0002.md": "---\nfrom: maintainer\nto: all\npurpose: digest\nsubject: To everyone\nread: m1 [ ] · m2 [ ] · m3 [ ]\n---\n\nAll.\n",
@@ -86,7 +86,7 @@ describe("/api/now and /api/doing", () => {
     const n = await now();
     expect(n.parties.map((p) => p.party)).toEqual(["maintainer", "machine-1", "machine-2"]);
     expect(Date.parse(n.at)).not.toBeNaN();
-    expect(of(n, "machine-1")).toMatchObject({ online: false, session: null, doing: null, fronts: ["150-rakun"], recent: [] });
+    expect(of(n, "machine-1")).toMatchObject({ online: false, session: null, doing: null, fronts: ["fronts/150-rakun"], recent: [] });
     expect(of(n, "machine-1").chat.map((m: { id: string }) => m.id)).toEqual(["mt-0002", "mt-0001"]);
     expect(of(n, "machine-1").chat[1]).toEqual({ id: "mt-0001", from: "maintainer", to: "machine-1", subject: "Hello from the maintainer", at: "2026-10-21T11:44" });
     expect(of(n, "machine-2").chat.map((m: { id: string }) => m.id)).toEqual(["mt-0002"]);
@@ -113,17 +113,17 @@ describe("/api/now and /api/doing", () => {
     events.length = 0;
     const set = await call("POST", "/api/doing", { text: "  reading   the rakun\nrouter ", front: "150" }, s);
     expect(set.status).toBe(200);
-    expect(set.body).toMatchObject({ party: "machine-1", doing: { text: "reading the rakun router", front: "150-rakun" } });
-    expect(events).toEqual([{ type: "doing", party: "machine-1", text: "reading the rakun router", front: "150-rakun", at: expect.any(String) }]);
+    expect(set.body).toMatchObject({ party: "machine-1", doing: { text: "reading the rakun router", front: "fronts/150-rakun" } });
+    expect(events).toEqual([{ type: "doing", party: "machine-1", text: "reading the rakun router", front: "fronts/150-rakun", at: expect.any(String) }]);
 
     // The same line again says nothing.
-    await call("POST", "/api/doing", { text: "reading the rakun router", front: "150-rakun" }, s);
+    await call("POST", "/api/doing", { text: "reading the rakun router", front: "fronts/150-rakun" }, s);
     expect(events.length).toBe(1);
 
     let m1 = of(await now(), "machine-1");
     expect(m1.online).toBe(true);
     expect(m1.session).toEqual({ label: "host · machine-1", since: expect.any(String), bound: false });
-    expect(m1.doing).toEqual({ text: "reading the rakun router", front: "150-rakun", since: expect.any(String) });
+    expect(m1.doing).toEqual({ text: "reading the rakun router", front: "fronts/150-rakun", since: expect.any(String) });
 
     expect((await call("POST", "/api/doing", { text: "x".repeat(201) }, s)).status).toBe(422);
     expect((await call("POST", "/api/doing", { text: "   " }, s)).status).toBe(422);
@@ -180,12 +180,12 @@ describe("the log's commits", () => {
   test("a party's commit by its trailers, else by its author; refs from the files", () => {
     const out = [
       "",
-      "abc1234\x1fmachine-1\x1f2026-10-26T10:00:00+00:00\x1fspec(1.0.12-beta): 150-rakun: claimed by machine-1\x1ffront.claim\x1fmachine-1\n\nspecs/150-rakun/README.md\n",
+      "abc1234\x1fmachine-1\x1f2026-10-26T10:00:00+00:00\x1fspec(1.0.12-beta): 150-rakun: claimed by machine-1\x1ffront.claim\x1fmachine-1\n\nspecs/fronts/150-rakun/README.md\n",
       "def5678\x1fmaintainer\x1f2026-10-26T09:00:00+00:00\x1fchat(machine-2): a question\x1f\x1f\n\nconversation-chat/machine-2/20261026-0900-a-question-mt-0040.md\n",
       "0001111\x1fsomeone\x1f2026-10-25T09:00:00+00:00\x1fby hand\x1f\x1f\n\nspecs/retired.md\n",
     ].join("\x1e");
     expect(parseLog(out)).toEqual([
-      { party: "machine-1", op: "front.claim", summary: "150-rakun: claimed by machine-1", refs: ["150-rakun/README"], commit: "abc1234", at: "2026-10-26T10:00:00+00:00" },
+      { party: "machine-1", op: "front.claim", summary: "150-rakun: claimed by machine-1", refs: ["fronts/150-rakun/README"], commit: "abc1234", at: "2026-10-26T10:00:00+00:00" },
       { party: "maintainer", op: "commit", summary: "a question", refs: ["message mt-0040"], commit: "def5678", at: "2026-10-26T09:00:00+00:00" },
     ]);
   });

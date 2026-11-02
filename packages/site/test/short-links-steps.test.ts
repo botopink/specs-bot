@@ -28,7 +28,7 @@ const FILES: Record<string, string> = {
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
   "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
-  "specs/144-checker/README.md": [
+  "specs/fronts/144-checker/README.md": [
     "---",
     "milestone: 1.0.12-beta",
     "owner: machine-1",
@@ -49,7 +49,7 @@ const FILES: Record<string, string> = {
     "",
     ...STEP_ROWS.map((i) => `### B-${10 + i} — step ${i}\n\n- [${i % 2 ? "x" : " "}] box\n`),
   ].join("\n"),
-  "specs/144-botopink-lang/README.md": [
+  "specs/fronts/144-botopink-lang/README.md": [
     "---",
     "milestone: 1.0.12-beta",
     "owner: machine-1",
@@ -67,8 +67,8 @@ const FILES: Record<string, string> = {
     "| B-999 | [1](../144-checker/README.md) | nowhere |",
     "",
   ].join("\n"),
-  "specs/01-checker/README.md": "---\nmilestone: 1.0.5-beta\n---\n# Old checker\n\nSee [notes](notes.md).\n",
-  "specs/01-checker/notes.md": "# Old notes\n",
+  "specs/fronts/01-checker/README.md": "---\nmilestone: 1.0.5-beta\n---\n# Old checker\n\nSee [notes](notes.md).\n",
+  "specs/fronts/01-checker/notes.md": "# Old notes\n",
   "moved.json": JSON.stringify({
     "1.0.12-beta/machine-1/144-botopink-lang/README": "144-botopink-lang/README",
     "1.0.5-beta/01-checker/README": "01-checker/README",
@@ -93,8 +93,8 @@ describe("the site over a fixture", () => {
   };
 
   test("a document opens at its ref; a folder goes to its README", async () => {
-    expect((await get("/docs/144-botopink-lang/README")).status).toBe(200);
-    expect((await get("/docs/144-botopink-lang")).location).toBe("/docs/144-botopink-lang/README");
+    expect((await get("/docs/fronts/144-botopink-lang/README")).status).toBe(200);
+    expect((await get("/docs/144-botopink-lang")).location).toBe("/docs/fronts/144-botopink-lang/README");
   });
 
   test("a URL from before the flattening redirects: versioned, short, or to a removed file's permalink", async () => {
@@ -107,27 +107,27 @@ describe("the site over a fixture", () => {
   });
 
   test("a frozen front's document opens, its links relative to it", async () => {
-    const old = await get("/docs/01-checker/README");
+    const old = await get("/docs/fronts/01-checker/README");
     expect(old.status).toBe(200);
-    expect(old.body).toContain('href="/docs/01-checker/notes"');
+    expect(old.body).toContain('href="/docs/fronts/01-checker/notes"');
   });
 
   test("the Fronts page links documents by their ref", async () => {
     const fronts = await get("/fronts");
-    expect(fronts.body).toContain('href="/docs/144-checker/README"');
+    expect(fronts.body).toContain('href="/docs/fronts/144-checker/README"');
     expect(fronts.body).not.toContain('href="/docs/1.0.12-beta/');
   });
 
   test("the index of steps: states, places, groups, filters, decisions linked", async () => {
-    const { body } = await get("/docs/144-botopink-lang/README");
+    const { body } = await get("/docs/fronts/144-botopink-lang/README");
     // B-00a and B-00b are one group, headed once.
     expect(body.match(/<tr class="group" data-group="B-00">/g)).toHaveLength(1);
     expect(body).toContain('<span translate="no">B-00</span> · 2 steps · 1 done');
     // A step is a link to where it is written, with its state; B-83 comes from the "B-82 … B-85" heading.
     // (The label sits in the translate guard's span: an id is never translated.)
     const label = (l: string) => `(<span class="notranslate" translate="no">)?${l}(</span>)?`;
-    expect(body).toMatch(new RegExp(`<a class="step" href="/docs/144-checker/README#b-00a--first">${label("B-00a")}</a> <span class="state done"`));
-    expect(body).toMatch(new RegExp(`href="/docs/144-checker/README#b-82--b-85--moved-to-front-164">${label("B-83")}</a>`));
+    expect(body).toMatch(new RegExp(`<a class="step" href="/docs/fronts/144-checker/README#b-00a--first">${label("B-00a")}</a> <span class="state done"`));
+    expect(body).toMatch(new RegExp(`href="/docs/fronts/144-checker/README#b-82--b-85--moved-to-front-164">${label("B-83")}</a>`));
     // The one label no README writes is counted as such.
     expect(body).toContain("1 not found in a README");
     expect(body).toContain('data-filter="state" data-value="open"');

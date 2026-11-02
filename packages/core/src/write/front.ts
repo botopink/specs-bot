@@ -3,6 +3,7 @@
 // maintainer — and removed by `front.release`. A front of the current milestone with no owner is free; the
 // documents under a front inherit its owner (load.ts).
 import type { Doc } from "../docs/doc.ts";
+import { FRONTS_DIR } from "../docs/doc.ts";
 import { withMeta } from "../docs/meta.ts";
 import type { Front, Model } from "../model.ts";
 import { PARTIES } from "./chat.ts";
@@ -11,13 +12,16 @@ import { type Plan, WriteError } from "./plan.ts";
 
 const MACHINES = PARTIES.filter((p) => p.startsWith("machine-"));
 
-/** A current front by its folder ("150-rakun") or its number when only one folder has it. */
+/** A current front by its folder ("150-rakun", or "fronts/150-rakun" already prefixed) or its number when only one folder has it. */
 export function frontFor(model: Model, front: string): { front: Front; readme: Doc } {
   const current = model.fronts.filter((f) => f.version === model.tree.current);
   const want = front.trim().replace(/\/+$/, "").replace(/\/README$/, "");
-  const found = /^\d+$/.test(want) ? current.filter((f) => f.num === Number(want)) : current.filter((f) => f.ref === want);
+  const wantRef = want.startsWith(`${FRONTS_DIR}/`) ? want : `${FRONTS_DIR}/${want}`;
+  const found = /^\d+$/.test(want)
+    ? current.filter((f) => f.num === Number(want))
+    : current.filter((f) => f.ref === want || f.ref === wantRef);
   if (!found.length) {
-    const old = model.fronts.find((f) => f.ref === want || String(f.num) === want);
+    const old = model.fronts.find((f) => f.ref === want || f.ref === wantRef || String(f.num) === want);
     if (old) throw new WriteError("frozen", `front ${want} is in ${old.version}, a closed milestone`, `only ${model.tree.current}'s fronts are worked`);
     throw new WriteError("not-found", `no front ${want} in ${model.tree.current}`, "specs-bot fronts lists them");
   }
@@ -35,11 +39,14 @@ function setOwner(readme: Doc, front: Front, owner: string | undefined, op: stri
   if (!meta.milestone) meta.milestone = readme.version;
   if (owner) meta.owner = owner;
   else delete meta.owner;
+  // The commit message and the one-line summary (now.ts's feed) stay short — the folder alone, not the full
+  // fronts/-prefixed ref; `refs` stays the full ref, what refHref (now.tsx) and Front.ref match against.
+  const short = front.ref.split("/").pop()!;
   return {
     op,
     refs: [front.ref],
-    message: `spec(${readme.version}): ${front.ref}: ${what}`,
-    summary: `${front.ref}: ${what}`,
+    message: `spec(${readme.version}): ${short}: ${what}`,
+    summary: `${short}: ${what}`,
     changes: [{ path: `specs/${readme.ref}.md`, before: readme.lines.join("\n"), after: withMeta(readme.lines, meta).join("\n") }],
   };
 }
@@ -88,6 +95,6 @@ export function newFront(model: Model, input: { front: string; text: string }): 
   const next = Math.max(0, ...model.fronts.map((f) => f.num)) + 1;
   const taken = model.fronts.find((f) => f.num === num);
   if (taken) throw new WriteError("conflict", `front number ${num} is ${taken.ref}'s (${taken.version})`, `the next free number is ${next}`);
-  const plan = newDoc(model, { ref: `${folder}/README`, text: input.text }, true);
-  return { ...plan, op: "front.new", refs: [folder], message: `spec(${model.tree.current}): ${folder}: front opened`, summary: `${folder}: front opened` };
+  const plan = newDoc(model, { ref: `${FRONTS_DIR}/${folder}/README`, text: input.text }, true);
+  return { ...plan, op: "front.new", refs: [`${FRONTS_DIR}/${folder}`], message: `spec(${model.tree.current}): ${folder}: front opened`, summary: `${folder}: front opened` };
 }

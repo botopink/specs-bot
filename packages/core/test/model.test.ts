@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { buildModel, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs } from "../src/index.ts";
+import { buildModel, docAt, loadModel, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs } from "../src/index.ts";
 
 const model = buildModel({
   specsDir: "/nowhere",
@@ -17,8 +17,8 @@ const model = buildModel({
   taken: parseTaken(`## lang — the language\n\n**Lead.**\n\nText.\n\nSteps: 1, 3\nBinds: x\n`),
   retired: parseRetired(`## Language spellings\n\n| Retired | Replaced by | Decisions | Since / note |\n|---|---|---|---|\n| a | b | 3 |  |\n`),
   tree: placeDocs([
-    parseDoc("150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n"),
-    parseDoc("150-rakun/04-rakun/track.md", "# Track 04\n"),
+    parseDoc("fronts/150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n"),
+    parseDoc("fronts/150-rakun/04-rakun/track.md", "# Track 04\n"),
     parseDoc("milestone/status.md", "# Status\n"),
   ]),
   chat: [],
@@ -42,23 +42,38 @@ describe("buildModel", () => {
     expect(model.statedNextFree).toEqual({ steps: 4, pending: 4 });
   });
 
-  test("a front is a numbered folder at the top, titled by its README, its milestone and owner its README's", () => {
+  test("a front is a numbered folder under fronts/, titled by its README, its milestone and owner its README's", () => {
     expect(model.fronts).toEqual([
       {
         version: "1.0.12-beta",
         owner: "machine-1",
         num: 150,
         slug: "rakun",
-        ref: "150-rakun",
+        ref: "fronts/150-rakun",
         title: "Front 150 — rakun",
-        readme: "150-rakun/README",
-        docs: ["150-rakun/README", "150-rakun/04-rakun/track"],
+        readme: "fronts/150-rakun/README",
+        docs: ["fronts/150-rakun/README", "fronts/150-rakun/04-rakun/track"],
       },
     ]);
   });
 
   test("the search index is built on first use", () => {
     expect(model.index.search("rule")[0]).toMatchObject({ kind: "step", key: "3" });
+  });
+});
+
+describe("docAt", () => {
+  test("resolves a ref in any of the four forms someone may type", () => {
+    const readme = model.docByRef.get("fronts/150-rakun/README")!;
+    expect(docAt(model, "fronts/150-rakun/README")).toBe(readme);
+    expect(docAt(model, "fronts/150-rakun")).toBe(readme);
+    expect(docAt(model, "150-rakun/README")).toBe(readme);
+    expect(docAt(model, "150-rakun")).toBe(readme);
+  });
+
+  test("answers undefined for a ref that resolves in none of the four forms", () => {
+    expect(docAt(model, "no-such-front")).toBeUndefined();
+    expect(docAt(model, "fronts/no-such-front")).toBeUndefined();
   });
 });
 

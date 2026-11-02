@@ -6,7 +6,7 @@ import { pendingEntries } from "./decisions/pending.ts";
 import type { RetiredRow } from "./decisions/retired.ts";
 import { nextFree, statedNextFree, type StepRow } from "./decisions/steps.ts";
 import type { Subject } from "./decisions/taken.ts";
-import type { Doc } from "./docs/doc.ts";
+import { type Doc, FRONTS_DIR } from "./docs/doc.ts";
 import { buildIndex, type SearchIndex, updateIndex } from "./search.ts";
 import { loadStore, type Store } from "./store.ts";
 
@@ -42,6 +42,20 @@ export interface Model extends Store {
   statedNextFree: { steps?: number; pending?: number };
   /** Built on first use (about a second over the real data), or updated from the index of the model it follows. */
   readonly index: SearchIndex;
+}
+
+/**
+ * A document by a ref given in any of the forms someone may type: the exact ref, its folder's README, the ref
+ * without the `fronts/` prefix (the shape before the real migration moves the data under it, which `moved.json`
+ * cannot yet know about), or that unprefixed form's README.
+ */
+export function docAt(model: Model, ref: string): Doc | undefined {
+  return (
+    model.docByRef.get(ref) ??
+    model.docByRef.get(`${ref}/README`) ??
+    model.docByRef.get(`${FRONTS_DIR}/${ref}`) ??
+    model.docByRef.get(`${FRONTS_DIR}/${ref}/README`)
+  );
 }
 
 /** The model a write left behind: the one before it, and the files it changed (relative to the data repository). */
@@ -124,7 +138,7 @@ export function buildModel(store: Store, follows?: Follows): Model {
 }
 
 /** A front is a numbered directory at the top of specs/; its README titles it and names its milestone. */
-function frontsOf(docs: Doc[]): Front[] {
+export function frontsOf(docs: Doc[]): Front[] {
   const byRef = new Map<string, Front>();
   for (const d of docs) {
     if (!d.front) continue;
