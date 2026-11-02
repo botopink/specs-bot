@@ -1,37 +1,61 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   answer,
   buildModel,
   check,
+  loadStore,
   markReviewed,
   type Model,
-  parsePending,
-  parseRetired,
-  parseSteps,
-  parseTaken,
-  parseDoc,
+  type Plan,
   pendingAdd,
   pendingEdit,
   pendingEtag,
   pendingWithdraw,
-  placeDocs,
   retiredAdd,
   setCell,
   supersede,
-  type Plan,
   WriteError,
 } from "../src/index.ts";
 
-const STEPS = `# Steps
+// decisions-taken/README.md + one file per group (group.ts), the layout answer/supersede/setCell assume.
+// "lang" carries prose (lead, a paragraph, Steps, Binds) and two rows; "unfiled" is a plain group — the shape
+// a subject never has (store.ts's loadRecord skips it as a Subject).
+const README = `# Decisions taken
 
-**The next free number is 3.**
+The rules in force. **The next free number is 3.**
 
-## L
+## Groups
+
+- lang
+- unfiled
+`;
+
+const LANG = `# lang — the language
+
+**Lead.**
+
+(1) Text (1).
+
+Steps: 1, 2
+Binds: x
+
+## Record
 
 | # | Id | Rule in force | Binds | Cell |
 |---|---|---|---|---|
 | 1 | q-1 · (the maintainer, 2026-10-01) | **A rule.** | \`machine-1/150\` s3 |  |
 | 2 | q-2 · (the maintainer, 2026-10-02) | **Another rule.** | x | another_rule |
+`;
+
+const UNFILED = `# unfiled — not yet grouped
+
+## Record
+
+| # | Id | Rule in force | Binds | Cell |
+|---|---|---|---|---|
 `;
 
 const PENDING = `# Pending
@@ -58,18 +82,6 @@ number, which is **3**.
 None open.
 `;
 
-const TAKEN = `# Taken
-
-## lang — the language
-
-**Lead.**
-
-(1) Text (1).
-
-Steps: 1, 2
-Binds: x
-`;
-
 const RETIRED = `# Retired
 
 ## Language spellings
@@ -85,30 +97,57 @@ const RETIRED = `# Retired
 | a | b | 2 |  |
 `;
 
-function model(over: { steps?: string; pending?: string } = {}): Model {
-  return buildModel({
-    specsDir: "/nowhere",
-    steps: parseSteps(over.steps ?? STEPS),
-    pending: parsePending(over.pending ?? PENDING),
-    taken: parseTaken(TAKEN),
-    retired: parseRetired(RETIRED),
-    tree: placeDocs([parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n")]),
-    chat: [],
-  });
+const FILES: Record<string, string> = {
+  "specs/decisions-taken/README.md": README,
+  "specs/decisions-taken/lang.md": LANG,
+  "specs/decisions-taken/unfiled.md": UNFILED,
+  "specs/decisions-pending.md": PENDING,
+  "specs/retired.md": RETIRED,
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
+};
+
+function write(root: string, files: Record<string, string>): void {
+  for (const [p, t] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, p)), { recursive: true });
+    writeFileSync(join(root, p), t);
+  }
+}
+
+// Each model is built over its own temp directory (the pattern store.test.ts uses for the new layout), so a
+// write's Plan — whose Change.path is a real file under decisions-taken/ — can be re-applied and reloaded the
+// same way the api would. filesOf remembers which files built a given Model, so `applied` can start from them.
+const filesOf = new WeakMap<Model, Record<string, string>>();
+
+function rebuild(files: Record<string, string>): Model {
+  const root = mkdtempSync(join(tmpdir(), "specs-bot-wd-"));
+  write(root, files);
+  const m = buildModel(loadStore(root));
+  filesOf.set(m, files);
+  return m;
+}
+
+function model(over: Record<string, string> = {}): Model {
+  return rebuild({ ...FILES, ...over });
 }
 
 /** The model over the data a plan leaves, as the writer would load it. */
 function applied(m: Model, plan: Plan): Model {
-  const text = (path: string, now: string) => plan.changes.find((c) => c.path === path)?.after ?? now;
-  return buildModel({
-    specsDir: "/nowhere",
-    steps: parseSteps(text("specs/decisions-taken-steps.md", m.steps.lines.join("\n"))),
-    pending: parsePending(text("specs/decisions-pending.md", m.pending.lines.join("\n"))),
-    taken: parseTaken(text("specs/decisions-taken.md", m.taken.lines.join("\n"))),
-    retired: parseRetired(text("specs/retired.md", m.retired.lines.join("\n"))),
-    tree: m.tree,
-    chat: [],
+  const files = { ...filesOf.get(m)! };
+  for (const c of plan.changes) files[c.path] = c.after;
+  return rebuild(files);
+}
+
+/** A model over the old pair of flat files — no `record` — to check that these writes refuse it. */
+function flatModel(): Model {
+  const root = mkdtempSync(join(tmpdir(), "specs-bot-wd-flat-"));
+  write(root, {
+    "specs/decisions-taken-steps.md":
+      "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
+    "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
+    "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
+    "specs/retired.md": "# R\n",
   });
+  return buildModel(loadStore(root));
 }
 
 function refused(fn: () => unknown): WriteError {
@@ -149,7 +188,7 @@ describe("pendingAdd", () => {
 
 test("a section is found by its name before a heading that only mentions it", () => {
   const pending = PENDING.replace("## Machine 2", "## Blocking now — machine 1 and front 165\n\nNone open.\n\n## Machine 2");
-  const p = pendingAdd(model({ pending }), { id: "q-10", section: "machine 1", title: "T", fields: FIELDS });
+  const p = pendingAdd(model({ "specs/decisions-pending.md": pending }), { id: "q-10", section: "machine 1", title: "T", fields: FIELDS });
   expect(p.summary).toBe("open question q-10 in § Machine 1");
 });
 
@@ -184,6 +223,9 @@ describe("answer", () => {
     expect(after.pending.review.map((r) => r.step)).toEqual([2]);
     expect(errors(after)).toEqual([]);
     expect(p.message).toBe("spec: row 3 answers q-9");
+    // With no --subject, the row lands in "unfiled" (already there in this fixture) — no other group touched.
+    expect(p.changes.map((c) => c.path).sort()).toEqual(["specs/decisions-pending.md", "specs/decisions-taken/README.md", "specs/decisions-taken/unfiled.md"]);
+    expect(after.stepByNum.get(3)!.section).toBe("unfiled");
   });
 
   test("by a machine: the coordinator †, and marked for the maintainer's review", () => {
@@ -193,11 +235,15 @@ describe("answer", () => {
     expect(after.pending.review.at(-1)).toMatchObject({ step: 3, answered: "q-9", summary: "It narrows.", reviewed: false });
   });
 
-  test("joins a subject: its Steps and Binds, and a sentence", () => {
+  test("joins a subject: its Steps and Binds, and a sentence — touching only that group, the README and pending", () => {
     const m = model();
-    const after = applied(m, answer(m, { id: "q-9", rule: "R.", binds: "y", subject: "lang", subjectText: "(2) It narrows (3)." }, "maintainer"));
+    const p = answer(m, { id: "q-9", rule: "R.", binds: "y", subject: "lang", subjectText: "(2) It narrows (3)." }, "maintainer");
+    expect(p.changes.map((c) => c.path).sort()).toEqual(["specs/decisions-pending.md", "specs/decisions-taken/README.md", "specs/decisions-taken/lang.md"]);
+    const after = applied(m, p);
     const s = after.subjectBySlug.get("lang")!;
     expect([s.steps, s.binds, s.paragraphs.at(-1)]).toEqual([[1, 2, 3], "x · y", "(2) It narrows (3)."]);
+    expect(after.stepByNum.get(3)!.section).toBe("lang");
+    expect(errors(after)).toEqual([]);
   });
 
   test("a new ruling no question asked keeps the page as it is but its number", () => {
@@ -210,12 +256,24 @@ describe("answer", () => {
   test("refuses an id already answered", () => {
     expect(refused(() => answer(model(), { id: "q-1", rule: "R.", binds: "x" }, "maintainer")).message).toContain("already answered by step 1");
   });
+
+  test("refuses an unknown --subject (only unfiled is ever auto-created)", () => {
+    expect(refused(() => answer(model(), { id: "q-9", rule: "R.", binds: "x", subject: "ghost" }, "maintainer")).code).toBe("not-found");
+  });
+
+  test("refuses a model with no record (the old flat-files layout)", () => {
+    const e = refused(() => answer(flatModel(), { id: "q-1", rule: "R.", binds: "x" }, "maintainer"));
+    expect(e.code).toBe("invalid");
+    expect(e.message).toContain("decisions-taken/");
+  });
 });
 
-describe("supersede, review, retired", () => {
-  test("a row is overtaken by a later one, its text kept", () => {
+describe("supersede, review, retired, setCell", () => {
+  test("a row is overtaken by a later one, its text kept, only its own group touched", () => {
     const m = applied(model(), answer(model(), { id: "q-9", rule: "R.", binds: "x" }, "maintainer"));
-    const after = applied(m, supersede(m, { num: 1, by: 3, kind: "overtaken" }));
+    const p = supersede(m, { num: 1, by: 3, kind: "overtaken" });
+    expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/lang.md"]);
+    const after = applied(m, p);
     expect(after.stepByNum.get(1)!).toMatchObject({ status: "overtaken", supersededBy: 3 });
     expect(after.stepByNum.get(1)!.rule).toBe("Overtaken by 3 (the later row in force, 730); the text as decided: **A rule.**");
   });
@@ -225,10 +283,11 @@ describe("supersede, review, retired", () => {
     expect(refused(() => supersede(model(), { num: 1, by: 9, kind: "replaced" })).code).toBe("not-found");
   });
 
-  test("set-cell changes the Cell alone (1022)", () => {
+  test("set-cell changes the Cell alone (1022), only its own group touched", () => {
     for (const value of ["tests/runtime_reuse.sh", "conformance/run.sh --self-test", "a_cell"]) {
       const p = setCell(model(), { num: 1, value });
       expect(p.op).toBe("step.cell");
+      expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/lang.md"]);
       const row = applied(model(), p).stepByNum.get(1)!;
       expect(row.cell).toBe(value);
       expect(p.changes[0]!.after).toContain(`| 1 | q-1 · (the maintainer, 2026-10-01) | **A rule.** | \`machine-1/150\` s3 | ${value} |`);
