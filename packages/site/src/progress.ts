@@ -154,7 +154,7 @@ function laneOf(heading: string): string | undefined {
   return m?.[1];
 }
 
-function statusItems(doc: Doc, nums: Set<number>): { front: number; item: ProgressItem }[] {
+export function statusItems(doc: Doc, nums: Set<number>): { front: number; item: ProgressItem }[] {
   const out: { front: number; item: ProgressItem }[] = [];
   const headingAt = new Map(doc.sections.map((s) => [s.start, s]));
   let lane: string | undefined;

@@ -138,7 +138,7 @@ export function buildModel(store: Store, follows?: Follows): Model {
 }
 
 /** A front is a numbered directory at the top of specs/; its README titles it and names its milestone. */
-function frontsOf(docs: Doc[]): Front[] {
+export function frontsOf(docs: Doc[]): Front[] {
   const byRef = new Map<string, Front>();
   for (const d of docs) {
     if (!d.front) continue;
