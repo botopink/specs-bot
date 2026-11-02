@@ -16,8 +16,8 @@ const FILES: Record<string, string> = {
     "# lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
   "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
   "specs/retired.md": "# R\n",
-  "specs/fronts/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
-  "specs/fronts/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n\n## Open\n\n- [ ] b\n",
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
+  "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n\n## Open\n\n- [ ] b\n",
   "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n",
   "specs/fronts/163-meta-ci/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 163 — meta-ci\n",
   "conversation-chat/machine-1/20261021-1144-hello-from-the-maintainer-mt-0001.md":
@@ -42,7 +42,7 @@ async function dataRepo(): Promise<{ root: string; seeded: string }> {
   await git(root, ["init", "-q", "-b", "main"]);
   await git(root, ["add", "."]);
   await git(root, ["commit", "-qm", "init"]);
-  writeFileSync(join(root, "specs/fronts/milestone/status.md"), `${FILES["specs/fronts/milestone/status.md"]}- [ ] c\n`);
+  writeFileSync(join(root, "specs/milestone/status.md"), `${FILES["specs/milestone/status.md"]}- [ ] c\n`);
   await git(root, ["commit", "-qam", "spec(1.0.12-beta): milestone/status: open c", "-m", "Op: doc.append\nParty: machine-2"], {
     GIT_AUTHOR_NAME: "machine-2",
     GIT_AUTHOR_EMAIL: "machine-2@specs-bot",
@@ -91,7 +91,7 @@ describe("/api/now and /api/doing", () => {
     expect(of(n, "machine-1").chat[1]).toEqual({ id: "mt-0001", from: "maintainer", to: "machine-1", subject: "Hello from the maintainer", at: "2026-10-21T11:44" });
     expect(of(n, "machine-2").chat.map((m: { id: string }) => m.id)).toEqual(["mt-0002"]);
     // The log's commit by machine-2 (its trailers); the commit by hand names no party and is left out.
-    expect(of(n, "machine-2").recent).toEqual([{ op: "doc.append", summary: "milestone/status: open c", refs: ["fronts/milestone/status"], commit: seeded, at: expect.any(String) }]);
+    expect(of(n, "machine-2").recent).toEqual([{ op: "doc.append", summary: "milestone/status: open c", refs: ["milestone/status"], commit: seeded, at: expect.any(String) }]);
     expect(n.parties.flatMap((p) => p.recent).length).toBe(1);
     // The site's /now page renders the same.
     const page = await (await app.request("/now")).text();
@@ -168,10 +168,10 @@ describe("/api/now and /api/doing", () => {
 
   test("a write lands at the top of the party's recent writes", async () => {
     const s = await take("machine-1");
-    const w = await call("POST", "/api/write/doc.append", { ref: "fronts/milestone/status", section: "done", text: "- [x] d", apply: true }, s);
+    const w = await call("POST", "/api/write/doc.append", { ref: "milestone/status", section: "done", text: "- [x] d", apply: true }, s);
     expect(w.status).toBe(200);
     const recent = of(await now(), "machine-1").recent;
-    expect(recent[0]).toEqual({ op: "doc.append", summary: w.body.summary, refs: ["fronts/milestone/status#done"], commit: w.body.commit, at: expect.any(String) });
+    expect(recent[0]).toEqual({ op: "doc.append", summary: w.body.summary, refs: ["milestone/status#done"], commit: w.body.commit, at: expect.any(String) });
     await call("DELETE", "/api/session", undefined, s);
   });
 });

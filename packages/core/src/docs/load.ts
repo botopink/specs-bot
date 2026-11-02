@@ -17,7 +17,7 @@ export interface DocTree {
   moved: Map<string, string>;
 }
 
-export const MILESTONE_DIR = "fronts/milestone";
+export const MILESTONE_DIR = "milestone";
 
 export function loadDocs(specsDir: string): DocTree {
   const docs: Doc[] = [];

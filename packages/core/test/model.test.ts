@@ -19,7 +19,7 @@ const model = buildModel({
   tree: placeDocs([
     parseDoc("fronts/150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n"),
     parseDoc("fronts/150-rakun/04-rakun/track.md", "# Track 04\n"),
-    parseDoc("fronts/milestone/status.md", "# Status\n"),
+    parseDoc("milestone/status.md", "# Status\n"),
   ]),
   chat: [],
   // buildModel reads store.steps/taken/etc. alone, never store.record, so an empty one satisfies the type.

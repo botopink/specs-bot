@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { anchorOf, compareVersions, docMeta, FRONTS_DIR, loadDocs, parseDoc, placeDocs, sectionText, serializeDoc } from "../src/index.ts";
+import { anchorOf, compareVersions, docMeta, FRONTS_DIR, loadDocs, MILESTONE_DIR, parseDoc, placeDocs, sectionText, serializeDoc } from "../src/index.ts";
 
 describe("docMeta", () => {
   test("reads front and group from the path under fronts/; milestone and machine wait for the loader", () => {
@@ -27,12 +27,12 @@ describe("docMeta", () => {
     });
   });
 
-  test("fronts/milestone's own file has neither", () => {
-    const m = docMeta("fronts/milestone/status.md");
+  test("milestone's own file has neither", () => {
+    const m = docMeta("milestone/status.md");
     expect([m.front, m.group, m.name]).toEqual([undefined, undefined, "status"]);
   });
 
-  test("FRONTS_DIR is the folder name every front (and fronts/milestone/) sits under", () => {
+  test("FRONTS_DIR is the folder name every front sits under (milestone/ stays beside it)", () => {
     expect(FRONTS_DIR).toBe("fronts");
   });
 
@@ -47,9 +47,9 @@ describe("docMeta", () => {
 
 describe("placeDocs", () => {
   const tree = placeDocs([
-    parseDoc("fronts/milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
-    parseDoc("fronts/milestone/status.md", "# Status\n"),
-    parseDoc("fronts/milestone/machine-1.md", "# Machine 1\n"),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+    parseDoc("milestone/status.md", "# Status\n"),
+    parseDoc("milestone/machine-1.md", "# Machine 1\n"),
     parseDoc("fronts/150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150\n\n## Steps\n\n**Milestone:** 9.9.9\n"),
     parseDoc("fronts/150-rakun/04-rakun/track.md", "# Track\n"),
     parseDoc("fronts/150-rakun/07-old/README.md", "---\nmilestone: 1.0.11-beta\n---\n# Old\n"),
@@ -58,7 +58,7 @@ describe("placeDocs", () => {
   ]);
   const at = (ref: string) => tree.docs.find((d) => d.ref === ref)!;
 
-  test("the current milestone is the one fronts/milestone/README.md names", () => {
+  test("the current milestone is the one milestone/README.md names", () => {
     expect(tree.current).toBe("1.0.12-beta");
     expect(tree.versions).toEqual(["1.0.5-beta", "1.0.11-beta", "1.0.12-beta"]);
   });
@@ -70,8 +70,8 @@ describe("placeDocs", () => {
   });
 
   test("the milestone's documents are the current milestone's; machine-N.md is that machine's", () => {
-    expect([at("fronts/milestone/status").version, at("fronts/milestone/status").owner]).toEqual(["1.0.12-beta", undefined]);
-    expect(at("fronts/milestone/machine-1").owner).toBe("machine-1");
+    expect([at("milestone/status").version, at("milestone/status").owner]).toEqual(["1.0.12-beta", undefined]);
+    expect(at("milestone/machine-1").owner).toBe("machine-1");
   });
 
   test("placeOf answers for a path that holds no document", () => {
@@ -171,8 +171,8 @@ if (!(!root || !existsSync(specs))) describe("the real milestone tree", () => {
     expect(new Set(tree.docs.map((d) => d.ref)).size).toBe(tree.docs.length);
   });
 
-  test("every document outside fronts/milestone/ has a front", () => {
-    const loose = tree.docs.filter((d) => !d.front && !d.ref.startsWith(`${FRONTS_DIR}/milestone/`));
+  test("every document outside milestone/ has a front", () => {
+    const loose = tree.docs.filter((d) => !d.front && !d.ref.startsWith(`${MILESTONE_DIR}/`));
     expect(loose.map((d) => d.ref)).toEqual([]);
   });
 });

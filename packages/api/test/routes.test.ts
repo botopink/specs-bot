@@ -67,8 +67,8 @@ number, which is **4**.
 |---|---|---|---|
 | \`@Task<T>\` | \`Async<T>\` | 3 |  |
 `,
-  "specs/fronts/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
-  "specs/fronts/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+  "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
   "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n\n## Steps\n\nRouting.\n",
   // The target is the pre-migration, unprefixed shape on purpose: moved.json was written before fronts/ existed
   // and knows nothing of it; docAt (model.ts) resolves that shape onto the real, fronts/-prefixed document.
@@ -204,16 +204,16 @@ describe("export", () => {
   test("ledger: the record and the current milestone's READMEs, by relative path", async () => {
     const r = (await get("/api/export/ledger")).body;
     // Both the milestone's own README and every front's README come back, each three segments deep
-    // under fronts/ (fronts/milestone/README, fronts/<front>/README) — the same pair the pre-fronts/
+    // under fronts/ (milestone/README, fronts/<front>/README) — the same pair the pre-fronts/
     // filter caught by its two-segment shape.
     expect(Object.keys(r.files).sort()).toEqual([
       "decisions-taken-steps.md",
       "fronts/150-rakun/README.md",
-      "fronts/milestone/README.md",
+      "milestone/README.md",
     ]);
     expect(r.files["decisions-taken-steps.md"]).toContain("| 3 | q-3");
     expect(r.files["fronts/150-rakun/README.md"]).toContain("Front 150 — rakun");
-    expect(r.files["fronts/milestone/README.md"]).toContain("Specs — 1.0.12-beta");
+    expect(r.files["milestone/README.md"]).toContain("Specs — 1.0.12-beta");
   });
 
   test("an unknown set is refused; a missing file is a 404", async () => {

@@ -24,8 +24,8 @@ const FILES: Record<string, string> = {
   "specs/decisions-pending.md":
     "the next free\nnumber, which is **3**.\n\n## Machine 1\n\n#### q-9 · Does the router narrow?\n- **Measured.** It refuses `for-await-one-source` and reads ranges.\n- **Options.** (a) yes; (b) no.\n- **Recommendation.** (a).\n- **Blocks.** Nothing.\n\n#### q-8 · Is the checker opaque?\n- **Measured.** Opaque routes.\n- **Blocks.** Nothing.\n",
   "specs/retired.md": "# R\n\n## Spellings\n\n| Retired | Replaced by | Decisions | Since / note |\n|---|---|---|---|\n| `@Task<T>` | `Async<T>` | 1 | an opaque spelling |\n",
-  "specs/fronts/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n\nThe milestone's router notes.\n",
-  "specs/fronts/milestone/status.md": "# Status\n\n## Done\n\n- [x] the opaque router\n\n## Open\n\n- [ ] ranges\n",
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n\nThe milestone's router notes.\n",
+  "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] the opaque router\n\n## Open\n\n- [ ] ranges\n",
   "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n\n## Steps\n\nThe router reads opaque routes.\n\n### s1\n\nRouting detail.\n",
   "specs/fronts/150-rakun/routes.md": "# Routes\n\n## Ranges\n\nA range of opaque routes.\n",
   "specs/fronts/01-checker/README.md": "---\nmilestone: 1.0.5-beta\n---\n# Checker\n\nOld opaque router notes.\n",
@@ -61,7 +61,7 @@ const AT = new Date(2026, 9, 25, 9, 5);
 
 /** The writes the test lands, one per kind of file the index reads. */
 const WRITES: [string, (m: Model) => Plan, string][] = [
-  ["doc.append", (m) => appendToSection(m, { ref: "fronts/milestone/status", anchor: "open", text: "- [ ] opaque ranges zyxwq" }), "machine-1"],
+  ["doc.append", (m) => appendToSection(m, { ref: "milestone/status", anchor: "open", text: "- [ ] opaque ranges zyxwq" }), "machine-1"],
   ["front.assign", (m) => assignFront(m, { front: "150-rakun", to: "machine-2" }, "maintainer"), "maintainer"],
   ["doc.meta", (m) => setMeta(m, { ref: "fronts/150-rakun/README", set: { model: "opus" } }), "maintainer"],
   ["answer", (m) => answer(m, { id: "q-9", rule: "The router narrows opaque ranges.", binds: "z", subject: "lang", at: AT }, "maintainer"), "maintainer"],
@@ -88,7 +88,7 @@ describe("updateIndex", () => {
       sameAnswers(r.model!.index, fresh, r.model!);
       model = r.model!;
     }
-    expect(model.index.search("zyxwq").map((h) => h.key)).toEqual(["fronts/milestone/status#open", "m2-0001", "fronts/150-rakun/narrowing#opaque-ranges"]);
+    expect(model.index.search("zyxwq").map((h) => h.key)).toEqual(["milestone/status#open", "m2-0001", "fronts/150-rakun/narrowing#opaque-ranges"]);
   });
 
   test("models never searched add up their files; the first search updates over all of them", async () => {

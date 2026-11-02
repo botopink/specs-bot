@@ -246,13 +246,13 @@ export function readRoutes(current: () => Model) {
     const files: Record<string, string> = {};
     if (set === "ledger") {
       // decisions-split.py: the record, and the milestone's README with the current fronts' READMEs (the aliases).
-      // In the flat, pre-fronts/ tree both kinds of README sat two segments down (`<front>/README`,
-      // `milestone/README`); under fronts/ they sit one deeper (`fronts/<front>/README`,
-      // `fronts/milestone/README`) — a front's and the milestone's own, both wanted here as before.
+      // A front's README sits under fronts/ (`fronts/<front>/README`); the milestone's own stays outside it
+      // (`milestone/README`) — both wanted here as before.
       files["decisions-taken-steps.md"] = renderLedger(model);
       for (const d of model.tree.docs) {
         const parts = d.ref.split("/");
-        if (d.version !== current || d.name !== "README" || parts.length !== 3 || parts[0] !== FRONTS_DIR) continue;
+        const front = parts.length === 3 && parts[0] === FRONTS_DIR;
+        if (d.version !== current || d.name !== "README" || !(front || d.ref === `${MILESTONE_DIR}/README`)) continue;
         files[`${d.ref}.md`] = d.lines.join("\n");
       }
     } else if (set === "language-gaps") {

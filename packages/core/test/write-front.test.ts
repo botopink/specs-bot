@@ -32,7 +32,7 @@ const model = buildModel({
   taken: parseTaken(""),
   retired: parseRetired(""),
   tree: placeDocs([
-    parseDoc("fronts/milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
     parseDoc("fronts/150-rakun/README.md", "---\nmilestone: 1.0.12-beta\npriority: high\n---\n# Front 150\n\nText.\n"),
     parseDoc("fronts/150-rakun/04-rakun/track.md", "---\nmilestone: 1.0.12-beta\n---\n# Track\n"),
     parseDoc("fronts/163-meta-ci/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-2\n---\n# Front 163\n"),
@@ -102,7 +102,7 @@ describe("the owner belongs on the front's README", () => {
     const stray = buildModel({
       ...model,
       tree: placeDocs([
-        parseDoc("fronts/milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+        parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
         parseDoc("fronts/150-rakun/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Front 150\n"),
         parseDoc("fronts/150-rakun/04-rakun/track.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Track\n"),
       ]),

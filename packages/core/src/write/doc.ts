@@ -1,6 +1,7 @@
 // Document writes (PLAN.md § 5.2) — the most frequent: a status checklist, a front's README.
 // Each plans one change to one file; frozen milestones are refused.
 import { type Doc, docMeta, FRONTS_DIR, sectionText } from "../docs/doc.ts";
+import { MILESTONE_DIR } from "../docs/load.ts";
 import { type Meta, splitMeta, withMeta } from "../docs/meta.ts";
 import { docAt, type Model } from "../model.ts";
 import { etagOf, type Plan, WriteError } from "./plan.ts";
@@ -102,11 +103,11 @@ export function addSection(model: Model, input: { ref: string; after: string; he
 export function newDoc(model: Model, input: { ref: string; text: string }, opening = false): Plan {
   const ref = input.ref.replace(/\.md$/, "");
   if (model.docByRef.has(ref)) throw new WriteError("invalid", `doc ${ref} already exists`, "specs-bot doc edit changes it");
-  // Every document opened from here on lives under fronts/ — the milestone's own pages included (load.ts's
-  // MILESTONE_DIR); decisions-taken/*, the only other thing under specs/, is written through write/decisions.ts,
-  // never here, so no exception from that rule is needed.
-  if (!ref.startsWith(`${FRONTS_DIR}/`)) {
-    throw new WriteError("invalid", `${ref} is not under ${FRONTS_DIR}/`, `a document lives under ${FRONTS_DIR}/<front>/…`);
+  // Every document opened from here on lives under fronts/, or among the milestone's own pages (load.ts's
+  // MILESTONE_DIR, which stays outside fronts/); decisions-taken/*, the only other thing under specs/, is written
+  // through write/decisions.ts, never here.
+  if (!ref.startsWith(`${FRONTS_DIR}/`) && !ref.startsWith(`${MILESTONE_DIR}/`)) {
+    throw new WriteError("invalid", `${ref} is not under ${FRONTS_DIR}/ or ${MILESTONE_DIR}/`, `a document lives under ${FRONTS_DIR}/<front>/… or ${MILESTONE_DIR}/`);
   }
   let where;
   try {

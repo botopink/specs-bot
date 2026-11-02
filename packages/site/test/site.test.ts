@@ -74,12 +74,12 @@ number, which is **5**.
 | \`@Task<T>\` | \`Async<T>\` | 3 (2), 4 | 2026-10-18 |
 | \`Option<T>\` | \`?T\` | 1 |  |
 `,
-  "fronts/milestone/README.md": `---
+  "milestone/README.md": `---
 milestone: 1.0.12-beta
 ---
 # Specs — 1.0.12-beta
 `,
-  "fronts/milestone/status.md": `# Status — 1.0.12-beta
+  "milestone/status.md": `# Status — 1.0.12-beta
 
 ## Done
 
@@ -89,7 +89,7 @@ Front [150](../150-rakun/README.md) landed.
 milestone: 1.0.12-beta
 owner: machine-1
 depends-on: |-
-  144 B-11 (\`wrapWith\`), see [the status](../milestone/status.md#done)
+  144 B-11 (\`wrapWith\`), see [the status](../../milestone/status.md#done)
   and B-12
 ---
 # Front 150 — rakun
@@ -98,11 +98,11 @@ depends-on: |-
 
 ## Steps
 
-See [the status](../milestone/status.md#done), [pending](../../decisions-pending.md), [the repo](../../../repository/rakun/AGENTS.md) and [an example](examples/a.bp).
+See [the status](../../milestone/status.md#done), [pending](../../decisions-pending.md), [the repo](../../../repository/rakun/AGENTS.md) and [an example](examples/a.bp).
 
 ### s1 · The \`bpp\` router
 `,
-  "fronts/milestone/machine-1.md": "# Machine 1 — the work queue\n",
+  "milestone/machine-1.md": "# Machine 1 — the work queue\n",
   "fronts/150-rakun/04-rakun/track.md": "# Track 04 — rakun\n",
   "fronts/150-rakun/121-bpp-content/context.md": "# Front 121 — bpp content: posts as `data`\n",
   "fronts/150-rakun/121-bpp-content/examples/post.md": "---\ntitle: Hello\n---\n# A sample post\n",
@@ -255,7 +255,7 @@ describe("the site over a fixture", () => {
     const h2 = [...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1]);
     expect(h2).toEqual(["milestone", "fronts"]);
     // A machine's page is one of the milestone's documents.
-    expect(body).toContain('<a href="/docs/fronts/milestone/machine-1">machine-1</a>');
+    expect(body).toContain('<a href="/docs/milestone/machine-1">machine-1</a>');
     // The owners filter the list.
     expect(body).toContain('<a href="/fronts?owner=machine-1">machine-1 · 1</a>');
     const one = (await get("/fronts?owner=machine-2")).body;
@@ -335,7 +335,7 @@ describe("the site over a fixture", () => {
     expect(status).toBe(200);
     expect(body).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(body).not.toContain("<script>alert");
-    expect(body).toContain('href="/docs/fronts/milestone/status#done"');
+    expect(body).toContain('href="/docs/milestone/status#done"');
     expect(body).toContain('href="/pending"');
     expect(body).toContain('<span class="unresolved">the repo</span>');
     expect(body).toContain('id="s1--the-bpp-router"');
@@ -348,7 +348,7 @@ describe("the site over a fixture", () => {
     expect(body.indexOf("</h1>")).toBeLessThan(body.indexOf('<dl class="meta">'));
     expect([...dl.matchAll(/<dt translate="no">([^<]+)<\/dt>/g)].map((m) => m[1])).toEqual(["milestone", "owner", "depends-on"]);
     expect(dl).toContain("<code>wrapWith</code>");
-    expect(dl).toContain('href="/docs/fronts/milestone/status#done"');
+    expect(dl).toContain('href="/docs/milestone/status#done"');
     expect(body).not.toContain("<hr");
     expect(body).not.toContain("depends-on: |-");
   });
@@ -370,7 +370,7 @@ describe("the site over a fixture", () => {
 describe("a front's progress on the site", () => {
   const root = fixture();
   writeFileSync(
-    join(root, "specs/fronts/milestone/status.md"),
+    join(root, "specs/milestone/status.md"),
     "# Status — 1.0.12-beta\n\n## L1 — now\n\n### 150 rakun\n\n- [ ] 150 s2 — the router's tail\n\n## Done — landed\n\n### 150 rakun\n\n- [x] 150 s1 — the `bpp` router\n",
   );
   const site = createSite({ dataPath: root, status, version: "0.0.1" });
@@ -393,7 +393,7 @@ describe("a front's progress on the site", () => {
     expect(body).toContain("Steps — from the README");
     expect(body).toContain('href="/docs/fronts/150-rakun/README#s1--the-bpp-router"');
     expect(body).toContain("In status.md");
-    expect(body).toContain('href="/docs/fronts/milestone/status#150-rakun"');
+    expect(body).toContain('href="/docs/milestone/status#150-rakun"');
     expect(body).toContain('<span class="lane" translate="no">Done</span>');
     expect((await get("/fronts/999")).status).toBe(404);
     expect((await get("/fronts/04?version=1.0.11-beta")).status).toBe(200);

@@ -84,8 +84,8 @@ const model = buildModel({
   taken: parseTaken(""),
   retired: parseRetired(""),
   tree: placeDocs([
-    parseDoc("fronts/milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
-    parseDoc("fronts/milestone/status.md", STATUS),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+    parseDoc("milestone/status.md", STATUS),
     parseDoc("fronts/150-rakun/README.md", README),
     parseDoc("fronts/150-rakun/04-rakun/track.md", "# Track 04\n\n- [ ] not a step of the README\n"),
     parseDoc("fronts/135-snap/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 135 — snap\n\nCoordination only.\n"),
@@ -149,7 +149,7 @@ describe("buildProgress — status.md", () => {
   test("a front whose README has no steps counts from status.md, and says so", () => {
     const p = progress.get(135)!;
     expect([p.basis, p.counts]).toEqual(["status", { done: 1, open: 2, blocked: 0 }]);
-    expect(progress.get(135)!.status[2]!.href).toBe("/docs/fronts/milestone/status#135-snap");
+    expect(progress.get(135)!.status[2]!.href).toBe("/docs/milestone/status#135-snap");
   });
 });
 

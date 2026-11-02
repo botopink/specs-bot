@@ -44,14 +44,14 @@ const model = buildModel({
   taken: parseTaken(""),
   retired: parseRetired(""),
   tree: placeDocs([
-    parseDoc("fronts/milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
-    parseDoc("fronts/milestone/status.md", STATUS),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+    parseDoc("milestone/status.md", STATUS),
     parseDoc("fronts/01-checker/status.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n\n## Done\n\nx\n"),
   ]),
   chat: [],
   record: { readme: { lines: [], order: [] }, groups: new Map() },
 });
-const doc = model.docByRef.get("fronts/milestone/status")!;
+const doc = model.docByRef.get("milestone/status")!;
 const after = (p: { changes: { after: string }[] }) => p.changes[0]!.after;
 
 function refused(fn: () => unknown): WriteError {
@@ -66,24 +66,24 @@ function refused(fn: () => unknown): WriteError {
 
 describe("replaceSection", () => {
   test("replaces heading to the next heading of its level, subsections included", () => {
-    const p = replaceSection(model, { ref: "fronts/milestone/status", anchor: "open", text: "## Open\n\n- [ ] c\n- [ ] d\n", etag: sectionEtag(doc, "open")! });
+    const p = replaceSection(model, { ref: "milestone/status", anchor: "open", text: "## Open\n\n- [ ] c\n- [ ] d\n", etag: sectionEtag(doc, "open")! });
     expect(after(p)).toBe(STATUS.replace("- [ ] c\n\n### Detail\n\nText.\n", "- [ ] c\n- [ ] d\n"));
-    expect([p.op, p.refs, p.changes[0]!.path]).toEqual(["doc.replace", ["fronts/milestone/status#open"], "specs/fronts/milestone/status.md"]);
+    expect([p.op, p.refs, p.changes[0]!.path]).toEqual(["doc.replace", ["milestone/status#open"], "specs/milestone/status.md"]);
     expect(p.message).toBe("spec(1.0.12-beta): milestone/status § Open rewritten");
   });
 
   test("the last section keeps the file's final newline", () => {
-    const p = replaceSection(model, { ref: "fronts/milestone/status", anchor: "notes", text: "## Notes\n\nNew.", etag: sectionEtag(doc, "notes")! });
+    const p = replaceSection(model, { ref: "milestone/status", anchor: "notes", text: "## Notes\n\nNew.", etag: sectionEtag(doc, "notes")! });
     expect(after(p).endsWith("## Notes\n\nNew.\n")).toBe(true);
   });
 
   test("a stale etag is a conflict that carries the current one", () => {
-    const e = refused(() => replaceSection(model, { ref: "fronts/milestone/status", anchor: "open", text: "## Open\n", etag: "old" }));
+    const e = refused(() => replaceSection(model, { ref: "milestone/status", anchor: "open", text: "## Open\n", etag: "old" }));
     expect([e.code, e.status, e.detail?.etag]).toEqual(["conflict", 409, sectionEtag(doc, "open")]);
   });
 
   test("the text must start with a heading of the section's level", () => {
-    expect(refused(() => replaceSection(model, { ref: "fronts/milestone/status", anchor: "open", text: "### Open\n", etag: sectionEtag(doc, "open")! })).code).toBe("invalid");
+    expect(refused(() => replaceSection(model, { ref: "milestone/status", anchor: "open", text: "### Open\n", etag: sectionEtag(doc, "open")! })).code).toBe("invalid");
   });
 
   test("a closed milestone is refused", () => {
@@ -93,24 +93,24 @@ describe("replaceSection", () => {
 
 describe("appendToSection", () => {
   test("a list item joins the list the section ends with", () => {
-    const p = appendToSection(model, { ref: "fronts/milestone/status", anchor: "done", text: "- [x] c" });
+    const p = appendToSection(model, { ref: "milestone/status", anchor: "done", text: "- [x] c" });
     expect(after(p)).toBe(STATUS.replace("- [x] b\n", "- [x] b\n- [x] c\n"));
   });
 
   test("a paragraph is its own, after the subsections", () => {
-    const p = appendToSection(model, { ref: "fronts/milestone/status", anchor: "open", text: "Later." });
+    const p = appendToSection(model, { ref: "milestone/status", anchor: "open", text: "Later." });
     expect(after(p)).toBe(STATUS.replace("Text.\n\n## Notes", "Text.\n\nLater.\n\n## Notes"));
   });
 });
 
 describe("addSection", () => {
   test("inserts after a section and its subsections", () => {
-    const p = addSection(model, { ref: "fronts/milestone/status", after: "open", heading: "Blocked", text: "- [ ] e" });
+    const p = addSection(model, { ref: "milestone/status", after: "open", heading: "Blocked", text: "- [ ] e" });
     expect(after(p)).toBe(STATUS.replace("Text.\n\n## Notes", "Text.\n\n## Blocked\n\n- [ ] e\n\n## Notes"));
   });
 
   test("after the last section the file still ends in one newline", () => {
-    const p = addSection(model, { ref: "fronts/milestone/status", after: "notes", heading: "End", text: "Z." });
+    const p = addSection(model, { ref: "milestone/status", after: "notes", heading: "End", text: "Z." });
     expect(after(p).endsWith("Last.\n\n## End\n\nZ.\n")).toBe(true);
   });
 });
@@ -123,7 +123,7 @@ const owned = buildModel({
   taken: parseTaken(""),
   retired: parseRetired(""),
   tree: placeDocs([
-    parseDoc("fronts/milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
+    parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n"),
     parseDoc("fronts/150-rakun/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\npriority: high\n---\n# Front 150\n\n## Steps\n\nx\n"),
     parseDoc("fronts/01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n"),
   ]),
@@ -133,9 +133,9 @@ const owned = buildModel({
 
 describe("newDoc", () => {
   test("a new document beside existing ones, its metadata block first: the current milestone", () => {
-    const p = newDoc(model, { ref: "fronts/milestone/contracts", text: "# Contracts\n\nText." });
+    const p = newDoc(model, { ref: "milestone/contracts", text: "# Contracts\n\nText." });
     expect(p.changes).toEqual([
-      { path: "specs/fronts/milestone/contracts.md", before: null, after: "---\nmilestone: 1.0.12-beta\n---\n# Contracts\n\nText.\n" },
+      { path: "specs/milestone/contracts.md", before: null, after: "---\nmilestone: 1.0.12-beta\n---\n# Contracts\n\nText.\n" },
     ]);
   });
 
@@ -148,17 +148,17 @@ describe("newDoc", () => {
     expect(refused(() => newDoc(owned, { ref: "fronts/150-rakun/x", text: "---\nowner: machine-2\n---\n# X\n" })).message).toContain("claim / assign");
   });
 
-  test("refuses a ref outside fronts/ with a hint, before anything else about it is checked", () => {
-    expect(refused(() => newDoc(model, { ref: "150-rakun/x", text: "# X" })).message).toContain("under fronts/");
-    expect(refused(() => newDoc(model, { ref: "milestone/x", text: "# X" })).hint).toContain("fronts/<front>");
+  test("refuses a ref outside fronts/ and milestone/ with a hint, before anything else about it is checked", () => {
+    expect(refused(() => newDoc(model, { ref: "150-rakun/x", text: "# X" })).message).toContain("under fronts/ or milestone/");
+    expect(refused(() => newDoc(model, { ref: "other/x", text: "# X" })).hint).toContain("fronts/<front>");
   });
 
   test("refuses an existing ref, a folder with no documents, a missing title, another milestone", () => {
-    expect(refused(() => newDoc(model, { ref: "fronts/milestone/status", text: "# S" })).message).toContain("already exists");
+    expect(refused(() => newDoc(model, { ref: "milestone/status", text: "# S" })).message).toContain("already exists");
     expect(refused(() => newDoc(model, { ref: "fronts/150-nowhere/x", text: "# X" })).message).toContain("no document lives");
-    expect(refused(() => newDoc(model, { ref: "fronts/milestone/notes", text: "No title" })).message).toContain("starts with its title");
-    expect(refused(() => newDoc(model, { ref: "fronts/milestone/notes", text: "---\nmilestone: 1.0.5-beta\n---\n# N" })).message).toContain("milestone: 1.0.5-beta");
-    expect(refused(() => newDoc(model, { ref: "fronts/milestone/notes", text: "---\nmilestone: [\n---\n# N" })).message).toContain("metadata block");
+    expect(refused(() => newDoc(model, { ref: "milestone/notes", text: "No title" })).message).toContain("starts with its title");
+    expect(refused(() => newDoc(model, { ref: "milestone/notes", text: "---\nmilestone: 1.0.5-beta\n---\n# N" })).message).toContain("milestone: 1.0.5-beta");
+    expect(refused(() => newDoc(model, { ref: "milestone/notes", text: "---\nmilestone: [\n---\n# N" })).message).toContain("metadata block");
     expect(refused(() => newDoc(owned, { ref: "fronts/01-checker/notes", text: "# N" })).code).toBe("frozen");
   });
 });
@@ -180,7 +180,7 @@ describe("setMeta", () => {
   });
 
   test("a document with no block gets one, its milestone first", () => {
-    const text = after(setMeta(model, { ref: "fronts/milestone/status", set: { track: "machine-1" } }));
+    const text = after(setMeta(model, { ref: "milestone/status", set: { track: "machine-1" } }));
     expect(text.startsWith("---\nmilestone: 1.0.12-beta\ntrack: machine-1\n---\n# Status — 1.0.12-beta\n")).toBe(true);
   });
 

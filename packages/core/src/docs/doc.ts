@@ -1,5 +1,5 @@
 // A spec document: any .md under specs/ except the decision files at its root. The tree is flat
-// (`fronts/<NNN-front>/[<NNN-group>/]…/<name>.md`, the milestone's own documents in `fronts/milestone/`); a
+// (`fronts/<NNN-front>/[<NNN-group>/]…/<name>.md`, the milestone's own documents in `milestone/`); a
 // front's milestone and machine are keys of the YAML block at its top (`milestone: 1.0.12-beta`, `owner:
 // machine-1`; meta.ts).
 

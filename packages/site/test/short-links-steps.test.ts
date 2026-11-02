@@ -26,8 +26,8 @@ const FILES: Record<string, string> = {
     "# lang — l\n\n**L.**\n\nText.\n\nSteps: 434\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 434 | q-1 · (the maintainer) | A rule. | x |  |\n",
   "specs/decisions-pending.md": "the next free\nnumber, which is **435**.\n\n## Machine 1\n\nNone open.\n",
   "specs/retired.md": "# R\n",
-  "specs/fronts/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
-  "specs/fronts/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+  "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
   "specs/fronts/144-checker/README.md": [
     "---",
     "milestone: 1.0.12-beta",
