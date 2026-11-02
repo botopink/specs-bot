@@ -14,15 +14,17 @@ import {
   pendingEdit,
   pendingEtag,
   pendingWithdraw,
+  refile,
   retiredAdd,
   setCell,
+  subjectNew,
   supersede,
   WriteError,
 } from "../src/index.ts";
 
-// decisions-taken/README.md + one file per group (group.ts), the layout answer/supersede/setCell assume.
-// "lang" carries prose (lead, a paragraph, Steps, Binds) and two rows; "unfiled" is a plain group — the shape
-// a subject never has (store.ts's loadRecord skips it as a Subject).
+// decisions-taken/README.md + one file per group (group.ts), the layout answer/supersede/setCell/refile/
+// subjectNew assume. "lang" carries prose (lead, a paragraph, Steps, Binds) and two rows; "unfiled" is a
+// plain group — the shape a subject never has (store.ts's loadRecord skips it as a Subject).
 const README = `# Decisions taken
 
 The rules in force. **The next free number is 3.**
@@ -310,5 +312,98 @@ describe("supersede, review, retired, setCell", () => {
     const after = applied(model(), retiredAdd(model(), { area: "process", retired: "x", replacedBy: "y", decisions: "2 (1)" }));
     expect(after.retired.rows.map((r) => `${r.area}:${r.retired}`)).toEqual(["Language spellings:`old`", "Process and files:a", "Process and files:x"]);
     expect(refused(() => retiredAdd(model(), { area: "process", retired: "x", replacedBy: "y", decisions: "77" })).message).toContain("77");
+  });
+});
+
+describe("refile", () => {
+  test("moves the row to another group, leaving the rest of that group and every other group untouched", () => {
+    const m = model();
+    const p = refile(m, { num: 1, to: "unfiled" });
+    expect(p.changes.map((c) => c.path).sort()).toEqual(["specs/decisions-taken/lang.md", "specs/decisions-taken/unfiled.md"]);
+    const after = applied(m, p);
+    expect(after.stepByNum.get(1)!.section).toBe("unfiled");
+    expect(after.stepByNum.get(2)!.section).toBe("lang");
+    // Home moved; the citation in lang's own Steps: is untouched (home and citation are independent).
+    expect(after.subjectBySlug.get("lang")!.steps).toEqual([1, 2]);
+    expect(errors(after)).toEqual([]);
+  });
+
+  test("--cite adds the row to a group with no Steps: line yet", () => {
+    const m = model();
+    const after = applied(m, refile(m, { num: 1, to: "unfiled", cite: true }));
+    const g = after.record!.groups.get("unfiled")!;
+    expect(g.steps).toEqual([1]);
+  });
+
+  const WITH_STD: Record<string, string> = {
+    ...FILES,
+    "specs/decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 3.**\n\n## Groups\n\n- lang\n- std\n- unfiled\n",
+    "specs/decisions-taken/std.md":
+      "# std — the standard library's surface\n\n**What std holds.**\n\nSteps: 2\nBinds: std\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n",
+  };
+
+  test("--cite extends an existing Steps: list", () => {
+    const m = model(WITH_STD);
+    const after = applied(m, refile(m, { num: 1, to: "std", cite: true }));
+    expect(after.subjectBySlug.get("std")!.steps).toEqual([2, 1]);
+    expect(after.stepByNum.get(1)!.section).toBe("std");
+    // lang still cites 1 in its own Steps: (refile moved the row's home, not the citation elsewhere).
+    expect(after.subjectBySlug.get("lang")!.steps).toEqual([1, 2]);
+  });
+
+  test("--cite is a no-op on Steps: when the destination already cites the row — no duplicate", () => {
+    const m = model(WITH_STD);
+    const after = applied(m, refile(m, { num: 2, to: "std", cite: true }));
+    expect(after.subjectBySlug.get("std")!.steps).toEqual([2]);
+    expect(after.stepByNum.get(2)!.section).toBe("std");
+  });
+
+  test("refuses moving a row to the group it already lives in, an unknown destination, or an unknown row", () => {
+    expect(refused(() => refile(model(), { num: 1, to: "lang" })).message).toContain("already in lang");
+    expect(refused(() => refile(model(), { num: 1, to: "ghost" })).code).toBe("not-found");
+    expect(refused(() => refile(model(), { num: 99, to: "unfiled" })).code).toBe("not-found");
+  });
+
+  test("refuses a model with no record", () => {
+    expect(refused(() => refile(flatModel(), { num: 1, to: "lang" })).code).toBe("invalid");
+  });
+});
+
+describe("subjectNew", () => {
+  test("creates the group file and lists it in the README right before unfiled", () => {
+    const m = model();
+    const p = subjectNew(m, { slug: "std", summary: "the standard library's surface", lead: "What std holds.", binds: "std" });
+    expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/std.md", "specs/decisions-taken/README.md"]);
+    expect(p.changes[0]!.before).toBeNull();
+    const after = applied(m, p);
+    expect([...after.record!.groups.keys()]).toEqual(["lang", "std", "unfiled"]);
+    expect(after.record!.readme.order).toEqual(["lang", "std", "unfiled"]);
+    const g = after.record!.groups.get("std")!;
+    expect([g.summary, g.lead, g.steps, g.binds]).toEqual(["the standard library's surface", "What std holds.", [], "std"]);
+  });
+
+  test("with no lead and no binds, Steps: is still written, empty, and parses as no steps", () => {
+    const m = model();
+    const after = applied(m, subjectNew(m, { slug: "runtime", summary: "the runtime" }));
+    const g = after.record!.groups.get("runtime")!;
+    expect([g.lead, g.paragraphs, g.steps, g.binds]).toEqual(["", [], [], ""]);
+  });
+
+  test("goes to the end of the list when unfiled is not listed", () => {
+    const files = { ...FILES, "specs/decisions-taken/README.md": README.replace("- unfiled\n", "") };
+    const m = model(files);
+    const p = subjectNew(m, { slug: "std", summary: "s" });
+    expect(p.changes[1]!.after.trim().endsWith("- std")).toBe(true);
+  });
+
+  test("refuses a duplicate slug, a reserved slug, a bad slug", () => {
+    expect(refused(() => subjectNew(model(), { slug: "lang", summary: "s" })).message).toContain("already exists");
+    expect(refused(() => subjectNew(model(), { slug: "unfiled", summary: "s" })).message).toContain("reserved");
+    expect(refused(() => subjectNew(model(), { slug: "readme", summary: "s" })).message).toContain("reserved");
+    expect(refused(() => subjectNew(model(), { slug: "Not-OK", summary: "s" })).code).toBe("invalid");
+  });
+
+  test("refuses a model with no record", () => {
+    expect(refused(() => subjectNew(flatModel(), { slug: "std", summary: "s" })).code).toBe("invalid");
   });
 });

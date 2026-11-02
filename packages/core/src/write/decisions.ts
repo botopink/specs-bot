@@ -2,11 +2,11 @@
 // record; supersede a row; mark a review item; add a retired form. Each keeps the files' own conventions:
 // numbers never reused, the next free number stated alike in the record and the pending page, English only.
 //
-// answer/supersede/setCell assume the new decisions-taken/ directory layout (one README.md index plus a
-// GroupDoc file per subject, group.ts) and nothing else: the dual-mode reading store.ts/loadStore keeps is for
-// the transition, never for a write. By the time this code runs for real the migration will have already run,
-// so a model with no `record` is refused outright (recordOrThrow) rather than carrying a second, never-
-// exercised path over the old flat files.
+// answer/supersede/setCell/refile/subjectNew assume the new decisions-taken/ directory layout (one README.md
+// index plus a GroupDoc file per subject, group.ts) and nothing else: the dual-mode reading store.ts/loadStore
+// keeps is for the transition, never for a write. By the time this code runs for real the migration will have
+// already run, so a model with no `record` is refused outright (recordOrThrow) rather than carrying a second,
+// never-exercised path over the old flat files.
 import { joinRow } from "../md/table.ts";
 import { parseNumberList } from "../decisions/taken.ts";
 import type { PendingEntry, PendingSection } from "../decisions/pending.ts";
@@ -253,6 +253,21 @@ function recordInsertAt(lines: string[], proseEnd: number): number {
   return at;
 }
 
+/** Adds `num` to a group's `Steps:` list, in its prose (before `proseEnd`) — a new `Steps:` line when it has none yet. */
+function addToSteps(lines: string[], proseEnd: number, num: number): { lines: string[]; proseEnd: number } {
+  const out = [...lines];
+  const idx = out.findIndex((l, i) => i < proseEnd && l.startsWith("Steps:"));
+  if (idx !== -1) {
+    const current = parseNumberList(out[idx]!.slice("Steps:".length));
+    if (!current.includes(num)) out[idx] = `Steps: ${[...current, num].join(", ")}`;
+    return { lines: out, proseEnd };
+  }
+  let at = proseEnd;
+  while (at > 0 && out[at - 1]!.trim() === "") at--;
+  out.splice(at, 0, "", `Steps: ${num}`);
+  return { lines: out, proseEnd: proseEnd + 2 };
+}
+
 /**
  * `answer --subject`'s prose edit, inside the target group's own lines: `Steps:`/`Binds:` updated in place, or
  * inserted when the group has neither yet (the shape `answer` itself just gave a freshly auto-created group,
@@ -468,3 +483,77 @@ export function setCell(model: Model, input: { num: number; value: string }): Pl
   };
 }
 
+// ── refile, subjectNew ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Moves row `num`'s home from its current group to `to` — its line cut from the origin's `## Record` table,
+ * appended to the destination's. `cite` (optional) also adds `num` to the destination's own `Steps:`, leaving
+ * every other subject that already cites it untouched: home and citation are independent, and a row may be
+ * cited from a subject it does not live in.
+ */
+export function refile(model: Model, input: { num: number; to: string; cite?: boolean }): Plan {
+  const rec = recordOrThrow(model, "refile/subjectNew");
+  const row = model.stepByNum.get(input.num);
+  if (!row) throw new WriteError("not-found", `step ${input.num} not found`);
+  const toGroup = rec.groups.get(input.to);
+  if (!toGroup) throw new WriteError("not-found", `subject ${input.to} not found`, "specs-bot subject lists them");
+  const fromSlug = row.section;
+  if (fromSlug === input.to) throw new WriteError("invalid", `step ${input.num} is already in ${input.to}`);
+  const fromGroup = rec.groups.get(fromSlug)!;
+
+  const fromLines = [...fromGroup.lines];
+  fromLines.splice(row.line, 1);
+
+  let toLines = [...toGroup.lines];
+  let toProseEnd = toGroup.proseEnd;
+  if (input.cite && !toGroup.steps.includes(input.num)) {
+    const added = addToSteps(toLines, toProseEnd, input.num);
+    toLines = added.lines;
+    toProseEnd = added.proseEnd;
+  }
+  const rowText = joinRow([row.raw.num, row.raw.id, row.raw.rule, row.raw.binds, row.raw.cell]);
+  toLines.splice(recordInsertAt(toLines, toProseEnd), 0, rowText);
+
+  return {
+    op: "refile",
+    refs: [`step ${input.num}`],
+    message: `spec: row ${input.num} refiled ${fromSlug} → ${input.to}`,
+    summary: `move step ${input.num} from ${fromSlug} to ${input.to}${input.cite ? "; cited in its Steps" : ""}`,
+    changes: [
+      { path: groupPath(fromSlug), before: fromGroup.lines.join("\n"), after: fromLines.join("\n") },
+      { path: groupPath(input.to), before: toGroup.lines.join("\n"), after: toLines.join("\n") },
+    ],
+  };
+}
+
+/** Opens a new, empty group file (no rows yet) and lists it in the README, right before "unfiled" when one is listed. */
+export function subjectNew(model: Model, input: { slug: string; summary: string; lead?: string; binds?: string }): Plan {
+  const rec = recordOrThrow(model, "refile/subjectNew");
+  const slug = input.slug.trim();
+  if (!ID.test(slug)) throw new WriteError("invalid", `a subject's slug is lowercase letters, digits and hyphens: ${slug}`);
+  if (slug === "unfiled" || slug === "readme") throw new WriteError("invalid", `${slug} is reserved`);
+  if (rec.groups.has(slug)) throw new WriteError("invalid", `subject ${slug} already exists`);
+  const summary = oneLine(input.summary, "the summary");
+  const lead = input.lead?.trim();
+  const binds = input.binds?.trim();
+
+  const lines = [`# ${slug} — ${summary}`, ""];
+  if (lead) lines.push(`**${lead}**`, "");
+  // Steps: is written with no numbers yet — parseNumberList("") reads it as [], the same as a group with none.
+  lines.push("Steps:");
+  if (binds) lines.push(`Binds: ${binds}`);
+  lines.push("", "## Record", "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", "");
+
+  const readmeAfter = addGroupToReadme([...rec.readme.lines], slug, rec.readme.order.includes("unfiled") ? "unfiled" : undefined);
+
+  return {
+    op: "subject.new",
+    refs: [`subject ${slug}`],
+    message: `spec: subject ${slug} — ${summary}`,
+    summary: `new subject ${slug}`,
+    changes: [
+      { path: groupPath(slug), before: null, after: lines.join("\n") },
+      { path: RECORD_README, before: rec.readme.lines.join("\n"), after: readmeAfter.join("\n") },
+    ],
+  };
+}
