@@ -1,7 +1,34 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, etagOf, type Kind, MILESTONE_DIR, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
+import { check, etagOf, formatStepRow, type Kind, MILESTONE_DIR, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./sessions.ts";
+
+/**
+ * Recreates the virtual `decisions-taken-steps.md` the old flat-file layout once held — byte-compatible with
+ * what `decisions/steps.ts`'s `parseSteps` already reads: a title, the stated next-free number, then one `##
+ * <slug>` heading per group (`model.record.readme.order`, store.ts's loadRecord), its Record table and rows.
+ *
+ * The heading carries the bare slug alone, never "<slug> — <summary>": `store.ts`'s loadRecord rewrites every
+ * row's `section` to the group's bare slug (never its "slug — summary" form), so a round trip through
+ * `parseSteps` (which takes a row's section from the nearest `## ` heading verbatim) only reproduces
+ * `model.steps.rows` exactly when the heading is the bare slug. A group's summary is already one call away
+ * (`GET /api/subjects/:slug`), so dropping it here costs nothing a reader cannot get elsewhere.
+ *
+ * A model over the old layout (no `model.record`) has no groups to walk: it falls back to the old field,
+ * `steps.lines`, unchanged — the one case where that field still holds real text.
+ */
+export function renderLedger(model: Model): string {
+  if (!model.record) return model.steps.lines.join("\n");
+  const { readme, groups } = model.record;
+  const lines = ["# Decisions taken — the steps", "", `The record. **The next free number is ${model.nextFree}.**`];
+  for (const slug of readme.order) {
+    const group = groups.get(slug);
+    if (!group) continue; // group-missing: check.ts's to report, not renderLedger's to fail over.
+    const rows = [...group.rows].sort((a, b) => a.num - b.num);
+    lines.push("", `## ${slug}`, "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", ...rows.map((r) => formatStepRow(r)));
+  }
+  return lines.join("\n");
+}
 
 const KINDS: Kind[] = ["step", "pending", "subject", "retired", "section", "message"];
 
@@ -91,6 +118,9 @@ export function readRoutes(current: () => Model) {
       const hint = n > 0 && n < model.nextFree ? `${n} is a number never used` : `the next free number is ${model.nextFree}`;
       return c.json(notFound(`step ${c.req.param("n")}`, hint), 404);
     }
+    // The etag goes back with a write over the row's own line (none exists yet); it is in the new layout only —
+    // the old flat steps.md's row still has nowhere to read a per-group "lines" array from.
+    const etag = model.record ? etagOf(model.record.groups.get(r.section)!.lines[r.line]!) : undefined;
     return c.json({
       num: r.num,
       id: r.id,
@@ -103,6 +133,7 @@ export function readRoutes(current: () => Model) {
       rule: r.rule,
       binds: r.binds,
       cell: r.cell,
+      ...(etag !== undefined ? { etag } : {}),
       subjects: (model.subjectsByStep.get(r.num) ?? []).map((s) => s.slug),
       retired: (model.retiredByStep.get(r.num) ?? []).map((x) => ({ retired: x.retired, replacedBy: x.replacedBy })),
     });
@@ -144,7 +175,13 @@ export function readRoutes(current: () => Model) {
   api.get("/subjects/:slug", (c) => {
     const s = model.subjectBySlug.get(c.req.param("slug"));
     if (!s) return c.json(notFound(`subject ${c.req.param("slug")}`, "GET /api/subjects lists them"), 404);
-    return c.json({ slug: s.slug, summary: s.summary, lead: s.lead, paragraphs: s.paragraphs, steps: s.steps, binds: s.binds });
+    const group = model.record?.groups.get(s.slug);
+    // etag: the group file's own prose (before "## Record"), to send back with an edit of it.
+    // home: the rows whose section (possession, store.ts's rewrite) is this subject — not s.steps, its citations.
+    const extra = group
+      ? { etag: etagOf(group.lines.slice(0, group.proseEnd).join("\n")), home: model.steps.rows.filter((r) => r.section === s.slug).map((r) => r.num) }
+      : {};
+    return c.json({ slug: s.slug, summary: s.summary, lead: s.lead, paragraphs: s.paragraphs, steps: s.steps, binds: s.binds, ...extra });
   });
 
   api.get("/retired", (c) => {
@@ -230,7 +267,7 @@ export function readRoutes(current: () => Model) {
     const files: Record<string, string> = {};
     if (set === "ledger") {
       // decisions-split.py: the record, and the milestone's README with the current fronts' READMEs (the aliases).
-      files["decisions-taken-steps.md"] = model.steps.lines.join("\n");
+      files["decisions-taken-steps.md"] = renderLedger(model);
       for (const d of model.tree.docs) {
         if (d.version !== current || d.name !== "README" || d.ref.split("/").length !== 2) continue;
         files[`${d.ref}.md`] = d.lines.join("\n");

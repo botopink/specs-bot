@@ -2,19 +2,44 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { buildModel, loadStore, parseSteps } from "@specs-bot/core";
 import { createApp } from "../src/app.ts";
+import { renderLedger } from "../src/routes.ts";
 
+// The decisions-taken/ directory layout (group.ts): a README.md index plus one file per group — "lang" holds
+// the one row in force (3) and its prose, "overtaken" holds the row it overtook (1), unfiled stays empty.
 const FILES: Record<string, string> = {
-  "specs/decisions-taken-steps.md": `# Steps
+  "specs/decisions-taken/README.md": `# Decisions taken
 
-**The next free number is 4.**
+The rules in force. **The next free number is 4.**
 
-## Language
+## Groups
+
+- lang
+- overtaken
+`,
+  "specs/decisions-taken/lang.md": `# lang — the language
+
+**Types are nominal.**
+
+(1) An opaque record hides its fields (3).
+
+Steps: 3
+Binds: x
+
+## Record
+
+| # | Id | Rule in force | Binds | Cell |
+|---|---|---|---|---|
+| 3 | q-3 · (the maintainer) | **An opaque type's constructor is private.** | \`machine-1/150\` s4 | opaque_private |
+`,
+  "specs/decisions-taken/overtaken.md": `# overtaken — rows no longer in force
+
+## Record
 
 | # | Id | Rule in force | Binds | Cell |
 |---|---|---|---|---|
 | 1 | q-1 · (the maintainer) | Overtaken by 3 (later) | \`machine-1/150\` s3 |  |
-| 3 | q-3 · (the maintainer) | **An opaque type's constructor is private.** | \`machine-1/150\` s4 | opaque_private |
 `,
   "specs/decisions-pending.md": `# Pending
 
@@ -33,17 +58,6 @@ number, which is **4**.
 
 - **Measured.** Built as (a).
 - **Recommendation.** (c).
-`,
-  "specs/decisions-taken.md": `# Taken
-
-## lang — the language
-
-**Types are nominal.**
-
-(1) An opaque record hides its fields (3).
-
-Steps: 3
-Binds: x
 `,
   "specs/retired.md": `# Retired
 
@@ -155,6 +169,49 @@ describe("the read api", () => {
 
   test("check reports the findings", async () => {
     expect((await get("/api/check")).body.summary).toEqual({});
+  });
+});
+
+describe("renderLedger", () => {
+  test("round-trips through parseSteps: the same rows, the same fields, in model.steps.rows's own number order", () => {
+    const root = mkdtempSync(join(tmpdir(), "specs-bot-ledger-"));
+    for (const [path, text] of Object.entries(FILES)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    const model = buildModel(loadStore(root));
+    const rendered = renderLedger(model);
+    expect(rendered).toContain("**The next free number is 4.**");
+    expect(rendered).toContain("## lang");
+    expect(rendered).toContain("## overtaken");
+
+    // `line` is a position in whichever document it was read from — the group file for model.steps.rows, the
+    // rendered ledger for the reread rows — so it is never part of the round trip's own equality.
+    const strip = <T extends { line: number }>(rows: readonly T[]) => rows.map(({ line: _, ...rest }: T) => rest);
+    // Rows are grouped under their own `##` heading, same as the pre-split file (steps.test.ts's SAMPLE:
+    // Language holds 1 and 3, Backends holds 2 — never one global run from 1 up), so the round trip is checked
+    // sorted by num rather than by position.
+    const byNum = (a: { num: number }, b: { num: number }) => a.num - b.num;
+    const expected = strip([...model.steps.rows].sort(byNum));
+    expect(strip(parseSteps(rendered).rows).sort(byNum)).toEqual(expected);
+  });
+
+  test("a model over the old flat layout falls back to steps.lines, unchanged", async () => {
+    const root = mkdtempSync(join(tmpdir(), "specs-bot-ledger-flat-"));
+    const flat: Record<string, string> = {
+      "specs/decisions-taken-steps.md": "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
+      "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
+      "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
+      "specs/retired.md": "# R\n",
+      "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
+    };
+    for (const [path, text] of Object.entries(flat)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    const model = buildModel(loadStore(root));
+    expect(model.record).toBeUndefined();
+    expect(renderLedger(model)).toBe(model.steps.lines.join("\n"));
   });
 });
 
