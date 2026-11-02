@@ -11,7 +11,7 @@
 //   the front waits on them; a README step a question names is blocked.
 //
 // Built once per model and milestone (the site is rebuilt on every write).
-import { MILESTONE_DIR } from "@specs-bot/core";
+import { frontReadmeRef, MILESTONE_DIR } from "@specs-bot/core";
 import type { Doc, PendingEntry } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
 
@@ -77,7 +77,7 @@ export function buildProgress(data: SiteData, version: string): Map<number, Fron
 
   // The README steps of each front folder (144 has three folders: their steps add up).
   for (const d of docs) {
-    if (!d.front || d.group || d.ref !== `${d.front.dir}/README`) continue;
+    if (!d.front || d.group || d.ref !== frontReadmeRef(d.front)) continue;
     out.get(d.front.num)!.steps.push(...readmeSteps(d, d.front.num, blockedLabels));
   }
 

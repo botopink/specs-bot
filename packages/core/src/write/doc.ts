@@ -1,14 +1,14 @@
 // Document writes (PLAN.md § 5.2) — the most frequent: a status checklist, a front's README.
 // Each plans one change to one file; frozen milestones are refused.
-import { type Doc, docMeta, sectionText } from "../docs/doc.ts";
+import { type Doc, docMeta, FRONTS_DIR, sectionText } from "../docs/doc.ts";
 import { type Meta, splitMeta, withMeta } from "../docs/meta.ts";
-import type { Model } from "../model.ts";
+import { docAt, type Model } from "../model.ts";
 import { etagOf, type Plan, WriteError } from "./plan.ts";
 
 const pathOf = (ref: string) => `specs/${ref}.md`;
 
 function docFor(model: Model, ref: string): Doc {
-  const doc = model.docByRef.get(ref) ?? model.docByRef.get(`${ref}/README`);
+  const doc = docAt(model, ref);
   if (!doc) throw new WriteError("not-found", `doc ${ref} not found`, "specs-bot fronts / specs-bot search find one");
   if (doc.version !== model.tree.current) {
     throw new WriteError("frozen", `${doc.ref} is in ${doc.version}, a closed milestone`, `only ${model.tree.current} is written`);
@@ -102,6 +102,12 @@ export function addSection(model: Model, input: { ref: string; after: string; he
 export function newDoc(model: Model, input: { ref: string; text: string }, opening = false): Plan {
   const ref = input.ref.replace(/\.md$/, "");
   if (model.docByRef.has(ref)) throw new WriteError("invalid", `doc ${ref} already exists`, "specs-bot doc edit changes it");
+  // Every document opened from here on lives under fronts/ — the milestone's own pages included (load.ts's
+  // MILESTONE_DIR); decisions-taken/*, the only other thing under specs/, is written through write/decisions.ts,
+  // never here, so no exception from that rule is needed.
+  if (!ref.startsWith(`${FRONTS_DIR}/`)) {
+    throw new WriteError("invalid", `${ref} is not under ${FRONTS_DIR}/`, `a document lives under ${FRONTS_DIR}/<front>/…`);
+  }
   let where;
   try {
     where = docMeta(`${ref}.md`);
@@ -109,7 +115,7 @@ export function newDoc(model: Model, input: { ref: string; text: string }, openi
     throw new WriteError("invalid", `${ref} is not a document ref (<front>/…/<name>)`);
   }
   const version = model.tree.placeOf(ref.split("/").slice(0, -1).join("/")).version;
-  if (version !== model.tree.current) throw new WriteError("frozen", `${ref.split("/")[0]} is in ${version}, a closed milestone`, `write in a front of ${model.tree.current}`);
+  if (version !== model.tree.current) throw new WriteError("frozen", `${ref.split("/")[1]} is in ${version}, a closed milestone`, `write in a front of ${model.tree.current}`);
   if (!/^[a-z0-9][a-z0-9-]*$/.test(where.name) && where.name !== "README") {
     throw new WriteError("invalid", `a document's name is lowercase words with hyphens: ${where.name}`);
   }

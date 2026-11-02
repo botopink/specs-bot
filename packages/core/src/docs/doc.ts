@@ -1,6 +1,7 @@
 // A spec document: any .md under specs/ except the decision files at its root. The tree is flat
-// (`<NNN-front>/[<NNN-group>/]…/<name>.md`, the milestone's own documents in `milestone/`); a front's milestone
-// and machine are keys of the YAML block at its top (`milestone: 1.0.12-beta`, `owner: machine-1`; meta.ts).
+// (`fronts/<NNN-front>/[<NNN-group>/]…/<name>.md`, the milestone's own documents in `fronts/milestone/`); a
+// front's milestone and machine are keys of the YAML block at its top (`milestone: 1.0.12-beta`, `owner:
+// machine-1`; meta.ts).
 
 import { type Meta, splitMeta } from "./meta.ts";
 
@@ -42,20 +43,36 @@ export interface Doc extends DocMeta {
 
 const NUMBERED = /^(\d+)-([a-z0-9][a-z0-9-]*)$/;
 
+/** The folder every front (and the milestone's own documents) lives under, directly beneath specs/. */
+export const FRONTS_DIR = "fronts";
+
 /** Where a path sits in the tree; `version` and `machine` are filled by the loader from the fields. */
 export function docMeta(path: string): DocMeta {
   if (!path.endsWith(".md")) throw new Error(`not a markdown path: ${path}`);
   const ref = path.slice(0, -3);
   const parts = ref.split("/");
-  if (parts.length < 2) throw new Error(`not in a folder under specs/: ${path}`);
+  // A numbered folder only counts as a front when it sits right under fronts/ — one directly under specs/ (the
+  // shape before fronts/ held every front) names no front at all.
+  const top = parts[0] === FRONTS_DIR ? 1 : 0;
+  if (parts.length < top + 2) throw new Error(`not in a folder under specs/: ${path}`);
   const name = parts.at(-1)!;
   const meta: DocMeta = { ref, version: "", name };
-  const numbered = parts.slice(0, -1).map((d) => d.match(NUMBERED)).filter((m) => m !== null);
-  if (numbered[0] && parts[0] === numbered[0][0]) {
-    meta.front = { num: Number(numbered[0][1]), slug: numbered[0][2]!, dir: numbered[0][0] };
-    if (numbered[1]) meta.group = { num: Number(numbered[1][1]), slug: numbered[1][2]!, dir: numbered[1][0] };
+  // Only a path that actually sits under fronts/ (top === 1) is read for a front at all — a numbered folder
+  // straight under specs/ (top === 0, the shape before the real migration moves everything under fronts/) names
+  // no front, on purpose.
+  if (top === 1) {
+    const numbered = parts.slice(top, -1).map((d) => d.match(NUMBERED)).filter((m) => m !== null);
+    if (numbered[0] && parts[top] === numbered[0][0]) {
+      meta.front = { num: Number(numbered[0][1]), slug: numbered[0][2]!, dir: numbered[0][0] };
+      if (numbered[1]) meta.group = { num: Number(numbered[1][1]), slug: numbered[1][2]!, dir: numbered[1][0] };
+    }
   }
   return meta;
+}
+
+/** The ref of a front's own README, prefixed under fronts/. */
+export function frontReadmeRef(front: { dir: string }): string {
+  return `${FRONTS_DIR}/${front.dir}/README`;
 }
 
 export function parseDoc(path: string, text: string): Doc {

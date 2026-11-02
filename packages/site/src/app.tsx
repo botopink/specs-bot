@@ -1,5 +1,6 @@
 // The read-only site (PLAN.md § 4.1, phase 5): server-rendered pages over the core parsers' output, loaded once
 // at startup. Mounted by the api at "/"; never shows a file path, only refs.
+import { docAt } from "@specs-bot/core";
 import { Hono } from "hono";
 import { CSS } from "./css.ts";
 import { type Loaded, loadSiteData } from "./data.ts";
@@ -174,7 +175,7 @@ export function createSite(opts: SiteOptions) {
       // keep it as written
     }
     ref = ref.replace(/\.md$/, "").replace(/\/$/, "");
-    const doc = data.docByRef.get(ref) ?? data.docByRef.get(`${ref}/README`);
+    const doc = docAt(data, ref);
     if (!doc) {
       // A path from before the tree was flattened (short-links.ts).
       const moved = movedTo(data.tree, ref);

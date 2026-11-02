@@ -1,7 +1,7 @@
 // The one hierarchy every page shows: milestone → front → the folders inside a front → documents. The machine
 // that works a front is a value of the front (its owner, the README's **Machine:** field), never a level.
 // Anchors are stable and readable ("150-rakun-04-rakun") so a document's breadcrumbs can point back to its section.
-import { MILESTONE_DIR } from "@specs-bot/core";
+import { frontReadmeRef, MILESTONE_DIR } from "@specs-bot/core";
 import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
 
@@ -63,7 +63,7 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
     }
     f.count++;
     if (!d.group) {
-      if (d.ref === `${d.front.dir}/README`) {
+      if (d.ref === frontReadmeRef(d.front)) {
         f.readme = d;
         f.title = shortTitle(d.title, d.front.num, d.front.slug);
         f.owner = d.owner ?? "";

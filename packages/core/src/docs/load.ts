@@ -17,7 +17,7 @@ export interface DocTree {
   moved: Map<string, string>;
 }
 
-export const MILESTONE_DIR = "milestone";
+export const MILESTONE_DIR = "fronts/milestone";
 
 export function loadDocs(specsDir: string): DocTree {
   const docs: Doc[] = [];
@@ -40,6 +40,7 @@ export function loadDocs(specsDir: string): DocTree {
 export function placeDocs(docs: Doc[], moved = new Map<string, string>()): DocTree {
   const readmes = new Map(docs.filter((d) => d.name === "README").map((d) => [d.ref.slice(0, -"/README".length), d]));
   const current = readmes.get(MILESTONE_DIR)?.fields.milestone ?? "";
+  const machinePageSegment = MILESTONE_DIR.split("/").length;
 
   const placeOf = (path: string): { version: string; owner?: string } => {
     const parts = path.replace(/\.md$/, "").split("/");
@@ -51,7 +52,9 @@ export function placeDocs(docs: Doc[], moved = new Map<string, string>()): DocTr
       owner ??= f?.owner;
     }
     // The milestone's own documents: machine-N.md is that machine's page.
-    if (parts[0] === MILESTONE_DIR && /^machine-\d+$/.test(parts[1] ?? "")) owner ??= parts[1];
+    if (path.startsWith(`${MILESTONE_DIR}/`) && /^machine-\d+$/.test(parts[machinePageSegment] ?? "")) {
+      owner ??= parts[machinePageSegment];
+    }
     return { version: version ?? current, ...(owner ? { owner } : {}) };
   };
 
