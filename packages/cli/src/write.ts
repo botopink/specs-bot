@@ -5,7 +5,7 @@
 // the body of `POST /api/write/<op>` with it, from arguments named as the CLI's options are (commander's camelCase).
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { post } from "./client.ts";
+import { get, post } from "./client.ts";
 import type { ClientConfig } from "./config.ts";
 import { type Format, render } from "./output.ts";
 
@@ -81,6 +81,13 @@ export const WRITES: Record<string, { op: string; body: (a: WriteArgs) => Record
     body: (a) => ({ id: a.id, rule: a.rule, binds: a.binds, ...some({ cell: a.cell, by: a.by, subject: a.subject, subjectText: a.subjectText }), process: a.process === true }),
   },
   "set-cell": { op: "step.cell", body: (a) => ({ num: Number(a.n), value: a.value }) },
+  // "land" (not "landed"): that key is every write's own body.landed (the code commit(s) it goes with,
+  // common()'s --landed flag below) — a second, op-specific meaning on the same JSON key would collide with it,
+  // in this body and again in writeBody()'s unconditional landed: … override.
+  status: {
+    op: "status.set",
+    body: (a) => ({ ref: a.ref, label: a.label, ...some({ check: a.check, note: a.note, etag: a.etag }), ...(a.land === true ? { land: true } : {}) }),
+  },
   refile: { op: "refile", body: (a) => ({ num: Number(a.n), to: a.to, ...(a.cite === true ? { cite: true } : {}) }) },
   "subject-new": { op: "subject.new", body: (a) => ({ slug: a.slug, summary: a.summary, ...some({ lead: a.lead, binds: a.binds }) }) },
   supersede: { op: "supersede", body: (a) => ({ num: Number(a.n), by: Number(a.by), kind: a.kind }) },
@@ -173,6 +180,32 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       set[kv.slice(0, at)] = kv.slice(at + 1).replace(/\\n/g, "\n");
     }
     await write("meta", { ...o, ref, set });
+  });
+
+  // `status` serves two jobs under one name, since commander admits no second command spelled the same way:
+  // with no label it is a plain read (GET /api/status/:ref, every item of the ---status companion); with a
+  // label it is this write, dry-run by default like every other write here. `--land` (not `--landed`, already
+  // the code-commit flag `common()` gives every write) moves the item into `## Landed`.
+  common(
+    program
+      .command("status")
+      .argument("<ref>", "the document whose ---status companion is read or changed")
+      .argument("[label]", "the item to change (its recognizable prefix, e.g. \"150 s29\"); omitted: list every item")
+      .option("--check", "mark the item done")
+      .option("--uncheck", "mark the item open")
+      .option("-n, --note <text|@file|->", "a continuation line added under the item")
+      .option("--land", "move the item into ## Landed")
+      .option("-e, --etag <etag>", "the etag specs-bot status <ref> showed for the item; changed since is refused")
+      .description("list a document's ---status companion, or change one item of it"),
+  ).action(async (ref: string, label: string | undefined, o) => {
+    if (label === undefined) {
+      const value = await get(config(), `status/${ref.split("/").map(encodeURIComponent).join("/")}`, {});
+      console.log(render(value, program.opts().format as Format));
+      return;
+    }
+    if (o.check && o.uncheck) throw new Error("--check and --uncheck are exclusive");
+    const check = o.check ? true : o.uncheck ? false : undefined;
+    await write("status", { ...o, ref, label, check }, ["note"]);
   });
 
   // ── fronts ──

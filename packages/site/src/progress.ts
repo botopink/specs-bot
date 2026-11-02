@@ -13,7 +13,7 @@
 //   the front waits on them; a README step a question names is blocked.
 //
 // Built once per model and milestone (the site is rebuilt on every write).
-import { frontReadmeRef, MILESTONE_DIR } from "@specs-bot/core";
+import { frontReadmeRef, MILESTONE_DIR, statusLabel } from "@specs-bot/core";
 import type { Doc, PendingEntry } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
 
@@ -210,11 +210,13 @@ export function statusItems(doc: Doc, nums: Set<number>): { front: number; item:
     let fronts = lead ? [Number(lead[1])] : headNums;
     if (!fronts.length) fronts = [...new Set([...text.matchAll(/(?<![\d./-])(\d{1,3}) (?:s\d+|B-\d+)\b/g)].map((m) => Number(m[1])))];
     const state: ItemState = lane === "Done" || b[1] !== " " ? "done" : lane === "L5" ? "blocked" : "open";
-    const [head, ...more] = text.split(" — ");
-    const label = head!.length <= 60 ? head! : `${head!.slice(0, 57)}…`;
+    // The label/rest split is docs/status.ts's statusLabel(), the one place that owns it — write/status.ts's
+    // statusSet() reads the same label to find an item, so neither side can drift from the other.
+    const head = text.split(" — ")[0]!;
+    const { label, rest } = statusLabel(text);
     for (const f of fronts) {
       if (!nums.has(f)) continue;
-      out.push({ front: f, item: { state, label, text: more.join(" — ") || (head!.length > 60 ? head! : ""), source: "status", href: `/docs/${doc.ref}#${anchor}`, lane } });
+      out.push({ front: f, item: { state, label, text: rest || (head.length > 60 ? head : ""), source: "status", href: `/docs/${doc.ref}#${anchor}`, lane } });
     }
   });
   return out;

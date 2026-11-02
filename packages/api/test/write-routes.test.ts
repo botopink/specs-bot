@@ -15,6 +15,8 @@ const FILES: Record<string, string> = {
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n\n## Open\n\n- [ ] b\n",
+  "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 150\n",
+  "specs/fronts/150-rakun/README---status.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 150 — status\n\n## L1 — open\n\n- [ ] 150 s29 — a task\n",
 };
 
 async function git(cwd: string, ...args: string[]) {
@@ -109,6 +111,33 @@ describe("POST /api/write/<op>", () => {
   test("an unknown op lists the known ones; a missing field is named", async () => {
     expect((await call("POST", "/api/write/nope", {})).status).toBe(404);
     expect((await call("POST", "/api/write/doc.append", { ref: "milestone/status" })).body.error).toBe("section is required (a string)");
+  });
+});
+
+describe("status.set over HTTP", () => {
+  test("check, note and land (never landed — that key is body.landed's own) all apply", async () => {
+    const dry = await call("POST", "/api/write/status.set", { ref: "fronts/150-rakun/README", label: "150 s29", check: true });
+    expect([dry.status, dry.body.applied]).toEqual([200, false]);
+    expect(dry.body.diff).toContain("+- [x] 150 s29 — a task");
+    const r = await call("POST", "/api/write/status.set", {
+      ref: "fronts/150-rakun/README",
+      label: "150 s29",
+      note: "a continuation",
+      land: true,
+      apply: true,
+      landed: ["rakun@abc1234"],
+    });
+    expect([r.status, r.body.applied]).toEqual([200, true]);
+    const text = readFileSync(join(root, "specs/fronts/150-rakun/README---status.md"), "utf8");
+    expect(text).toContain("## Landed\n\n- [ ] 150 s29 — a task\n  a continuation\n");
+    expect(events).toMatchObject([{ type: "write", op: "status.set", party: "machine-2", refs: ["fronts/150-rakun/README---status#150 s29"] }]);
+  });
+
+  test("a stale etag is a 409; an unknown item is a 404", async () => {
+    const stale = await call("POST", "/api/write/status.set", { ref: "fronts/150-rakun/README", label: "150 s29", check: true, etag: "old", apply: true });
+    expect(stale.status).toBe(409);
+    const missing = await call("POST", "/api/write/status.set", { ref: "fronts/150-rakun/README", label: "nope", check: true });
+    expect(missing.status).toBe(404);
   });
 });
 

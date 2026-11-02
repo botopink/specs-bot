@@ -1,5 +1,20 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, docAt, etagOf, FRONTS_DIR, type Kind, MILESTONE_DIR, type Model, pendingEtag, renderLedger, sectionEtag, sectionText, summarize } from "@specs-bot/core";
+import {
+  check,
+  docAt,
+  etagOf,
+  FRONTS_DIR,
+  type Kind,
+  MILESTONE_DIR,
+  type Model,
+  parseStatusItems,
+  pendingEtag,
+  renderLedger,
+  sectionEtag,
+  sectionText,
+  statusRef,
+  summarize,
+} from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./sessions.ts";
 
@@ -214,6 +229,16 @@ export function readRoutes(current: () => Model) {
       return c.json({ ref: doc.ref, title: doc.title, section: anchor, etag: etagOf(text), text });
     }
     return c.json({ ref: doc.ref, title: doc.title, version: doc.version, frozen: doc.version !== model.tree.current, meta: doc.meta, outline, text: doc.lines.join("\n") });
+  });
+
+  api.get("/status/*", (c) => {
+    const ref = decodeURIComponent(c.req.path.replace(/^\/api\/status\//, "")).replace(/\.md$/, "").replace(/\/$/, "");
+    const sref = statusRef(ref);
+    const doc = docAt(model, sref);
+    if (!doc) return c.json(notFound(`status ${sref}`, "GET /api/docs/<ref> or /api/fronts to find the right ref"), 404);
+    // `line` is docs/status.ts's own bookkeeping (the write side's), not something a reader needs.
+    const items = parseStatusItems(doc).map(({ line: _line, ...i }) => i);
+    return c.json({ ref: doc.ref, items });
   });
 
   api.get("/chat", (c) => {

@@ -570,6 +570,13 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
         return s(a.severity) ? v : { summary: c.summary, errors: c.findings.filter((f) => f.severity === "error") };
       },
     ),
+    read(
+      "status_get",
+      "a document's ---status companion, every item (lane, heading, label, text, checked, etag)",
+      { ref: str("the document (e.g. fronts/150-rakun/README)") },
+      ["ref"],
+      (a) => `status/${String(a.ref).split("/").map(enc).join("/")}`,
+    ),
     read("sessions", "which session holds which party now", {}, [], () => "sessions"),
     read("online", "the machines connected to the api's websocket now", {}, [], () => "presence"),
     {
@@ -700,6 +707,21 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       "set one row's Cell column (decision 1022); its rule, Id and Binds stay",
       { n: int("the decision row"), value: str("a cell slug (lowercase_with_underscores), tests/<name>.sh, or conformance/run.sh --self-test") },
       ["n", "value"],
+    ),
+    write(
+      "status_set",
+      "status",
+      "change one item of a document's ---status companion: check/uncheck it, add a note, or move it into ## Landed",
+      {
+        ref: str("the document (e.g. fronts/150-rakun/README)"),
+        label: str("the item's recognizable prefix, as status_get showed it (e.g. \"150 s29\")"),
+        check: bool("true checks the box, false unchecks it"),
+        note: str("a continuation line added under the item"),
+        // "land", not "landed": that name is COMMON.landed below (the code commit(s) this write goes with).
+        land: bool("move the item into ## Landed"),
+        etag: str("the etag status_get showed for the item; changed since is refused"),
+      },
+      ["ref", "label"],
     ),
     write("reviewed", "reviewed", "mark a delegated decision reviewed (the maintainer)", { n: int("the step in the To review table") }, ["n"]),
     write(

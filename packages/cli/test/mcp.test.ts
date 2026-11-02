@@ -17,6 +17,8 @@ const FILES: Record<string, string> = {
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n\n## Open\n\n- [ ] b\n",
+  "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 150\n",
+  "specs/fronts/150-rakun/README---status.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 150 — status\n\n## L1 — open\n\n- [ ] 150 s29 — a task\n",
 };
 
 async function git(cwd: string, ...args: string[]) {
@@ -129,7 +131,7 @@ describe("specs-bot mcp", () => {
     expect(init.result.serverInfo.name).toBe("specs-bot");
     expect(init.result.capabilities.tools).toBeDefined();
     const names = ((await first.rpc("tools/list")).result.tools as { name: string; inputSchema: { type: string } }[]).map((t) => t.name);
-    for (const n of ["as", "logout", "whoami", "search", "doc", "chat", "sessions", "wait", "edit", "append", "add_section", "new_doc", "meta", "answer", "send", "mark_read", "claim", "release", "assign", "doing", "done"]) {
+    for (const n of ["as", "logout", "whoami", "search", "doc", "chat", "sessions", "wait", "edit", "append", "add_section", "new_doc", "meta", "answer", "send", "mark_read", "claim", "release", "assign", "doing", "done", "status_get", "status_set"]) {
       expect(names).toContain(n);
     }
   });
@@ -173,6 +175,20 @@ describe("specs-bot mcp", () => {
     expect(done).toContain("applied: true");
     const commit = done.match(/commit: (\w+)/)![1];
     expect(await git(data, "log", "-1", "--format=%an %h")).toBe(`machine-2 ${commit}`);
+  }, 15000);
+
+  test("status_get lists a document's ---status companion; status_set changes one item by label", async () => {
+    const listed = text(await first.tool("status_get", { ref: "fronts/150-rakun/README" }));
+    expect(listed).toContain("ref: fronts/150-rakun/README---status");
+    expect(listed).toContain("150 s29,a task,false");
+
+    const dry = text(await first.tool("status_set", { ref: "fronts/150-rakun/README", label: "150 s29", check: true }));
+    expect(dry).toContain("applied: false");
+    expect(dry).toContain("+- [x] 150 s29 — a task");
+
+    const done = text(await first.tool("status_set", { ref: "fronts/150-rakun/README", label: "150 s29", land: true, apply: true }));
+    expect(done).toContain("applied: true");
+    expect(readFileSync(join(data, "specs/fronts/150-rakun/README---status.md"), "utf8")).toContain("## Landed\n\n- [ ] 150 s29 — a task\n");
   }, 15000);
 
   test("doing says what the session's party is doing, done clears it; tiny answers, and no doing events after a result", async () => {
