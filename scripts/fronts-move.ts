@@ -851,24 +851,45 @@ function docPairs(plan: Plan): { before: Map<string, Doc>; after: Map<string, Do
   return { before: new Map(b.map((d) => [d.ref, d])), after: new Map(a.map((d) => [d.ref, d])) };
 }
 
-/** O2: every document's place and parse are the same; only its ref gained the prefix. */
+/**
+ * O2: every document's place and parse are the same; only its ref gained the prefix. A metadata value may hold a
+ * markdown link (`reference: "… [decision 116](../../decisions-taken-steps.md) …"`), which phase 1 rebases like
+ * any link of the body: each value is compared with its links replaced by the final file they name (from the
+ * document's old path before, its new path after), so a rebased link is no difference and any other change is.
+ */
 export function oracleDocsSame(plan: Plan): OracleResult {
   const { before, after } = docPairs(plan);
-  const pick = (d: Doc) => ({
+  const { p1 } = plan;
+  const oldPath = new Map([...p1.moves].map(([o, n]) => [n, o]));
+  const map: TargetMap = (t) => phase1Path(t, p1.dirs);
+  const metaOf = (d: Doc, file: string, m: TargetMap) =>
+    Object.fromEntries(Object.entries(d.meta).map(([k, v]) => [k, normalizeLinks(v.split("\n"), file, m).join("\n")]));
+  const pick = (d: Doc, meta: Record<string, string>) => ({
     version: d.version,
     owner: d.owner,
     front: d.front,
     group: d.group,
     name: d.name,
     title: d.title,
-    meta: d.meta,
+    meta,
     anchors: d.sections.map((s) => s.anchor),
   });
   const problems: string[] = [];
   for (const [ref, d] of before) {
     const a = after.get(ref);
-    if (!a) problems.push(`${ref}: no document after`);
-    else if (JSON.stringify(pick(a)) !== JSON.stringify(pick(d))) problems.push(`${ref}: differs`);
+    if (!a) {
+      problems.push(`${ref}: no document after`);
+      continue;
+    }
+    // review-triage.md is read at its old path both times (docPairs); its file now sits at the root.
+    const newFile = ref === refOf(REVIEW_TRIAGE) ? phase1Path(REVIEW_TRIAGE, p1.dirs) : `${ref}.md`;
+    const oldFile = oldPath.get(newFile) ?? newFile;
+    const x = pick(d, metaOf(d, oldFile, map));
+    const y = pick(a, metaOf(a, newFile, (t) => t));
+    if (JSON.stringify(x) !== JSON.stringify(y)) {
+      const keys = Object.keys({ ...x.meta, ...y.meta }).filter((k) => x.meta[k] !== y.meta[k]);
+      problems.push(`${ref}: differs${keys.length ? ` (meta ${keys.join(", ")})` : ""}`);
+    }
   }
   return problems.length ? fail(few(problems)) : pass(`${before.size} document(s): same version, owner, front, group, name, title, meta and anchors`);
 }

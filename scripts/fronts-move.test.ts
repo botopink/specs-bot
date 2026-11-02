@@ -178,7 +178,8 @@ See [the status](../milestone/status.md#150-rakun), [the order](../milestone/fro
   "specs/150-rakun/examples/a.bp": "fn main() {\n  // LANGUAGE GAP gap-x\n}\n",
   "specs/150-rakun/examples/post.md": "---\ntitle: a post\n---\n# A post\n",
   "specs/151-json/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 151 — json\n\n## Alias table\n\n| Old id | Step here |\n|---|---|\n| `103-json-parse` s1 | 151 s1 |\n",
-  "specs/152-yaml/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 152 — yaml\n",
+  // A metadata value holding a markdown link: phase 1 rebases it like a link of the body, and O2 still holds.
+  "specs/152-yaml/README.md": '---\nmilestone: 1.0.12-beta\nreference: "the rule, [decision 116](../decisions-pending.md) and [rakun](../150-rakun/README.md)"\n---\n# Front 152 — yaml\n',
   "specs/163-meta-ci/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 163 — meta-ci\n",
   "specs/010-old/README.md": "---\nmilestone: 1.0.11-beta\n---\n# Front 10 — old\n\nThe milestone then: [README](../milestone/README.md).\n",
   "moved.json": `${JSON.stringify({ "1.0.12-beta/machine-1/150-rakun/README": "150-rakun/README", "gone/old": "https://github.com/botopink/specs-data/blob/abc/gone.md" }, null, 2)}\n`,
@@ -367,6 +368,17 @@ describe("the oracles", () => {
     const path = "fronts/150-rakun/README---status.md";
     plan.after.specs.set(path, Buffer.from(plan.after.specs.get(path)!.toString().replace("- [x] 150 s30 — landed early\n", "")));
     expect(runOracles(plan).find((o) => o.name.startsWith("S1"))!.result.ok).toBe(false);
+  });
+
+  test("O2: a link inside a metadata value is rebased and passes; any other change to a value fails", () => {
+    const plan = planMove(dataSet(), OVERRIDE);
+    const path = "fronts/152-yaml/README.md";
+    const text = plan.p1.specs.get(path)!.toString();
+    expect(text).toContain('reference: "the rule, [decision 116](../../decisions-pending.md) and [rakun](../150-rakun/README.md)"');
+    expect(runOracles(plan).find((o) => o.name.startsWith("O2"))!.result.ok).toBe(true);
+    plan.p1.specs.set(path, Buffer.from(text.replace("the rule, ", "a rule, ")));
+    const o2 = runOracles(plan).find((o) => o.name.startsWith("O2"))!.result;
+    expect([o2.ok, o2.detail]).toEqual([false, "fronts/152-yaml/README: differs (meta reference)"]);
   });
 
   test("O5 catches a link that names another file", () => {
