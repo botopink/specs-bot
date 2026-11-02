@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   check,
   loadStore,
@@ -127,6 +129,53 @@ describe("check", () => {
 
   test("summarize counts by severity and code", () => {
     expect(summarize(check(store()))).toEqual({ "warning step-bare-pipe": 1 });
+  });
+});
+
+// The new decisions-taken/ directory layout: the README's listing of groups diverges from the files really on
+// disk in both directions — a listed slug with no file, and a file no slug lists.
+function recordStore(over: { groups?: string[]; extraFile?: string } = {}): Store {
+  const root = mkdtempSync(join(tmpdir(), "specs-bot-check-"));
+  const write = (p: string, t: string) => {
+    mkdirSync(dirname(join(root, p)), { recursive: true });
+    writeFileSync(join(root, p), t);
+  };
+  write("specs/decisions-pending.md", "the next free\nnumber, which is **108**.\n\n## Machine 1\n\nNone open.\n");
+  write("specs/retired.md", "# Retired\n");
+  const groups = over.groups ?? ["module-system", "ghost"];
+  write(
+    "specs/decisions-taken/README.md",
+    `# Decisions taken\n\nThe rules in force. **The next free number is 108.**\n\n## Groups\n\n${groups.map((g) => `- ${g}`).join("\n")}\n`,
+  );
+  write(
+    "specs/decisions-taken/module-system.md",
+    "# module-system — files, modules and imports\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 107 | q-1 | A rule | x |  |\n",
+  );
+  if (over.extraFile) {
+    write(`specs/decisions-taken/${over.extraFile}.md`, `# ${over.extraFile} — an unlisted group\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n`);
+  }
+  return loadStore(root);
+}
+
+describe("check — the decisions-taken/ directory layout", () => {
+  test("a slug the README lists with no matching file is group-missing", () => {
+    expect(codes(check(recordStore()))).toContain("group-missing group ghost");
+  });
+
+  test("a file on disk the README does not list is group-unlisted", () => {
+    expect(codes(check(recordStore({ groups: ["module-system"], extraFile: "stray" })))).toContain("group-unlisted group stray");
+  });
+
+  test("a consistent directory has neither", () => {
+    const f = codes(check(recordStore({ groups: ["module-system"] })));
+    expect(f).not.toContain("group-missing group module-system");
+    expect(f.some((c) => c.startsWith("group-unlisted"))).toBe(false);
+  });
+
+  test("next-free-mismatch is about the README under this layout", () => {
+    const s = recordStore({ groups: ["module-system"] });
+    s.steps.statedNextFree = 999;
+    expect(codes(check(s))).toContain("next-free-mismatch decisions-taken/README");
   });
 });
 

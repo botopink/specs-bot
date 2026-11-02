@@ -23,7 +23,11 @@ export function loadDocs(specsDir: string): DocTree {
   const docs: Doc[] = [];
   for (const file of walk(specsDir)) {
     const path = relative(specsDir, file);
-    if (file.endsWith(".md") && path.includes("/")) docs.push(parseDoc(path, readFileSync(file, "utf8")));
+    // decisions-taken/ (the new layout's README and one file per group) is store.ts's, read through parseGroup
+    // and parseRecordReadme, never a Doc of the spec tree — excluded by prefix the way a hidden name is, below.
+    if (file.endsWith(".md") && path.includes("/") && !path.startsWith("decisions-taken/")) {
+      docs.push(parseDoc(path, readFileSync(file, "utf8")));
+    }
   }
   const movedFile = join(specsDir, "..", "moved.json");
   const moved = new Map<string, string>(

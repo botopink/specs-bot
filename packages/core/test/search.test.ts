@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { buildIndex, loadStore, parseDoc, parsePending, parseRetired, parseSteps, parseTaken, placeDocs, snippet, type Store } from "../src/index.ts";
+import { buildIndex, loadStore, parseDoc, parseGroup, parsePending, parseRecordReadme, parseRetired, parseSteps, parseTaken, placeDocs, snippet, type Store, units } from "../src/index.ts";
 
 const store: Store = {
   specsDir: "/nowhere",
@@ -82,6 +82,42 @@ describe("snippet", () => {
     expect(s.startsWith("…")).toBe(true);
     expect(s.endsWith("…")).toBe(true);
     expect(s).toContain("needle");
+  });
+});
+
+// Under the new decisions-taken/ directory layout, a step's and a subject's unit points at its own group's
+// file, not a shared decisions-taken-steps.md / decisions-taken.md (store.ts rewrites r.section to the slug).
+describe("units — the decisions-taken/ directory layout", () => {
+  const group = parseGroup(`# module-system — files, modules and imports
+
+**A file is a module.**
+
+Steps: 107
+Binds: x
+
+## Record
+
+| # | Id | Rule in force | Binds | Cell |
+|---|---|---|---|---|
+| 107 | q-1 | A rule | x |  |
+`);
+  const recordStore: Store = {
+    specsDir: "/nowhere",
+    steps: { lines: [], rows: group.rows.map((r) => ({ ...r, section: group.slug })) },
+    pending: parsePending(""),
+    taken: { lines: [], head: [], subjects: [{ slug: group.slug, summary: group.summary, lead: group.lead, paragraphs: group.paragraphs, steps: group.steps, binds: group.binds, lines: group.lines, line: 0 }] },
+    retired: parseRetired(""),
+    tree: placeDocs([]),
+    chat: [],
+    record: { readme: parseRecordReadme("# Decisions taken\n\n## Groups\n\n- module-system\n"), groups: new Map([["module-system", group]]) },
+  };
+
+  test("a step's file is its group's, not decisions-taken-steps.md", () => {
+    expect(units(recordStore).find((u) => u.kind === "step")!.file).toBe("specs/decisions-taken/module-system.md");
+  });
+
+  test("a subject's file is its group's, not decisions-taken.md", () => {
+    expect(units(recordStore).find((u) => u.kind === "subject")!.file).toBe("specs/decisions-taken/module-system.md");
   });
 });
 
