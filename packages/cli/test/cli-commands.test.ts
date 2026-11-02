@@ -73,4 +73,21 @@ describe("the CLI's commands", () => {
       ["DELETE /api/doing", null, "s1"],
     ]);
   });
+
+  test("status: no label reads; a label writes, --check/--note/--land/--etag mapped (never --landed, that's every write's own)", async () => {
+    seen.length = 0;
+    expect((await run("status", "150-rakun/README")).code).toBe(0);
+    expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["GET /api/status/150-rakun/README"]);
+
+    seen.length = 0;
+    expect((await run("status", "150-rakun/README", "150 s29", "--check", "--note", "a note", "--land", "--etag", "abc")).code).toBe(0);
+    expect(seen.map((r) => `${r.method} ${r.path}`)).toEqual(["POST /api/write/status.set"]);
+    expect(seen[0]!.body).toEqual({ ref: "150-rakun/README", label: "150 s29", check: true, note: "a note", land: true, etag: "abc", apply: false, landed: [] });
+  });
+
+  test("--check and --uncheck are exclusive", async () => {
+    const r = await run("status", "150-rakun/README", "150 s29", "--check", "--uncheck");
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("exclusive");
+  });
 });

@@ -26,6 +26,7 @@ import {
   setMeta,
   type Plan,
   replaceSection,
+  statusSet,
   WriteError,
   type Writer,
 } from "@specs-bot/core";
@@ -102,6 +103,22 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
     return supersede(m, { num: num(b, "num"), by: num(b, "by"), kind });
   },
   "step.cell": (m, b) => setCell(m, { num: num(b, "num"), value: str(b, "value") }),
+  // b.land, never b.landed — that key is every write's own body.landed (the code commit(s) it goes with,
+  // read generically above in the route handler), so this op's own "move to Landed" flag answers to a different
+  // one on the wire (write.ts's WRITES.status and mcp.ts's status_set tool use the same "land").
+  "status.set": (m, b, party) =>
+    statusSet(
+      m,
+      {
+        ref: str(b, "ref"),
+        label: str(b, "label"),
+        ...(typeof b.check === "boolean" ? { check: b.check } : {}),
+        ...opt(b, "note"),
+        ...(b.land === true ? { landed: true } : {}),
+        ...opt(b, "etag"),
+      },
+      party,
+    ),
   refile: (m, b) => refile(m, { num: num(b, "num"), to: str(b, "to"), ...(b.cite === true ? { cite: true } : {}) }),
   "subject.new": (m, b) => subjectNew(m, { slug: str(b, "slug"), summary: str(b, "summary"), ...opt(b, "lead"), ...opt(b, "binds") }),
   review: (m, b, party) => markReviewed(m, { num: num(b, "num") }, party),

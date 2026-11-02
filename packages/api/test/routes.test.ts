@@ -70,6 +70,8 @@ number, which is **4**.
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
   "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- a\n\n## Open\n\n- b\n",
   "specs/fronts/150-rakun/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 150 — rakun\n\n## Steps\n\nRouting.\n",
+  "specs/fronts/150-rakun/README---status.md":
+    "---\nmilestone: 1.0.12-beta\n---\n# Front 150 — status\n\n## L1 — open\n\n### 150 rakun\n\n- [ ] 150 s29 — rakun's wrappers\n",
   // The target is the pre-migration, unprefixed shape on purpose: moved.json was written before fronts/ existed
   // and knows nothing of it; docAt (model.ts) resolves that shape onto the real, fronts/-prefixed document.
   "moved.json": JSON.stringify({
@@ -151,6 +153,16 @@ describe("the read api", () => {
     expect((await get("/api/docs/milestone/status?outline")).body.outline.map((s: any) => s.anchor)).toEqual(["status", "done", "open"]);
     expect((await get("/api/docs/milestone/status?section=open")).body.text).toBe("## Open\n\n- b\n");
     expect((await get("/api/docs/150-rakun")).body.ref).toBe("fronts/150-rakun/README");
+  });
+
+  test("a document's ---status companion: every item, by label", async () => {
+    const s = (await get("/api/status/150-rakun/README")).body;
+    expect(s.ref).toBe("fronts/150-rakun/README---status");
+    expect(s.items).toEqual([
+      { lane: "L1 — open", heading: "150 rakun", label: "150 s29", text: "rakun's wrappers", checked: false, etag: expect.any(String) },
+    ]);
+    expect((await get("/api/status/fronts/150-rakun/README")).body.ref).toBe("fronts/150-rakun/README---status");
+    expect((await get("/api/status/milestone/status")).status).toBe(404);
   });
 
   test("a ref from before the flattening answers as its new one; a removed file names its permalink", async () => {
