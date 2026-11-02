@@ -510,7 +510,7 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
       "doc",
       "a document: its outline by default, one section (with its etag), or whole",
       {
-        ref: str("e.g. 150-rakun/README, milestone/status"),
+        ref: str("e.g. fronts/150-rakun/README, fronts/milestone/status"),
         section: str("an anchor from the outline"),
         whole: bool("the whole text (refused past ~8k tokens unless force)"),
         force: bool("whole, however long"),

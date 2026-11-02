@@ -1,7 +1,7 @@
 // The one hierarchy every page shows: milestone → front → the folders inside a front → documents. The machine
 // that works a front is a value of the front (its owner, the README's **Machine:** field), never a level.
 // Anchors are stable and readable ("150-rakun-04-rakun") so a document's breadcrumbs can point back to its section.
-import { frontReadmeRef, MILESTONE_DIR } from "@specs-bot/core";
+import { FRONTS_DIR, frontReadmeRef, MILESTONE_DIR } from "@specs-bot/core";
 import type { Doc } from "@specs-bot/core";
 import type { SiteData } from "./data.ts";
 
@@ -172,8 +172,10 @@ export function crumbsOf(data: SiteData, d: Doc): Crumb[] {
   ];
   if (d.front) crumbs.push({ label: d.front.dir, href: frontsHref(data, d.version, frontAnchor(d.front.dir)) });
   if (d.front && d.group) crumbs.push({ label: d.group.dir, href: frontsHref(data, d.version, folderAnchor(d.front.dir, d.group.dir)) });
-  // Folders between the deepest section and the file ("examples") are named, not linked.
-  const known = [d.ref.startsWith(`${MILESTONE_DIR}/`), d.front, d.group].filter(Boolean).length;
+  // Folders between the deepest section and the file ("examples") are named, not linked. Every front and the
+  // milestone's own documents sit one segment deeper than before, under fronts/ (FRONTS_DIR) — that prefix is
+  // its own consumed segment, on top of whichever of these the ref also sits under.
+  const known = [d.ref.startsWith(`${FRONTS_DIR}/`), d.ref.startsWith(`${MILESTONE_DIR}/`), d.front, d.group].filter(Boolean).length;
   const rest = d.ref.split("/").slice(known);
   for (const seg of rest.slice(0, -1)) crumbs.push({ label: seg });
   crumbs.push({ label: rest.at(-1)! });
@@ -186,7 +188,9 @@ export function sectionOfFolder(data: SiteData, ref: string): string | undefined
   if (!inside) return undefined;
   // The crumbs past "Fronts": the milestone, the front, the group.
   const crumbs = crumbsOf(data, inside).slice(1);
-  const at = ref.split("/").length;
+  // Same adjustment as crumbsOf's `known`: a folder under fronts/ (FRONTS_DIR) has one more path segment than
+  // the section levels crumbsOf counts for it (the fronts/ prefix itself is not a level of its own).
+  const at = ref.split("/").length - (ref.startsWith(`${FRONTS_DIR}/`) ? 1 : 0);
   // An unnumbered folder has no section of its own: its milestone's stands for it.
   return (/^\d+-/.test(ref.split("/").at(-1)!) && crumbs[at]?.href) || frontsHref(data, inside.version);
 }

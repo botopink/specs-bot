@@ -305,12 +305,12 @@ describe("the site over a fixture", () => {
   });
 
   test("a folder with no README leads to its section", async () => {
-    // KNOWN GAP (fronts-move peça 1, left for the site peça): sectionOfFolder's `at` index (hierarchy.ts) and
-    // crumbsOf's `known` count still assume one path segment per front/milestone; now that every one of them
-    // sits two segments deep (fronts/<front>), the exact Fronts-section anchor is lost and it falls back to the
-    // bare /fronts page. Fixing `known`/`at` for the fronts/ prefix is the site package's own change.
+    // A numbered folder (04-rakun, a group inside front 150-rakun) leads straight to its own section anchor,
+    // accounting for the extra fronts/ segment every front and the milestone now sits under.
     const folder = await get("/docs/fronts/150-rakun/04-rakun");
-    expect([folder.status, folder.res.headers.get("location")]).toEqual([302, "/fronts"]);
+    expect([folder.status, folder.res.headers.get("location")]).toEqual([302, "/fronts#150-rakun-04-rakun"]);
+    // An unnumbered folder (closure-audit, loose inside front 04-rakun) has no section of its own: its
+    // milestone's stands for it.
     const loose = await get("/docs/fronts/04-rakun/closure-audit");
     expect(loose.res.headers.get("location")).toBe("/fronts?version=1.0.11-beta");
   });

@@ -157,7 +157,7 @@ program
 
 program
   .command("doc")
-  .argument("<ref>", "a document ref, e.g. 150-rakun/README or milestone/status (a folder means its README)")
+  .argument("<ref>", "a document ref, e.g. fronts/150-rakun/README or fronts/milestone/status (a folder means its README)")
   .description("a document: whole, its outline, or one section")
   .option("-s, --section <anchor>", "only this section (anchors from --outline)")
   .option("-o, --outline", "only the headings, with their anchors and sizes")

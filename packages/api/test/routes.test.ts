@@ -203,13 +203,17 @@ describe("renderLedger", () => {
 describe("export", () => {
   test("ledger: the record and the current milestone's READMEs, by relative path", async () => {
     const r = (await get("/api/export/ledger")).body;
-    // KNOWN GAP (fronts-move peça 1, left for the api peça): the route's own front-README filter is still
-    // `d.ref.split("/").length !== 2`, written for the pre-fronts/ shape; every README's ref now has three
-    // segments (fronts/<front>/README), so this filter drops them all and only the rendered ledger comes back.
-    // Fixing it (e.g. a frontReadmeRef-style check, as check.ts's doc-owner-outside-front now uses) is the api
-    // package's own change, out of this piece's scope.
-    expect(Object.keys(r.files).sort()).toEqual(["decisions-taken-steps.md"]);
+    // Both the milestone's own README and every front's README come back, each three segments deep
+    // under fronts/ (fronts/milestone/README, fronts/<front>/README) — the same pair the pre-fronts/
+    // filter caught by its two-segment shape.
+    expect(Object.keys(r.files).sort()).toEqual([
+      "decisions-taken-steps.md",
+      "fronts/150-rakun/README.md",
+      "fronts/milestone/README.md",
+    ]);
     expect(r.files["decisions-taken-steps.md"]).toContain("| 3 | q-3");
+    expect(r.files["fronts/150-rakun/README.md"]).toContain("Front 150 — rakun");
+    expect(r.files["fronts/milestone/README.md"]).toContain("Specs — 1.0.12-beta");
   });
 
   test("an unknown set is refused; a missing file is a 404", async () => {

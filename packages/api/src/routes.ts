@@ -1,5 +1,5 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, docAt, etagOf, type Kind, MILESTONE_DIR, type Model, pendingEtag, renderLedger, sectionEtag, sectionText, summarize } from "@specs-bot/core";
+import { check, docAt, etagOf, FRONTS_DIR, type Kind, MILESTONE_DIR, type Model, pendingEtag, renderLedger, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./sessions.ts";
 
@@ -246,9 +246,13 @@ export function readRoutes(current: () => Model) {
     const files: Record<string, string> = {};
     if (set === "ledger") {
       // decisions-split.py: the record, and the milestone's README with the current fronts' READMEs (the aliases).
+      // In the flat, pre-fronts/ tree both kinds of README sat two segments down (`<front>/README`,
+      // `milestone/README`); under fronts/ they sit one deeper (`fronts/<front>/README`,
+      // `fronts/milestone/README`) — a front's and the milestone's own, both wanted here as before.
       files["decisions-taken-steps.md"] = renderLedger(model);
       for (const d of model.tree.docs) {
-        if (d.version !== current || d.name !== "README" || d.ref.split("/").length !== 2) continue;
+        const parts = d.ref.split("/");
+        if (d.version !== current || d.name !== "README" || parts.length !== 3 || parts[0] !== FRONTS_DIR) continue;
         files[`${d.ref}.md`] = d.lines.join("\n");
       }
     } else if (set === "language-gaps") {
