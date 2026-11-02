@@ -180,7 +180,8 @@ See [the status](../milestone/status.md#150-rakun), [the order](../milestone/fro
   "specs/151-json/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 151 — json\n\n## Alias table\n\n| Old id | Step here |\n|---|---|\n| `103-json-parse` s1 | 151 s1 |\n",
   // A metadata value holding a markdown link: phase 1 rebases it like a link of the body, and O2 still holds.
   "specs/152-yaml/README.md": '---\nmilestone: 1.0.12-beta\nreference: "the rule, [decision 116](../decisions-pending.md) and [rakun](../150-rakun/README.md)"\n---\n# Front 152 — yaml\n',
-  "specs/163-meta-ci/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 163 — meta-ci\n",
+  // A metadata value naming a moved folder in bare prose: phase 1 prefixes it, and O2 still holds.
+  "specs/163-meta-ci/README.md": '---\nmilestone: 1.0.12-beta\nowns: "the per-report status lines in specs/150-rakun/track.md · the gate"\n---\n# Front 163 — meta-ci\n',
   "specs/010-old/README.md": "---\nmilestone: 1.0.11-beta\n---\n# Front 10 — old\n\nThe milestone then: [README](../milestone/README.md).\n",
   "moved.json": `${JSON.stringify({ "1.0.12-beta/machine-1/150-rakun/README": "150-rakun/README", "gone/old": "https://github.com/botopink/specs-data/blob/abc/gone.md" }, null, 2)}\n`,
   "conversation-chat/m1-0001.md": "a message naming specs/150-rakun/ — never touched\n",
@@ -379,6 +380,17 @@ describe("the oracles", () => {
     plan.p1.specs.set(path, Buffer.from(text.replace("the rule, ", "a rule, ")));
     const o2 = runOracles(plan).find((o) => o.name.startsWith("O2"))!.result;
     expect([o2.ok, o2.detail]).toEqual([false, "fronts/152-yaml/README: differs (meta reference)"]);
+  });
+
+  test("O2: a bare specs/<front>/ mention in a metadata value is prefixed and passes; any other change fails", () => {
+    const plan = planMove(dataSet(), OVERRIDE);
+    const path = "fronts/163-meta-ci/README.md";
+    const text = plan.p1.specs.get(path)!.toString();
+    expect(text).toContain('owns: "the per-report status lines in specs/fronts/150-rakun/track.md · the gate"');
+    expect(runOracles(plan).find((o) => o.name.startsWith("O2"))!.result.ok).toBe(true);
+    plan.p1.specs.set(path, Buffer.from(text.replace("· the gate", "· the hook")));
+    const o2 = runOracles(plan).find((o) => o.name.startsWith("O2"))!.result;
+    expect([o2.ok, o2.detail]).toEqual([false, "fronts/163-meta-ci/README: differs (meta owns)"]);
   });
 
   test("O5 catches a link that names another file", () => {

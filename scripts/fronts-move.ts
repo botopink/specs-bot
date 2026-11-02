@@ -854,16 +854,21 @@ function docPairs(plan: Plan): { before: Map<string, Doc>; after: Map<string, Do
 /**
  * O2: every document's place and parse are the same; only its ref gained the prefix. A metadata value may hold a
  * markdown link (`reference: "… [decision 116](../../decisions-taken-steps.md) …"`), which phase 1 rebases like
- * any link of the body: each value is compared with its links replaced by the final file they name (from the
- * document's old path before, its new path after), so a rebased link is no difference and any other change is.
+ * any link of the body, and may name a moved folder in bare prose (`specs/06-checker/README.md`), which phase 1
+ * prefixes like any mention: each value is compared with its links replaced by the final file they name (from the
+ * document's old path before, its new path after) and its bare mentions prefixed, so neither rewrite is a
+ * difference and any other change is.
  */
 export function oracleDocsSame(plan: Plan): OracleResult {
   const { before, after } = docPairs(plan);
   const { p1 } = plan;
   const oldPath = new Map([...p1.moves].map(([o, n]) => [n, o]));
   const map: TargetMap = (t) => phase1Path(t, p1.dirs);
+  // Phase 1's bare-mention rule too (`specs/06-checker/README.md` in prose → `specs/fronts/06-checker/…`); it is
+  // idempotent, so it runs on both sides.
+  const text = textRewriter(p1.dirs);
   const metaOf = (d: Doc, file: string, m: TargetMap) =>
-    Object.fromEntries(Object.entries(d.meta).map(([k, v]) => [k, normalizeLinks(v.split("\n"), file, m).join("\n")]));
+    Object.fromEntries(Object.entries(d.meta).map(([k, v]) => [k, text(normalizeLinks(v.split("\n"), file, m).join("\n"))]));
   const pick = (d: Doc, meta: Record<string, string>) => ({
     version: d.version,
     owner: d.owner,
