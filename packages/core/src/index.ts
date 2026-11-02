@@ -16,6 +16,7 @@ export * from "./store.ts";
 export * from "./check.ts";
 export * from "./search.ts";
 export * from "./model.ts";
+export * from "./ledger.ts";
 export * from "./write/plan.ts";
 export * from "./write/diff.ts";
 export * from "./write/rules.ts";
