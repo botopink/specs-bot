@@ -81,6 +81,8 @@ export const WRITES: Record<string, { op: string; body: (a: WriteArgs) => Record
     body: (a) => ({ id: a.id, rule: a.rule, binds: a.binds, ...some({ cell: a.cell, by: a.by, subject: a.subject, subjectText: a.subjectText }), process: a.process === true }),
   },
   "set-cell": { op: "step.cell", body: (a) => ({ num: Number(a.n), value: a.value }) },
+  refile: { op: "refile", body: (a) => ({ num: Number(a.n), to: a.to, ...(a.cite === true ? { cite: true } : {}) }) },
+  "subject-new": { op: "subject.new", body: (a) => ({ slug: a.slug, summary: a.summary, ...some({ lead: a.lead, binds: a.binds }) }) },
   supersede: { op: "supersede", body: (a) => ({ num: Number(a.n), by: Number(a.by), kind: a.kind }) },
   reviewed: { op: "review", body: (a) => ({ num: Number(a.n) }) },
   retire: {
@@ -279,6 +281,25 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
   common(program.command("reviewed").argument("<n>", "the step in the To review table").description("mark a delegated decision reviewed (the maintainer)")).action(
     (n: string, o) => write("reviewed", { ...o, n }),
   );
+
+  common(
+    program
+      .command("refile")
+      .argument("<n>", "the decision row")
+      .requiredOption("--to <slug>", "the subject it moves to")
+      .option("--cite", "also add it to the destination's own Steps: (home and citation are independent)")
+      .description("move a row's home from its current subject to another; its text stays"),
+  ).action((n: string, o) => write("refile", { ...o, n }));
+
+  common(
+    program
+      .command("subject-new")
+      .argument("<slug>", "the new subject's slug (lowercase letters, digits, hyphens)")
+      .requiredOption("--summary <text>", "one line, the H1's own")
+      .option("--lead <text>", "the bold first sentence")
+      .option("--binds <text>", "what it binds")
+      .description("open a new subject: an empty group, listed in decisions-taken/README.md, no rows yet"),
+  ).action((slug: string, o) => write("subject-new", { ...o, slug }));
 
   common(
     program
