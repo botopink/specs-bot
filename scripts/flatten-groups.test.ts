@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type DataSet, readDataSet } from "./fronts-move.ts";
-import { nothingToDo, planFlatten, run, runOracles } from "./flatten-groups.ts";
+import { nothingToDo, oracleNoCollision, planFlatten, run, runOracles } from "./flatten-groups.ts";
 
 // A small specs-data checkout, already in the fronts/ layout, holding every shape flatten-groups handles:
 //
@@ -122,27 +122,67 @@ describe("the plan", () => {
 });
 
 describe("collisions", () => {
-  test("70-misc-extra's number collides with 70-widgets without an override", () => {
+  test("70-misc-extra's number collides with 70-widgets, so it auto-resolves instead of standing", () => {
     const plan = planFlatten(dataSet());
-    expect(plan.collisions).toEqual([{ num: 70, dirs: ["70-misc-extra", "70-widgets"] }]);
+    expect(plan.collisions).toEqual([]);
+    expect(plan.renumbered).toEqual([{ key: "08-misc/70-misc-extra", from: "70-misc-extra", to: "71-misc-extra" }]);
   });
 
-  test("the override resolves it", () => {
+  test("an override forces a different number than the auto-assigned one", () => {
     const plan = planFlatten(dataSet(), OVERRIDE);
     expect(plan.collisions).toEqual([]);
+    expect(plan.renumbered).toEqual([]);
+    expect(plan.dest.get("08-misc/70-misc-extra")).toBe("270-misc-extra");
   });
 
-  test("dry-run only lists a collision, never refuses", () => {
+  test("dry-run resolves it on its own, no refusal", async () => {
     const root = checkout();
-    expect(run("dry-run", root)).resolves.toBe(1); // O3 (and others downstream) fail while it stands
-    expect(existsSync(join(root, "specs/fronts/08-misc/70-misc-extra/README.md"))).toBe(true);
+    expect(await run("dry-run", root)).toBe(0);
+    expect(existsSync(join(root, "specs/fronts/08-misc/70-misc-extra/README.md"))).toBe(true); // dry-run writes nothing
   });
 
-  test("migrate refuses, naming the collision, without an override", async () => {
+  test("migrate resolves it on its own, naming the number it picked", async () => {
     const root = checkout();
-    expect(await run("migrate", root)).toBe(1);
-    expect(existsSync(join(root, "specs/fronts/08-misc/70-misc-extra/README.md"))).toBe(true);
-    expect(existsSync(join(root, "specs/fronts/70-misc-extra"))).toBe(false);
+    expect(await run("migrate", root)).toBe(0);
+    expect(existsSync(join(root, "specs/fronts/08-misc/70-misc-extra/README.md"))).toBe(false);
+    expect(existsSync(join(root, "specs/fronts/71-misc-extra/README.md"))).toBe(true);
+    expect(existsSync(join(root, "specs/fronts/70-misc-extra"))).toBe(false); // 70 stayed 70-widgets's
+  });
+});
+
+describe("a group named exactly like its own front", () => {
+  // specs/fronts/50-carry/50-carry/ — a leftover of the pre-flatten nesting: the group's full slug IS
+  // its front's. It must merge straight into 50-carry, never alias onto (and clobber) 50-carry's own
+  // README, which the old destOf/readmeFixesOf did (a Set silently collapsed the two identical names).
+  const SELF: Record<string, string> = {
+    "specs/decisions-pending.md": "the next free\nnumber, which is **1**.\n",
+    "specs/retired.md": "# Retired\n",
+    "specs/decisions-taken/README.md": "# Decisions taken\n\nThe record. **The next free number is 1.**\n\n## Groups\n\n",
+    "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+    "specs/fronts/50-carry/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-7\npriority: high\n---\n# Front 50 — carry\n",
+    "specs/fronts/50-carry/50-carry/context.md": "---\nmilestone: 1.0.12-beta\n---\n# Context\n",
+  };
+  function selfDataSet(): DataSet {
+    const specs = new Map<string, Buffer>();
+    for (const [p, t] of Object.entries(SELF)) specs.set(p.slice("specs/".length), Buffer.from(t));
+    return { specs };
+  }
+
+  test("the group's files land directly in the front; the front's own README is untouched", () => {
+    const plan = planFlatten(selfDataSet());
+    const readme = plan.after.specs.get("fronts/50-carry/README.md")!.toString("utf8");
+    expect(readme).toContain("priority: high");
+    expect(readme).toContain("# Front 50 — carry");
+    expect(plan.after.specs.get("fronts/50-carry/context.md")!.toString("utf8")).toContain("# Context");
+    expect(plan.after.specs.has("fronts/50-carry/50-carry")).toBe(false);
+    expect(plan.selfMerge.has("50-carry/50-carry")).toBe(true);
+    expect(plan.created).toEqual([]); // no new front, nothing to create a README for
+    expect(plan.selfMergeConflicts).toEqual([]);
+  });
+
+  test("every oracle passes", () => {
+    const outcomes = runOracles(planFlatten(selfDataSet()));
+    for (const o of outcomes) expect([o.name, o.result.ok]).toEqual([o.name, true]);
   });
 });
 
@@ -180,6 +220,86 @@ describe("the oracles", () => {
     const path = "fronts/44-emilia-transitions/notes.md";
     plan.after.specs.set(path, Buffer.from(plan.after.specs.get(path)!.toString().replace("../05-emilia/README.md", "../08-misc/README.md")));
     expect(runOracles(plan).find((o) => o.name.startsWith("O5"))!.result.ok).toBe(false);
+  });
+});
+
+describe("a group nested inside a group", () => {
+  // specs/fronts/60-base/61-mid/62-inner/ — 61-mid only shows up once 62-inner's own front/group parsing
+  // sees it as a front (docMeta reads at most two numbered segments at a time), so one planFlatten pass
+  // only promotes 61-mid; 62-inner needs a second pass over the result. The CLI's run() loops for this.
+  const DEEP: Record<string, string> = {
+    "specs/decisions-pending.md": "the next free\nnumber, which is **1**.\n",
+    "specs/retired.md": "# Retired\n",
+    "specs/decisions-taken/README.md": "# Decisions taken\n\nThe record. **The next free number is 1.**\n\n## Groups\n\n",
+    "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+    "specs/fronts/60-base/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-6\n---\n# Front 60 — base\n",
+    "specs/fronts/60-base/61-mid/62-inner/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 62 — inner\n",
+  };
+  function deepCheckout(): string {
+    const root = mkdtempSync(join(tmpdir(), "flatten-groups-deep-"));
+    for (const [p, t] of Object.entries(DEEP)) {
+      mkdirSync(dirname(join(root, p)), { recursive: true });
+      writeFileSync(join(root, p), t);
+    }
+    return root;
+  }
+
+  test("one pass only reaches 61-mid; 62-inner is still nested in it", () => {
+    const plan = planFlatten({ specs: (() => { const m = new Map<string, Buffer>(); for (const [p, t] of Object.entries(DEEP)) m.set(p.slice("specs/".length), Buffer.from(t)); return m; })() });
+    expect(plan.groups.map((g) => g.key)).toEqual(["60-base/61-mid"]);
+    expect(nothingToDo(planFlatten(plan.after))).toBe(false); // 61-mid/62-inner is next
+  });
+
+  test("dry-run projects every pass and writes nothing", async () => {
+    const root = deepCheckout();
+    expect(await run("dry-run", root)).toBe(0);
+    expect(existsSync(join(root, "specs/fronts/60-base/61-mid/62-inner/README.md"))).toBe(true);
+  });
+
+  test("migrate loops until both levels are flattened", async () => {
+    const root = deepCheckout();
+    expect(await run("migrate", root)).toBe(0);
+    expect(existsSync(join(root, "specs/fronts/61-mid/README.md"))).toBe(true);
+    expect(existsSync(join(root, "specs/fronts/62-inner/README.md"))).toBe(true);
+    expect(existsSync(join(root, "specs/fronts/60-base/61-mid"))).toBe(false);
+    expect(nothingToDo(planFlatten(readDataSet(root)))).toBe(true);
+  });
+});
+
+describe("fronts that already reuse a number across unrelated, frozen milestones", () => {
+  // A real tree keeps "01-std" (1.0.10-beta) and "01-test-green" (1.0.0-beta) side by side: each
+  // closed milestone kept its own front numbering, so a leading number is reused on purpose and this
+  // script must never treat that pre-existing reuse as a collision of its own making — only a number a
+  // *placement* (a promoted or renumbered group) lands on is its business.
+  const REUSE: Record<string, string> = {
+    "specs/decisions-pending.md": "the next free\nnumber, which is **1**.\n",
+    "specs/retired.md": "# Retired\n",
+    "specs/decisions-taken/README.md": "# Decisions taken\n\nThe record. **The next free number is 1.**\n\n## Groups\n\n",
+    "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+    "specs/fronts/01-std/README.md": "---\nmilestone: 1.0.10-beta\nowner: machine-1\n---\n# Front 1 — std\n",
+    "specs/fronts/01-test-green/README.md": "---\nmilestone: 1.0.0-beta\nowner: machine-2\n---\n# Front 1 — test green\n",
+    "specs/fronts/80-carry/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-3\n---\n# Front 80 — carry\n",
+    "specs/fronts/80-carry/12-carry-extra/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 12 — carry extra\n",
+  };
+  function reuseDataSet(): DataSet {
+    const specs = new Map<string, Buffer>();
+    for (const [p, t] of Object.entries(REUSE)) specs.set(p.slice("specs/".length), Buffer.from(t));
+    return { specs };
+  }
+
+  test("the pre-existing 01/01 reuse is not reported, not even as a safety-net collision", () => {
+    const plan = planFlatten(reuseDataSet());
+    expect(plan.collisions).toEqual([]);
+    expect(plan.renumbered).toEqual([]); // 12-carry-extra's own number is free
+    expect(oracleNoCollision(plan).ok).toBe(true);
+  });
+
+  test("every oracle still passes, 01-std and 01-test-green both untouched", () => {
+    const plan = planFlatten(reuseDataSet());
+    const outcomes = runOracles(plan);
+    for (const o of outcomes) expect([o.name, o.result.ok]).toEqual([o.name, true]);
+    expect(plan.after.specs.has("fronts/01-std/README.md")).toBe(true);
+    expect(plan.after.specs.has("fronts/01-test-green/README.md")).toBe(true);
   });
 });
 
