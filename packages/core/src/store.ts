@@ -5,8 +5,8 @@ import { type ChatMessage, loadChat } from "./chat/chat.ts";
 import { type GroupDoc, parseGroup, parseRecordReadme, type RecordReadmeDoc } from "./decisions/group.ts";
 import { type PendingDoc, parsePending } from "./decisions/pending.ts";
 import { type RetiredDoc, parseRetired } from "./decisions/retired.ts";
-import { type StepRow, type StepsDoc, parseSteps } from "./decisions/steps.ts";
-import { type Subject, type TakenDoc, parseTaken } from "./decisions/taken.ts";
+import type { StepRow, StepsDoc } from "./decisions/steps.ts";
+import type { Subject, TakenDoc } from "./decisions/taken.ts";
 import { type DocTree, loadDocs } from "./docs/load.ts";
 
 export interface Store {
@@ -20,12 +20,12 @@ export interface Store {
   tree: DocTree;
   chat: ChatMessage[];
   /**
-   * Present only under the new `decisions-taken/` directory layout (a `README.md` index plus one file per
-   * group) — absent, as before, under the old pair of flat files. `groups` holds every group file `loadStore`
-   * could read, keyed by its slug; a slug the README lists with no matching file, or a file on disk the README
-   * does not list, is left for `check.ts` to report (`group-missing` / `group-unlisted`) rather than failing here.
+   * The `decisions-taken/` directory: a `README.md` index plus one file per group. `groups` holds every group
+   * file `loadStore` could read, keyed by its slug; a slug the README lists with no matching file, or a file on
+   * disk the README does not list, is left for `check.ts` to report (`group-missing` / `group-unlisted`) rather
+   * than failing here.
    */
-  record?: { readme: RecordReadmeDoc; groups: Map<string, GroupDoc> };
+  record: { readme: RecordReadmeDoc; groups: Map<string, GroupDoc> };
 }
 
 export function loadStore(dataPath: string): Store {
@@ -34,11 +34,8 @@ export function loadStore(dataPath: string): Store {
   const pt = join(specsDir, "decisoes-pendentes.md");
   const chatDir = join(dataPath, "conversation-chat");
   const recordDir = join(specsDir, "decisions-taken");
-  const newLayout = existsSync(join(recordDir, "README.md"));
 
-  const { steps, taken, record } = newLayout
-    ? loadRecord(recordDir)
-    : { steps: parseSteps(read("decisions-taken-steps.md")), taken: parseTaken(read("decisions-taken.md")), record: undefined };
+  const { steps, taken, record } = loadRecord(recordDir);
 
   return {
     specsDir,
@@ -49,7 +46,7 @@ export function loadStore(dataPath: string): Store {
     retired: parseRetired(read("retired.md")),
     tree: loadDocs(specsDir),
     chat: existsSync(chatDir) ? loadChat(chatDir) : [],
-    ...(record ? { record } : {}),
+    record,
   };
 }
 

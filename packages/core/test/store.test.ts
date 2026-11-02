@@ -68,13 +68,6 @@ Binds: std
 `,
 };
 
-// The old pair of flat files, as loadStore has always read them.
-const FLAT_FILES: Record<string, string> = {
-  ...COMMON,
-  "specs/decisions-taken-steps.md": "**The next free number is 116.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 107 | 1.0.1-beta | A rule | x |  |\n",
-  "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 107\nBinds: x\n",
-};
-
 function tempStore(files: Record<string, string>) {
   const root = mkdtempSync(join(tmpdir(), "specs-bot-store-"));
   write(root, files);
@@ -112,18 +105,5 @@ describe("loadStore — the new decisions-taken/ directory layout", () => {
     expect(ms.paragraphs).toEqual(["(1) Every `.bp` is a module."]);
     expect(ms.steps).toEqual([107]);
     expect(ms.binds).toBe("every repository");
-  });
-});
-
-describe("loadStore — the old pair of flat files", () => {
-  const store = tempStore(FLAT_FILES);
-
-  test("record is absent", () => {
-    expect(store.record).toBeUndefined();
-  });
-
-  test("steps and taken read exactly as parseSteps/parseTaken would", () => {
-    expect(store.steps.rows.map((r) => [r.num, r.section])).toEqual([[107, "L"]]);
-    expect(store.taken.subjects.map((s) => s.slug)).toEqual(["lang"]);
   });
 });

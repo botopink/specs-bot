@@ -22,6 +22,8 @@ const model = buildModel({
     parseDoc("milestone/status.md", "# Status\n"),
   ]),
   chat: [],
+  // buildModel reads store.steps/taken/etc. alone, never store.record, so an empty one satisfies the type.
+  record: { readme: { lines: [], order: [] }, groups: new Map() },
 });
 
 describe("buildModel", () => {

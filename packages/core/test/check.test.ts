@@ -68,15 +68,22 @@ const RETIRED = `# Retired
 | \`old\` | \`new\` | 2 |  |
 `;
 
+// checkRecord (group-missing / group-unlisted) reads the decisions-taken/ directory straight off disk, so a
+// Store built in memory for the checks below still needs a real (empty) one to read — one tmp dir for every
+// store(), its record empty and in agreement with the empty directory.
+const specsRoot = mkdtempSync(join(tmpdir(), "specs-bot-check-base-"));
+mkdirSync(join(specsRoot, "decisions-taken"), { recursive: true });
+
 function store(over: Partial<Record<"steps" | "pending" | "taken" | "retired", string>> = {}): Store {
   return {
-    specsDir: "/nowhere",
+    specsDir: specsRoot,
     steps: parseSteps(over.steps ?? STEPS),
     pending: parsePending(over.pending ?? PENDING),
     taken: parseTaken(over.taken ?? TAKEN),
     retired: parseRetired(over.retired ?? RETIRED),
     tree: placeDocs([]),
     chat: [],
+    record: { readme: { lines: [], order: [] }, groups: new Map() },
   };
 }
 
@@ -104,7 +111,7 @@ describe("check", () => {
 
   test("a next free number that disagrees with the rows", () => {
     const f = check(store({ steps: STEPS.replace("is 4.", "is 7."), pending: PENDING.replace("**4**", "**6**") }));
-    expect(codes(f)).toContain("next-free-mismatch decisions-taken-steps");
+    expect(codes(f)).toContain("next-free-mismatch decisions-taken/README");
     expect(codes(f)).toContain("next-free-mismatch decisions-pending");
   });
 

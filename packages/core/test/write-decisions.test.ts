@@ -139,19 +139,6 @@ function applied(m: Model, plan: Plan): Model {
   return rebuild(files);
 }
 
-/** A model over the old pair of flat files — no `record` — to check that these writes refuse it. */
-function flatModel(): Model {
-  const root = mkdtempSync(join(tmpdir(), "specs-bot-wd-flat-"));
-  write(root, {
-    "specs/decisions-taken-steps.md":
-      "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
-    "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
-    "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
-    "specs/retired.md": "# R\n",
-  });
-  return buildModel(loadStore(root));
-}
-
 function refused(fn: () => unknown): WriteError {
   try {
     fn();
@@ -262,12 +249,6 @@ describe("answer", () => {
   test("refuses an unknown --subject (only unfiled is ever auto-created)", () => {
     expect(refused(() => answer(model(), { id: "q-9", rule: "R.", binds: "x", subject: "ghost" }, "maintainer")).code).toBe("not-found");
   });
-
-  test("refuses a model with no record (the old flat-files layout)", () => {
-    const e = refused(() => answer(flatModel(), { id: "q-1", rule: "R.", binds: "x" }, "maintainer"));
-    expect(e.code).toBe("invalid");
-    expect(e.message).toContain("decisions-taken/");
-  });
 });
 
 describe("supersede, review, retired, setCell", () => {
@@ -363,10 +344,6 @@ describe("refile", () => {
     expect(refused(() => refile(model(), { num: 1, to: "ghost" })).code).toBe("not-found");
     expect(refused(() => refile(model(), { num: 99, to: "unfiled" })).code).toBe("not-found");
   });
-
-  test("refuses a model with no record", () => {
-    expect(refused(() => refile(flatModel(), { num: 1, to: "lang" })).code).toBe("invalid");
-  });
 });
 
 describe("subjectNew", () => {
@@ -401,9 +378,5 @@ describe("subjectNew", () => {
     expect(refused(() => subjectNew(model(), { slug: "unfiled", summary: "s" })).message).toContain("reserved");
     expect(refused(() => subjectNew(model(), { slug: "readme", summary: "s" })).message).toContain("reserved");
     expect(refused(() => subjectNew(model(), { slug: "Not-OK", summary: "s" })).code).toBe("invalid");
-  });
-
-  test("refuses a model with no record", () => {
-    expect(refused(() => subjectNew(flatModel(), { slug: "std", summary: "s" })).code).toBe("invalid");
   });
 });

@@ -2,11 +2,11 @@
 // record; supersede a row; mark a review item; add a retired form. Each keeps the files' own conventions:
 // numbers never reused, the next free number stated alike in the record and the pending page, English only.
 //
-// answer/supersede/setCell/refile/subjectNew assume the new decisions-taken/ directory layout (one README.md
-// index plus a GroupDoc file per subject, group.ts) and nothing else: the dual-mode reading store.ts/loadStore
-// keeps is for the transition, never for a write. By the time this code runs for real the migration will have
-// already run, so a model with no `record` is refused outright (recordOrThrow) rather than carrying a second,
-// never-exercised path over the old flat files.
+// answer/supersede/setCell/refile/subjectNew assume the decisions-taken/ directory layout (one README.md index
+// plus a GroupDoc file per subject, group.ts): store.ts's loadStore reads nothing else any more, so `record` is
+// always present on a Model loadModel built. recordOrThrow still refuses a `record`-less Model outright — kept
+// as a defensive check against a Model some other code assembled by hand (a script, a test) rather than through
+// loadModel/loadStore, never a live second path these five writes carry.
 import { joinRow } from "../md/table.ts";
 import { parseNumberList } from "../decisions/taken.ts";
 import type { PendingEntry, PendingSection } from "../decisions/pending.ts";

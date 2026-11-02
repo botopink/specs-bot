@@ -14,12 +14,8 @@ import type { Model } from "./model.ts";
  * `parseSteps` (which takes a row's section from the nearest `## ` heading verbatim) only reproduces
  * `model.steps.rows` exactly when the heading is the bare slug. A group's summary is already one call away
  * (`GET /api/subjects/:slug`), so dropping it here costs nothing a reader cannot get elsewhere.
- *
- * A model over the old layout (no `model.record`) has no groups to walk: it falls back to the old field,
- * `steps.lines`, unchanged — the one case where that field still holds real text.
  */
 export function renderLedger(model: Model): string {
-  if (!model.record) return model.steps.lines.join("\n");
   const { readme, groups } = model.record;
   const lines = ["# Decisions taken — the steps", "", `The record. **The next free number is ${model.nextFree}.**`];
   for (const slug of readme.order) {

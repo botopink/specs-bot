@@ -5,9 +5,10 @@ import { dirname, join } from "node:path";
 import { appendToSection, loadModel, type Model, newDoc, WriteError, Writer } from "../src/index.ts";
 
 const FILES: Record<string, string> = {
-  "specs/decisions-taken-steps.md": "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
+  "specs/decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 2.**\n\n## Groups\n\n- lang\n",
+  "specs/decisions-taken/lang.md":
+    "# lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
   "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
-  "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",
@@ -76,13 +77,13 @@ describe("Writer", () => {
     // A document whose link-free text is fine, but the plan also breaks the next free number in the record.
     const plan = newDoc(model, { ref: "milestone/notes", text: "# Notes" });
     plan.changes.push({
-      path: "specs/decisions-taken-steps.md",
-      before: FILES["specs/decisions-taken-steps.md"]!,
-      after: FILES["specs/decisions-taken-steps.md"]!.replace("is 2.", "is 9."),
+      path: "specs/decisions-taken/README.md",
+      before: FILES["specs/decisions-taken/README.md"]!,
+      after: FILES["specs/decisions-taken/README.md"]!.replace("is 2.", "is 9."),
     });
     const e = (await writer.apply(model, plan, "machine-2").catch((x) => x)) as WriteError;
     expect(e.message).toBe("the write would break next-free-mismatch");
-    expect(readFileSync(join(root, "specs/decisions-taken-steps.md"), "utf8")).toBe(FILES["specs/decisions-taken-steps.md"]!);
+    expect(readFileSync(join(root, "specs/decisions-taken/README.md"), "utf8")).toBe(FILES["specs/decisions-taken/README.md"]!);
     expect(await sh(root, "status", "--porcelain")).toBe("");
   });
 

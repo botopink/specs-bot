@@ -10,9 +10,10 @@ import { websocket } from "../../api/src/ws.ts";
 const CLI = join(import.meta.dir, "..", "src", "index.ts");
 
 const FILES: Record<string, string> = {
-  "specs/decisions-taken-steps.md": "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
+  "specs/decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 2.**\n\n## Groups\n\n- lang\n",
+  "specs/decisions-taken/lang.md":
+    "# lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
   "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
-  "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "specs/milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n\n## Open\n\n- [ ] b\n",

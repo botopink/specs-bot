@@ -36,6 +36,9 @@ Binds: x
     parseDoc("01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Checker\n\nOld opaque notes.\n"),
   ]),
   chat: [],
+  // units() only formats this into a file path (specs/decisions-taken/<slug>.md); nothing here reads the
+  // directory, so an empty in-memory record is enough for a Store that buildIndex alone runs over.
+  record: { readme: { lines: [], order: [] }, groups: new Map() },
 };
 
 describe("buildIndex", () => {

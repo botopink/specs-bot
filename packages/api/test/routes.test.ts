@@ -195,24 +195,6 @@ describe("renderLedger", () => {
     const expected = strip([...model.steps.rows].sort(byNum));
     expect(strip(parseSteps(rendered).rows).sort(byNum)).toEqual(expected);
   });
-
-  test("a model over the old flat layout falls back to steps.lines, unchanged", async () => {
-    const root = mkdtempSync(join(tmpdir(), "specs-bot-ledger-flat-"));
-    const flat: Record<string, string> = {
-      "specs/decisions-taken-steps.md": "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
-      "specs/decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
-      "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
-      "specs/retired.md": "# R\n",
-      "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
-    };
-    for (const [path, text] of Object.entries(flat)) {
-      mkdirSync(dirname(join(root, path)), { recursive: true });
-      writeFileSync(join(root, path), text);
-    }
-    const model = buildModel(loadStore(root));
-    expect(model.record).toBeUndefined();
-    expect(renderLedger(model)).toBe(model.steps.lines.join("\n"));
-  });
 });
 
 describe("export", () => {

@@ -96,9 +96,8 @@ export function readRoutes(current: () => Model) {
       const hint = n > 0 && n < model.nextFree ? `${n} is a number never used` : `the next free number is ${model.nextFree}`;
       return c.json(notFound(`step ${c.req.param("n")}`, hint), 404);
     }
-    // The etag goes back with a write over the row's own line (none exists yet); it is in the new layout only —
-    // the old flat steps.md's row still has nowhere to read a per-group "lines" array from.
-    const etag = model.record ? etagOf(model.record.groups.get(r.section)!.lines[r.line]!) : undefined;
+    // The etag goes back with a write over the row's own line (none exists yet).
+    const etag = etagOf(model.record.groups.get(r.section)!.lines[r.line]!);
     return c.json({
       num: r.num,
       id: r.id,
@@ -111,7 +110,7 @@ export function readRoutes(current: () => Model) {
       rule: r.rule,
       binds: r.binds,
       cell: r.cell,
-      ...(etag !== undefined ? { etag } : {}),
+      etag,
       subjects: (model.subjectsByStep.get(r.num) ?? []).map((s) => s.slug),
       retired: (model.retiredByStep.get(r.num) ?? []).map((x) => ({ retired: x.retired, replacedBy: x.replacedBy })),
     });
@@ -153,7 +152,7 @@ export function readRoutes(current: () => Model) {
   api.get("/subjects/:slug", (c) => {
     const s = model.subjectBySlug.get(c.req.param("slug"));
     if (!s) return c.json(notFound(`subject ${c.req.param("slug")}`, "GET /api/subjects lists them"), 404);
-    const group = model.record?.groups.get(s.slug);
+    const group = model.record.groups.get(s.slug);
     // etag: the group file's own prose (before "## Record"), to send back with an edit of it.
     // home: the rows whose section (possession, store.ts's rewrite) is this subject — not s.steps, its citations.
     const extra = group
