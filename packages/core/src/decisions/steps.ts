@@ -51,7 +51,8 @@ export function parseSteps(text: string): StepsDoc {
   return { lines, rows, ...(next !== undefined ? { statedNextFree: next } : {}) };
 }
 
-function parseRow(line: string, index: number, section: string): StepRow {
+/** A single `| # | Id | Rule in force | Binds | Cell |` row; shared with group.ts's `## Record` tables. */
+export function parseRow(line: string, index: number, section: string): StepRow {
   const cells = splitRow(line);
   if (cells.length < 5) throw new Error(`step row on line ${index + 1} has ${cells.length} cells`);
   // Anchored: number and id first, binds and cell last; a bare `|` can only be inside the rule.
