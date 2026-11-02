@@ -18,11 +18,11 @@ import { assignFront, answer,
 } from "../src/index.ts";
 
 const FILES: Record<string, string> = {
-  "specs/decisions-taken-steps.md":
-    "**The next free number is 3.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 · (the maintainer, 2026-10-01) | **An opaque type's constructor is private.** | x |  |\n| 2 | q-2 · (the maintainer, 2026-10-02) | **A router reads opaque routes.** | y | router_routes |\n",
+  "specs/decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 3.**\n\n## Groups\n\n- lang\n",
+  "specs/decisions-taken/lang.md":
+    "# lang — the language\n\n**Types are nominal.**\n\nAn opaque record hides its fields.\n\nSteps: 1\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 · (the maintainer, 2026-10-01) | **An opaque type's constructor is private.** | x |  |\n| 2 | q-2 · (the maintainer, 2026-10-02) | **A router reads opaque routes.** | y | router_routes |\n",
   "specs/decisions-pending.md":
     "the next free\nnumber, which is **3**.\n\n## Machine 1\n\n#### q-9 · Does the router narrow?\n- **Measured.** It refuses `for-await-one-source` and reads ranges.\n- **Options.** (a) yes; (b) no.\n- **Recommendation.** (a).\n- **Blocks.** Nothing.\n\n#### q-8 · Is the checker opaque?\n- **Measured.** Opaque routes.\n- **Blocks.** Nothing.\n",
-  "specs/decisions-taken.md": "# T\n\n## lang — the language\n\n**Types are nominal.**\n\nAn opaque record hides its fields.\n\nSteps: 1\nBinds: x\n",
   "specs/retired.md": "# R\n\n## Spellings\n\n| Retired | Replaced by | Decisions | Since / note |\n|---|---|---|---|\n| `@Task<T>` | `Async<T>` | 1 | an opaque spelling |\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n\nThe milestone's router notes.\n",
   "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] the opaque router\n\n## Open\n\n- [ ] ranges\n",

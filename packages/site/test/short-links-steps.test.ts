@@ -21,9 +21,10 @@ describe("doc links", () => {
 // moved.json that maps the refs from before the flattening.
 const STEP_ROWS = Array.from({ length: INDEX_ROWS + 2 }, (_, i) => i);
 const FILES: Record<string, string> = {
-  "specs/decisions-taken-steps.md": "**The next free number is 435.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 434 | q-1 · (the maintainer) | A rule. | x |  |\n",
+  "specs/decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 435.**\n\n## Groups\n\n- lang\n",
+  "specs/decisions-taken/lang.md":
+    "# lang — l\n\n**L.**\n\nText.\n\nSteps: 434\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 434 | q-1 · (the maintainer) | A rule. | x |  |\n",
   "specs/decisions-pending.md": "the next free\nnumber, which is **435**.\n\n## Machine 1\n\nNone open.\n",
-  "specs/decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 434\nBinds: x\n",
   "specs/retired.md": "# R\n",
   "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
   "specs/milestone/status.md": "# Status\n\n## Done\n\n- [x] a\n",

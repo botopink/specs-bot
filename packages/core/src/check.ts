@@ -5,7 +5,7 @@ import { dirname, join, normalize } from "node:path";
 import { nextFree, statedNextFree } from "./decisions/steps.ts";
 import { pendingEntries } from "./decisions/pending.ts";
 import { checkGapMarkers } from "./gaps.ts";
-import type { Store } from "./store.ts";
+import { groupFilesOnDisk, type Store } from "./store.ts";
 
 export type Severity = "error" | "warning";
 
@@ -26,6 +26,7 @@ export function check(store: Store): Finding[] {
     ...checkDocs(store),
     ...checkChat(store),
     ...checkGapMarkers(store),
+    ...checkRecord(store),
   ];
 }
 
@@ -53,7 +54,7 @@ function checkSteps(store: Store): Finding[] {
   }
   const next = nextFree(store.steps);
   if (store.steps.statedNextFree !== next) {
-    out.push(err("next-free-mismatch", "decisions-taken-steps", `the head says ${store.steps.statedNextFree ?? "nothing"}, the rows make it ${next}`));
+    out.push(err("next-free-mismatch", "decisions-taken/README", `the head says ${store.steps.statedNextFree ?? "nothing"}, the rows make it ${next}`));
   }
   return out;
 }
@@ -90,6 +91,9 @@ function checkPending(store: Store): Finding[] {
   return out;
 }
 
+// A plain group (no lead, no paragraphs, no Steps, no Binds — unfiled.md's shape) never becomes a `Subject`
+// (store.ts's loadRecord skips it, the same test the old decisions-taken.md's `##` blocks always passed by
+// having nothing to parse there); checkSubjects below never sees one, under either layout, and needs no change.
 function checkSubjects(store: Store): Finding[] {
   const out: Finding[] = [];
   const nums = stepNumbers(store);
@@ -158,6 +162,33 @@ function checkChat(store: Store): Finding[] {
       if (target && w !== `${target.ref}.md`) {
         out.push(warn("chat-reply-path", `message ${m.id}`, `in-reply-to writes ${w}; the message is ${target.ref}.md`));
       }
+    }
+  }
+  return out;
+}
+
+/**
+ * The `decisions-taken/` directory layout: the README's listing against the directory's actual files.
+ * A group's H1 slug disagreeing with its filename (`group-slug-mismatch`) is not reported here — `loadStore`
+ * already refuses to load such a file (`parseGroup`'s `slugExpected` check throws), consistent with every other
+ * malformed heading in this codebase (`parseSteps`, `parseTaken`): those throw too, rather than becoming a
+ * `Finding`, so a build never runs checks over data it could not parse. Two groups sharing a slug is likewise not
+ * checked for: a slug comes from a file's name (`<slug>.md`), and a directory cannot hold two files of the same
+ * name, so `store.record.groups` (a `Map`) can never collide on one.
+ */
+function checkRecord(store: Store): Finding[] {
+  const out: Finding[] = [];
+  const { readme, groups } = store.record;
+  const onDisk = groupFilesOnDisk(join(store.specsDir, "decisions-taken"));
+  const listed = new Set(readme.order);
+  for (const slug of onDisk) {
+    if (!listed.has(slug)) {
+      out.push(err("group-unlisted", `group ${slug}`, `decisions-taken/${slug}.md exists but the README's Groups does not list it`));
+    }
+  }
+  for (const slug of readme.order) {
+    if (!groups.has(slug)) {
+      out.push(err("group-missing", `group ${slug}`, `the README's Groups lists ${slug}, but decisions-taken/${slug}.md does not exist`));
     }
   }
   return out;

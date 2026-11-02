@@ -14,8 +14,10 @@ import {
   pendingAdd,
   pendingEdit,
   pendingWithdraw,
+  refile,
   retiredAdd,
   setCell,
+  subjectNew,
   supersede,
   type ApplyResult,
   type Model,
@@ -100,6 +102,8 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
     return supersede(m, { num: num(b, "num"), by: num(b, "by"), kind });
   },
   "step.cell": (m, b) => setCell(m, { num: num(b, "num"), value: str(b, "value") }),
+  refile: (m, b) => refile(m, { num: num(b, "num"), to: str(b, "to"), ...(b.cite === true ? { cite: true } : {}) }),
+  "subject.new": (m, b) => subjectNew(m, { slug: str(b, "slug"), summary: str(b, "summary"), ...opt(b, "lead"), ...opt(b, "binds") }),
   review: (m, b, party) => markReviewed(m, { num: num(b, "num") }, party),
   "retired.add": (m, b) =>
     retiredAdd(m, { area: str(b, "area"), retired: str(b, "retired"), replacedBy: str(b, "replacedBy"), decisions: str(b, "decisions"), ...opt(b, "note") }),

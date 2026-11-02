@@ -703,6 +703,20 @@ export function tools(config: ClientConfig, link: Link): Tool[] {
     ),
     write("reviewed", "reviewed", "mark a delegated decision reviewed (the maintainer)", { n: int("the step in the To review table") }, ["n"]),
     write(
+      "refile",
+      "refile",
+      "move a row's home from its current subject to another (its text stays); cite also adds it to the destination's own Steps:",
+      { n: int("the decision row"), to: str("the subject it moves to"), cite: bool("also add it to the destination's own Steps:") },
+      ["n", "to"],
+    ),
+    write(
+      "subject_new",
+      "subject-new",
+      "open a new subject: an empty group, listed in decisions-taken/README.md, no rows yet",
+      { slug: str("lowercase letters, digits, hyphens"), summary: str("one line, the H1's own"), lead: str("the bold first sentence"), binds: str("what it binds") },
+      ["slug", "summary"],
+    ),
+    write(
       "retire",
       "retire",
       "add a retired form",

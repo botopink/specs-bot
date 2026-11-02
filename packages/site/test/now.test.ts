@@ -7,9 +7,10 @@ import { relTime } from "../src/now.ts";
 import { NOW_SCRIPT, took } from "../src/views/now.tsx";
 
 const FILES: Record<string, string> = {
-  "decisions-taken-steps.md": "**The next free number is 2.**\n\n## L\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
+  "decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 2.**\n\n## Groups\n\n- lang\n",
+  "decisions-taken/lang.md":
+    "# lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n| 1 | q-1 | A rule | x |  |\n",
   "decisions-pending.md": "the next free\nnumber, which is **2**.\n\n## Machine 1\n\nNone open.\n",
-  "decisions-taken.md": "# T\n\n## lang — l\n\n**L.**\n\nText.\n\nSteps: 1\nBinds: x\n",
   "retired.md": "# R\n",
   "milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
   "milestone/status.md": "---\nmilestone: 1.0.12-beta\n---\n# Status\n\n## Done\n\n- [x] a\n",

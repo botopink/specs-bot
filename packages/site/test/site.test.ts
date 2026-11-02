@@ -21,11 +21,24 @@ describe("shortTitle", () => {
 });
 
 const FILES: Record<string, string> = {
-  "decisions-taken-steps.md": `# Decisions taken — the steps
+  "decisions-taken/README.md": `# Decisions taken
 
-**The next free number is 5.**
+The rules in force. **The next free number is 5.**
 
-## Language
+## Groups
+
+- module-system
+`,
+  "decisions-taken/module-system.md": `# module-system — files and modules
+
+**A file is a module.**
+
+(1) Every \`.bp\` is a module (3).
+
+Steps: 1, 3
+Binds: every repository
+
+## Record
 
 | # | Id | Rule in force | Binds | Cell |
 |---|---|---|---|---|
@@ -51,17 +64,6 @@ number, which is **5**.
 
 - **Measured.** Built as (a).
 - **Recommendation.** (a).
-`,
-  "decisions-taken.md": `# Decisions taken
-
-## module-system — files and modules
-
-**A file is a module.**
-
-(1) Every \`.bp\` is a module (3).
-
-Steps: 1, 3
-Binds: every repository
 `,
   "retired.md": `# Retired
 

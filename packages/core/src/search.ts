@@ -50,22 +50,23 @@ export interface SearchIndex {
 }
 
 // The decision files, as store.ts reads them.
-const STEPS_FILE = "specs/decisions-taken-steps.md";
 const PENDING_FILE = "specs/decisions-pending.md";
-const TAKEN_FILE = "specs/decisions-taken.md";
 const RETIRED_FILE = "specs/retired.md";
 
 export function units(store: Store): Unit[] {
   const out: Unit[] = [];
+  // Under the decisions-taken/ directory layout, a step's and a subject's file is its own group's (r.section /
+  // s.slug are the group's slug there — store.ts rewrites r.section to it).
+  const groupFile = (slug: string) => `specs/decisions-taken/${slug}.md`;
   for (const r of store.steps.rows) {
-    out.push({ id: `step:${r.num}`, kind: "step", key: String(r.num), title: `${r.num} · ${r.id}`, text: `${r.rule}\n${r.binds}`, file: STEPS_FILE });
+    out.push({ id: `step:${r.num}`, kind: "step", key: String(r.num), title: `${r.num} · ${r.id}`, text: `${r.rule}\n${r.binds}`, file: groupFile(r.section) });
   }
   for (const e of pendingEntries(store.pending)) {
     const text = e.fields.map((f) => `${f.name}. ${f.text}`).join("\n");
     out.push({ id: `pending:${e.id}`, kind: "pending", key: e.id, title: `${e.id} · ${e.title}`, text, file: PENDING_FILE });
   }
   for (const s of store.taken.subjects) {
-    out.push({ id: `subject:${s.slug}`, kind: "subject", key: s.slug, title: `${s.slug} — ${s.summary}`, text: [s.lead, ...s.paragraphs].join("\n"), file: TAKEN_FILE });
+    out.push({ id: `subject:${s.slug}`, kind: "subject", key: s.slug, title: `${s.slug} — ${s.summary}`, text: [s.lead, ...s.paragraphs].join("\n"), file: groupFile(s.slug) });
   }
   store.retired.rows.forEach((r, i) => {
     out.push({ id: `retired:${i}`, kind: "retired", key: r.retired, title: `${r.retired} → ${r.replacedBy}`, text: `${r.area}\n${r.note}`, file: RETIRED_FILE });

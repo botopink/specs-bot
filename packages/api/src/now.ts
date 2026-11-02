@@ -219,16 +219,26 @@ export function parseLog(out: string): Recent[] {
   return rows;
 }
 
-/** The api's names for the files a commit changed: a document's ref, a message's id. */
+/** The api's names for the files a commit changed: a document's ref, a message's id, a group's own subject. */
 function refsOf(files: string[]): string[] {
   const refs = new Set<string>();
   for (const f of files.map((x) => x.trim()).filter(Boolean)) {
     const msg = f.match(/^conversation-chat\/[^/]+\/.*-([a-z][a-z0-9]*-\d{4})\.md$/);
-    if (msg) refs.add(`message ${msg[1]}`);
-    else {
-      const doc = f.match(/^specs\/(.+)\.md$/);
-      if (doc) refs.add(doc[1]!);
+    if (msg) {
+      refs.add(`message ${msg[1]}`);
+      continue;
     }
+    // decisions-taken/<slug>.md is group.ts's own file, never a Doc of the tree (docs/load.ts excludes the
+    // directory) — its own name, "subject <slug>", rather than the bare ref a Doc would otherwise get. The
+    // index itself keeps its ref ("decisions-taken/README"); "unfiled" is still a nameable subject even
+    // though it carries no Subject (no lead, no paragraphs, no Steps, no Binds — store.ts's loadRecord skips it).
+    const group = f.match(/^specs\/decisions-taken\/([^/]+)\.md$/);
+    if (group) {
+      refs.add(group[1] === "README" ? "decisions-taken/README" : `subject ${group[1]}`);
+      continue;
+    }
+    const doc = f.match(/^specs\/(.+)\.md$/);
+    if (doc) refs.add(doc[1]!);
   }
   return [...refs];
 }

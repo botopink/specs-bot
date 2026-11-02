@@ -1,15 +1,31 @@
 // Decision writes (PLAN.md § 5.2): open, edit and withdraw a pending question; answer it with a new row of the
 // record; supersede a row; mark a review item; add a retired form. Each keeps the files' own conventions:
 // numbers never reused, the next free number stated alike in the record and the pending page, English only.
+//
+// answer/supersede/setCell/refile/subjectNew assume the decisions-taken/ directory layout (one README.md index
+// plus a GroupDoc file per subject, group.ts): store.ts's loadStore reads nothing else any more, so `record` is
+// always present on a Model loadModel built. recordOrThrow still refuses a `record`-less Model outright — kept
+// as a defensive check against a Model some other code assembled by hand (a script, a test) rather than through
+// loadModel/loadStore, never a live second path these five writes carry.
 import { joinRow } from "../md/table.ts";
+import { parseNumberList } from "../decisions/taken.ts";
 import type { PendingEntry, PendingSection } from "../decisions/pending.ts";
 import type { Model } from "../model.ts";
 import { etagOf, type Plan, WriteError } from "./plan.ts";
 
-const STEPS = "specs/decisions-taken-steps.md";
 const PENDING = "specs/decisions-pending.md";
-const TAKEN = "specs/decisions-taken.md";
 const RETIRED = "specs/retired.md";
+
+const RECORD_DIR = "specs/decisions-taken";
+const RECORD_README = `${RECORD_DIR}/README.md`;
+const groupPath = (slug: string) => `${RECORD_DIR}/${slug}.md`;
+
+const GROUPS_HEADING = "## Groups";
+const GROUP_ITEM = /^- (.+)$/;
+/** A group's `## Record` table row, read the same way group.ts's own `ROW` does. */
+const RECORD_ROW = /^\| (\d+) \|/;
+/** A GFM table separator row: `|---|---|...|`, dashes and colons only between the pipes. */
+const RECORD_SEPARATOR = /^\|[-:\s|]+\|$/;
 
 /** The four fields every pending question carries, in their order (decisions-pending.md's head). */
 export const PENDING_FIELDS = ["Measured", "Options", "Recommendation", "Blocks"] as const;
@@ -33,6 +49,14 @@ function cellText(text: string): string {
 function today(at = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${at.getFullYear()}-${p(at.getMonth() + 1)}-${p(at.getDate())}`;
+}
+
+/** Refuses a model built over the old flat files: these five writes know only the decisions-taken/ layout. */
+function recordOrThrow(model: Model, fns: string): NonNullable<Model["record"]> {
+  if (!model.record) {
+    throw new WriteError("invalid", `${fns} precisam do layout novo de decisions-taken/ (model.record ausente); rode a migração primeiro`);
+  }
+  return model.record;
 }
 
 /**
@@ -171,6 +195,119 @@ export function pendingWithdraw(model: Model, input: { id: string; reason: strin
   };
 }
 
+// ── the record (decisions-taken/) ─────────────────────────────────────────────────────────────────────────
+
+/** The `## Groups` list's line range: just after the heading, up to (not including) its trailing blank lines. */
+function groupsListRange(lines: string[]): { at: number; end: number } {
+  const at = lines.indexOf(GROUPS_HEADING);
+  if (at === -1) throw new WriteError("invalid", `decisions-taken/README.md has no "${GROUPS_HEADING}" heading`);
+  let end = at + 1;
+  while (end < lines.length && !lines[end]!.startsWith("#")) end++;
+  while (end > at + 1 && lines[end - 1]!.trim() === "") end--;
+  return { at, end };
+}
+
+/** Adds `slug` to the README's `## Groups` list — right before the item named `before` when given, else at the end. */
+function addGroupToReadme(lines: string[], slug: string, before?: string): string[] {
+  const { at, end } = groupsListRange(lines);
+  let insertAt = end;
+  if (before !== undefined) {
+    for (let i = at + 1; i < end; i++) {
+      const m = lines[i]!.match(GROUP_ITEM);
+      if (m && m[1] === before) {
+        insertAt = i;
+        break;
+      }
+    }
+  }
+  return [...lines.slice(0, insertAt), `- ${slug}`, ...lines.slice(insertAt)];
+}
+
+/**
+ * The next free number stated in a file's text moves from n to n + 1. Shared by the README (the record's own
+ * count) and decisions-pending.md (which states the same number on its own, and must move in step).
+ */
+function bumpNextFree(text: string, n: number, path: string, required = true): string {
+  const rx = /(next free\s+number,?\s+(?:which\s+)?is\s+\**)(\d+)/;
+  const m = text.match(rx);
+  if (!m) {
+    if (required) throw new WriteError("invalid", `${path} does not state the next free number`);
+    return text;
+  }
+  if (Number(m[2]) !== n) throw new WriteError("conflict", `${path} states ${m[2]} as the next free number, the record makes it ${n}`, "specs-bot check");
+  return text.replace(rx, `$1${n + 1}`);
+}
+
+/**
+ * Where a new row of a group's `## Record` table goes: right after its last existing row; or, a table with
+ * none yet, right after its header and separator lines when they are there, else right after the heading itself.
+ */
+function recordInsertAt(lines: string[], proseEnd: number): number {
+  let last = -1;
+  for (let i = proseEnd + 1; i < lines.length; i++) if (RECORD_ROW.test(lines[i]!)) last = i;
+  if (last !== -1) return last + 1;
+  let at = proseEnd + 1;
+  while (at < lines.length && lines[at]!.trim() === "") at++;
+  if (at < lines.length && lines[at]!.startsWith("|")) at++;
+  if (at < lines.length && RECORD_SEPARATOR.test(lines[at]!)) at++;
+  return at;
+}
+
+/** Adds `num` to a group's `Steps:` list, in its prose (before `proseEnd`) — a new `Steps:` line when it has none yet. */
+function addToSteps(lines: string[], proseEnd: number, num: number): { lines: string[]; proseEnd: number } {
+  const out = [...lines];
+  const idx = out.findIndex((l, i) => i < proseEnd && l.startsWith("Steps:"));
+  if (idx !== -1) {
+    const current = parseNumberList(out[idx]!.slice("Steps:".length));
+    if (!current.includes(num)) out[idx] = `Steps: ${[...current, num].join(", ")}`;
+    return { lines: out, proseEnd };
+  }
+  let at = proseEnd;
+  while (at > 0 && out[at - 1]!.trim() === "") at--;
+  out.splice(at, 0, "", `Steps: ${num}`);
+  return { lines: out, proseEnd: proseEnd + 2 };
+}
+
+/**
+ * `answer --subject`'s prose edit, inside the target group's own lines: `Steps:`/`Binds:` updated in place, or
+ * inserted when the group has neither yet (the shape `answer` itself just gave a freshly auto-created group,
+ * when that very group is the one named by `--subject`); the paragraph, if given, lands right before `Steps:`.
+ */
+function applySubject(lines: string[], proseEnd: number, num: number, binds: string, subjectText?: string): { lines: string[]; proseEnd: number } {
+  const out = [...lines];
+  let end = proseEnd;
+
+  const stepsIdx = out.findIndex((l, i) => i < end && l.startsWith("Steps:"));
+  if (stepsIdx !== -1) {
+    const current = parseNumberList(out[stepsIdx]!.slice("Steps:".length));
+    out[stepsIdx] = `Steps: ${[...current, num].join(", ")}`;
+  }
+  const bindsIdx = out.findIndex((l, i) => i < end && l.startsWith("Binds:"));
+  if (bindsIdx !== -1) {
+    const priorBinds = out[bindsIdx]!.slice("Binds:".length).trim();
+    if (!priorBinds.includes(binds)) out[bindsIdx] = `Binds: ${priorBinds} · ${binds}`;
+  }
+
+  const missing = [...(stepsIdx === -1 ? [`Steps: ${num}`] : []), ...(bindsIdx === -1 ? [`Binds: ${binds}`] : [])];
+  if (missing.length) {
+    let at = end;
+    while (at > 0 && out[at - 1]!.trim() === "") at--;
+    out.splice(at, 0, "", ...missing);
+    end += missing.length + 1;
+  }
+
+  if (subjectText?.trim()) {
+    const stepsLine = out.findIndex((l, i) => i < end && l.startsWith("Steps:"));
+    let at = stepsLine;
+    while (at > 0 && out[at - 1]!.trim() === "") at--;
+    const text = subjectText.trim().split("\n");
+    out.splice(at, 0, "", ...text);
+    end += text.length + 1;
+  }
+
+  return { lines: out, proseEnd: end };
+}
+
 // ── answer ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface AnswerInput {
@@ -189,6 +326,7 @@ export interface AnswerInput {
 }
 
 export function answer(model: Model, input: AnswerInput, party: string): Plan {
+  const rec = recordOrThrow(model, "answer/supersede/setCell");
   const id = input.id.trim();
   if (!ID.test(id)) throw new WriteError("invalid", `an id is lowercase letters, digits and hyphens: ${id}`);
   const answered = model.answeredBy.get(id);
@@ -202,13 +340,34 @@ export function answer(model: Model, input: AnswerInput, party: string): Plan {
   const idCell = `${id} · (${by}, ${today(input.at)})${input.process ? " · (process)" : ""}`;
   const row = joinRow([` ${n} `, ` ${idCell} `, ` ${rule} `, ` ${binds} `, cell ? ` ${cell} ` : " "]);
 
-  // The record: the row after the last row of the file, and the head's next free number.
-  const steps = [...model.steps.lines];
-  const last = Math.max(...model.steps.rows.map((r) => r.line));
-  steps.splice(last + 1, 0, row);
-  const stepsText = bumpNextFree(steps.join("\n"), n, STEPS);
+  // The target group: input.subject's, or "unfiled" when no subject names one. Only "unfiled" is ever
+  // auto-created here (the first time it is missing); any other named subject that does not exist is the
+  // caller's error.
+  const targetSlug = input.subject ?? "unfiled";
+  const existing = rec.groups.get(targetSlug);
+  if (!existing && targetSlug !== "unfiled") {
+    throw new WriteError("not-found", `subject ${targetSlug} not found`, "specs-bot subject lists them");
+  }
+  const groupBefore = existing ? existing.lines.join("\n") : null;
+  let groupLines = existing
+    ? [...existing.lines]
+    : ["# unfiled — decisions no subject cites", "", "## Record", "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", ""];
+  let proseEnd = existing ? existing.proseEnd : groupLines.indexOf("## Record");
 
-  // The pending page: the question leaves, a delegated decision is marked for the maintainer's review, the number moves.
+  if (input.subject) {
+    const applied = applySubject(groupLines, proseEnd, n, input.binds.trim(), input.subjectText);
+    groupLines = applied.lines;
+    proseEnd = applied.proseEnd;
+  }
+  groupLines.splice(recordInsertAt(groupLines, proseEnd), 0, row);
+
+  // The README: the next free number always; the new group listed too, when answer itself just created it.
+  let readmeLines = [...rec.readme.lines];
+  if (!existing) readmeLines = addGroupToReadme(readmeLines, targetSlug);
+  const readmeAfter = bumpNextFree(readmeLines.join("\n"), n, RECORD_README);
+
+  // decisions-pending.md: the question leaves, a delegated decision is marked for the maintainer's review, and
+  // its own stated next-free number moves in step with the README's — untouched by the group/subject split.
   let pending = [...model.pending.lines];
   const open = model.entries.find((e) => e.id === id);
   if (open) {
@@ -225,25 +384,10 @@ export function answer(model: Model, input: AnswerInput, party: string): Plan {
   const pendingText = bumpNextFree(pending.join("\n"), n, PENDING, false);
 
   const changes: Plan["changes"] = [
-    { path: STEPS, before: model.steps.lines.join("\n"), after: stepsText },
+    { path: groupPath(targetSlug), before: groupBefore, after: groupLines.join("\n") },
+    { path: RECORD_README, before: rec.readme.lines.join("\n"), after: readmeAfter },
     { path: PENDING, before: model.pending.lines.join("\n"), after: pendingText },
   ];
-
-  if (input.subject) {
-    const s = model.subjectBySlug.get(input.subject);
-    if (!s) throw new WriteError("not-found", `subject ${input.subject} not found`, "specs-bot subject lists them");
-    const taken = [...model.taken.lines];
-    const stepsAt = s.line + s.lines.findIndex((l) => l.startsWith("Steps:"));
-    const bindsAt = s.line + s.lines.findIndex((l) => l.startsWith("Binds:"));
-    taken[stepsAt] = `Steps: ${[...s.steps, n].join(", ")}`;
-    if (!s.binds.includes(input.binds.trim())) taken[bindsAt] = `Binds: ${s.binds} · ${input.binds.trim()}`;
-    if (input.subjectText?.trim()) {
-      let at = stepsAt;
-      while (at > s.line && taken[at - 1]!.trim() === "") at--;
-      taken.splice(at, 0, "", ...input.subjectText.trim().split("\n"));
-    }
-    changes.push({ path: TAKEN, before: model.taken.lines.join("\n"), after: taken.join("\n") });
-  }
 
   return {
     op: "answer",
@@ -254,36 +398,26 @@ export function answer(model: Model, input: AnswerInput, party: string): Plan {
   };
 }
 
-/** The next free number stated in a file's text moves from n to n + 1. */
-function bumpNextFree(text: string, n: number, path: string, required = true): string {
-  const rx = /(next free\s+number,?\s+(?:which\s+)?is\s+\**)(\d+)/;
-  const m = text.match(rx);
-  if (!m) {
-    if (required) throw new WriteError("invalid", `${path} does not state the next free number`);
-    return text;
-  }
-  if (Number(m[2]) !== n) throw new WriteError("conflict", `${path} states ${m[2]} as the next free number, the record makes it ${n}`, "specs-bot check");
-  return text.replace(rx, `$1${n + 1}`);
-}
-
-// ── supersede, review, retired ─────────────────────────────────────────────────────────────────────────────
+// ── supersede, review, retired, cell ───────────────────────────────────────────────────────────────────────
 
 export function supersede(model: Model, input: { num: number; by: number; kind: "overtaken" | "replaced" | "reversed" }): Plan {
+  const rec = recordOrThrow(model, "answer/supersede/setCell");
   const row = model.stepByNum.get(input.num);
   if (!row) throw new WriteError("not-found", `step ${input.num} not found`);
   if (row.status !== "in-force") throw new WriteError("invalid", `step ${input.num} is already ${row.status} by ${row.supersededBy}`);
   if (!model.stepByNum.has(input.by)) throw new WriteError("not-found", `step ${input.by} not found`, "the row in force is written first (specs-bot answer)");
   if (input.by <= input.num) throw new WriteError("invalid", `a row is superseded by a later one: ${input.by} ≤ ${input.num}`);
+  const group = rec.groups.get(row.section)!;
   const kind = input.kind[0]!.toUpperCase() + input.kind.slice(1);
   const rule = `${kind} by ${input.by} (the later row in force, 730); the text as decided: ${row.rule}`;
-  const steps = [...model.steps.lines];
-  steps[row.line] = joinRow([row.raw.num, row.raw.id, ` ${rule} `, row.raw.binds, row.raw.cell]);
+  const lines = [...group.lines];
+  lines[row.line] = joinRow([row.raw.num, row.raw.id, ` ${rule} `, row.raw.binds, row.raw.cell]);
   return {
     op: "supersede",
     refs: [`step ${input.num}`],
     message: `spec: row ${input.num} ${input.kind} by ${input.by}`,
     summary: `step ${input.num} ${input.kind} by ${input.by}`,
-    changes: [{ path: STEPS, before: model.steps.lines.join("\n"), after: steps.join("\n") }],
+    changes: [{ path: groupPath(row.section), before: group.lines.join("\n"), after: lines.join("\n") }],
   };
 }
 
@@ -327,10 +461,9 @@ export function retiredAdd(model: Model, input: { area: string; retired: string;
   };
 }
 
-
-
 /** Sets one row's Cell (decision 1022); its number, Id, rule and Binds stay as written. */
 export function setCell(model: Model, input: { num: number; value: string }): Plan {
+  const rec = recordOrThrow(model, "answer/supersede/setCell");
   const row = model.stepByNum.get(input.num);
   if (!row) throw new WriteError("not-found", `step ${input.num} not found`);
   const value = input.value.trim();
@@ -338,13 +471,89 @@ export function setCell(model: Model, input: { num: number; value: string }): Pl
     throw new WriteError("invalid", `a Cell is a cell slug (lowercase_with_underscores), tests/<name>.sh or conformance/run.sh --self-test: ${value}`);
   }
   if (row.cell === value) throw new WriteError("invalid", `step ${input.num}'s Cell is already ${value}`);
-  const steps = [...model.steps.lines];
-  steps[row.line] = joinRow([row.raw.num, row.raw.id, row.raw.rule, row.raw.binds, ` ${value} `]);
+  const group = rec.groups.get(row.section)!;
+  const lines = [...group.lines];
+  lines[row.line] = joinRow([row.raw.num, row.raw.id, row.raw.rule, row.raw.binds, ` ${value} `]);
   return {
     op: "step.cell",
     refs: [`step ${input.num}`],
     message: `spec: row ${input.num} cell → ${value}`,
     summary: `step ${input.num}'s Cell: ${row.cell || "(empty)"} → ${value}`,
-    changes: [{ path: STEPS, before: model.steps.lines.join("\n"), after: steps.join("\n") }],
+    changes: [{ path: groupPath(row.section), before: group.lines.join("\n"), after: lines.join("\n") }],
+  };
+}
+
+// ── refile, subjectNew ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Moves row `num`'s home from its current group to `to` — its line cut from the origin's `## Record` table,
+ * appended to the destination's. `cite` (optional) also adds `num` to the destination's own `Steps:`, leaving
+ * every other subject that already cites it untouched: home and citation are independent, and a row may be
+ * cited from a subject it does not live in.
+ */
+export function refile(model: Model, input: { num: number; to: string; cite?: boolean }): Plan {
+  const rec = recordOrThrow(model, "refile/subjectNew");
+  const row = model.stepByNum.get(input.num);
+  if (!row) throw new WriteError("not-found", `step ${input.num} not found`);
+  const toGroup = rec.groups.get(input.to);
+  if (!toGroup) throw new WriteError("not-found", `subject ${input.to} not found`, "specs-bot subject lists them");
+  const fromSlug = row.section;
+  if (fromSlug === input.to) throw new WriteError("invalid", `step ${input.num} is already in ${input.to}`);
+  const fromGroup = rec.groups.get(fromSlug)!;
+
+  const fromLines = [...fromGroup.lines];
+  fromLines.splice(row.line, 1);
+
+  let toLines = [...toGroup.lines];
+  let toProseEnd = toGroup.proseEnd;
+  if (input.cite && !toGroup.steps.includes(input.num)) {
+    const added = addToSteps(toLines, toProseEnd, input.num);
+    toLines = added.lines;
+    toProseEnd = added.proseEnd;
+  }
+  const rowText = joinRow([row.raw.num, row.raw.id, row.raw.rule, row.raw.binds, row.raw.cell]);
+  toLines.splice(recordInsertAt(toLines, toProseEnd), 0, rowText);
+
+  return {
+    op: "refile",
+    refs: [`step ${input.num}`],
+    message: `spec: row ${input.num} refiled ${fromSlug} → ${input.to}`,
+    summary: `move step ${input.num} from ${fromSlug} to ${input.to}${input.cite ? "; cited in its Steps" : ""}`,
+    changes: [
+      { path: groupPath(fromSlug), before: fromGroup.lines.join("\n"), after: fromLines.join("\n") },
+      { path: groupPath(input.to), before: toGroup.lines.join("\n"), after: toLines.join("\n") },
+    ],
+  };
+}
+
+/** Opens a new, empty group file (no rows yet) and lists it in the README, right before "unfiled" when one is listed. */
+export function subjectNew(model: Model, input: { slug: string; summary: string; lead?: string; binds?: string }): Plan {
+  const rec = recordOrThrow(model, "refile/subjectNew");
+  const slug = input.slug.trim();
+  if (!ID.test(slug)) throw new WriteError("invalid", `a subject's slug is lowercase letters, digits and hyphens: ${slug}`);
+  if (slug === "unfiled" || slug === "readme") throw new WriteError("invalid", `${slug} is reserved`);
+  if (rec.groups.has(slug)) throw new WriteError("invalid", `subject ${slug} already exists`);
+  const summary = oneLine(input.summary, "the summary");
+  const lead = input.lead?.trim();
+  const binds = input.binds?.trim();
+
+  const lines = [`# ${slug} — ${summary}`, ""];
+  if (lead) lines.push(`**${lead}**`, "");
+  // Steps: is written with no numbers yet — parseNumberList("") reads it as [], the same as a group with none.
+  lines.push("Steps:");
+  if (binds) lines.push(`Binds: ${binds}`);
+  lines.push("", "## Record", "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", "");
+
+  const readmeAfter = addGroupToReadme([...rec.readme.lines], slug, rec.readme.order.includes("unfiled") ? "unfiled" : undefined);
+
+  return {
+    op: "subject.new",
+    refs: [`subject ${slug}`],
+    message: `spec: subject ${slug} — ${summary}`,
+    summary: `new subject ${slug}`,
+    changes: [
+      { path: groupPath(slug), before: null, after: lines.join("\n") },
+      { path: RECORD_README, before: rec.readme.lines.join("\n"), after: readmeAfter.join("\n") },
+    ],
   };
 }

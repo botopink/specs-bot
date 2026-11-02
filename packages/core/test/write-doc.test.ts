@@ -49,6 +49,7 @@ const model = buildModel({
     parseDoc("01-checker/status.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n\n## Done\n\nx\n"),
   ]),
   chat: [],
+  record: { readme: { lines: [], order: [] }, groups: new Map() },
 });
 const doc = model.docByRef.get("milestone/status")!;
 const after = (p: { changes: { after: string }[] }) => p.changes[0]!.after;
@@ -127,6 +128,7 @@ const owned = buildModel({
     parseDoc("01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n"),
   ]),
   chat: [],
+  record: { readme: { lines: [], order: [] }, groups: new Map() },
 });
 
 describe("newDoc", () => {

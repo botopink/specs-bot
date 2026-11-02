@@ -93,6 +93,7 @@ const model = buildModel({
     parseDoc("151-json/README.md", "---\nmilestone: 1.0.12-beta\nowner: machine-1\n---\n# Front 151 — json\n"),
   ]),
   chat: [],
+  record: { readme: { lines: [], order: [] }, groups: new Map() },
 });
 
 const progress = buildProgress(model, "1.0.12-beta");

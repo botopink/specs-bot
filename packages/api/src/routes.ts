@@ -1,7 +1,12 @@
 // The read endpoints (PLAN.md § 5.1). Domain objects only: refs and ids, never a file path.
-import { check, etagOf, type Kind, MILESTONE_DIR, type Model, pendingEtag, sectionEtag, sectionText, summarize } from "@specs-bot/core";
+import { check, etagOf, type Kind, MILESTONE_DIR, type Model, pendingEtag, renderLedger, sectionEtag, sectionText, summarize } from "@specs-bot/core";
 import { Hono } from "hono";
 import type { Vars } from "./sessions.ts";
+
+// renderLedger moved to packages/core/src/ledger.ts (it depends only on core's Model and formatStepRow, never on
+// Hono or anything api-specific) so scripts/split-record.ts can call it for its own round-trip oracle without
+// pulling in the api package. Re-exported here so nothing that already imports it from this module breaks.
+export { renderLedger };
 
 const KINDS: Kind[] = ["step", "pending", "subject", "retired", "section", "message"];
 
@@ -91,6 +96,8 @@ export function readRoutes(current: () => Model) {
       const hint = n > 0 && n < model.nextFree ? `${n} is a number never used` : `the next free number is ${model.nextFree}`;
       return c.json(notFound(`step ${c.req.param("n")}`, hint), 404);
     }
+    // The etag goes back with a write over the row's own line (none exists yet).
+    const etag = etagOf(model.record.groups.get(r.section)!.lines[r.line]!);
     return c.json({
       num: r.num,
       id: r.id,
@@ -103,6 +110,7 @@ export function readRoutes(current: () => Model) {
       rule: r.rule,
       binds: r.binds,
       cell: r.cell,
+      etag,
       subjects: (model.subjectsByStep.get(r.num) ?? []).map((s) => s.slug),
       retired: (model.retiredByStep.get(r.num) ?? []).map((x) => ({ retired: x.retired, replacedBy: x.replacedBy })),
     });
@@ -144,7 +152,13 @@ export function readRoutes(current: () => Model) {
   api.get("/subjects/:slug", (c) => {
     const s = model.subjectBySlug.get(c.req.param("slug"));
     if (!s) return c.json(notFound(`subject ${c.req.param("slug")}`, "GET /api/subjects lists them"), 404);
-    return c.json({ slug: s.slug, summary: s.summary, lead: s.lead, paragraphs: s.paragraphs, steps: s.steps, binds: s.binds });
+    const group = model.record.groups.get(s.slug);
+    // etag: the group file's own prose (before "## Record"), to send back with an edit of it.
+    // home: the rows whose section (possession, store.ts's rewrite) is this subject — not s.steps, its citations.
+    const extra = group
+      ? { etag: etagOf(group.lines.slice(0, group.proseEnd).join("\n")), home: model.steps.rows.filter((r) => r.section === s.slug).map((r) => r.num) }
+      : {};
+    return c.json({ slug: s.slug, summary: s.summary, lead: s.lead, paragraphs: s.paragraphs, steps: s.steps, binds: s.binds, ...extra });
   });
 
   api.get("/retired", (c) => {
@@ -230,7 +244,7 @@ export function readRoutes(current: () => Model) {
     const files: Record<string, string> = {};
     if (set === "ledger") {
       // decisions-split.py: the record, and the milestone's README with the current fronts' READMEs (the aliases).
-      files["decisions-taken-steps.md"] = model.steps.lines.join("\n");
+      files["decisions-taken-steps.md"] = renderLedger(model);
       for (const d of model.tree.docs) {
         if (d.version !== current || d.name !== "README" || d.ref.split("/").length !== 2) continue;
         files[`${d.ref}.md`] = d.lines.join("\n");

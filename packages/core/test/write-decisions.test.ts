@@ -1,37 +1,63 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import {
   answer,
   buildModel,
   check,
+  loadStore,
   markReviewed,
   type Model,
-  parsePending,
-  parseRetired,
-  parseSteps,
-  parseTaken,
-  parseDoc,
+  type Plan,
   pendingAdd,
   pendingEdit,
   pendingEtag,
   pendingWithdraw,
-  placeDocs,
+  refile,
   retiredAdd,
   setCell,
+  subjectNew,
   supersede,
-  type Plan,
   WriteError,
 } from "../src/index.ts";
 
-const STEPS = `# Steps
+// decisions-taken/README.md + one file per group (group.ts), the layout answer/supersede/setCell/refile/
+// subjectNew assume. "lang" carries prose (lead, a paragraph, Steps, Binds) and two rows; "unfiled" is a
+// plain group — the shape a subject never has (store.ts's loadRecord skips it as a Subject).
+const README = `# Decisions taken
 
-**The next free number is 3.**
+The rules in force. **The next free number is 3.**
 
-## L
+## Groups
+
+- lang
+- unfiled
+`;
+
+const LANG = `# lang — the language
+
+**Lead.**
+
+(1) Text (1).
+
+Steps: 1, 2
+Binds: x
+
+## Record
 
 | # | Id | Rule in force | Binds | Cell |
 |---|---|---|---|---|
 | 1 | q-1 · (the maintainer, 2026-10-01) | **A rule.** | \`machine-1/150\` s3 |  |
 | 2 | q-2 · (the maintainer, 2026-10-02) | **Another rule.** | x | another_rule |
+`;
+
+const UNFILED = `# unfiled — not yet grouped
+
+## Record
+
+| # | Id | Rule in force | Binds | Cell |
+|---|---|---|---|---|
 `;
 
 const PENDING = `# Pending
@@ -58,18 +84,6 @@ number, which is **3**.
 None open.
 `;
 
-const TAKEN = `# Taken
-
-## lang — the language
-
-**Lead.**
-
-(1) Text (1).
-
-Steps: 1, 2
-Binds: x
-`;
-
 const RETIRED = `# Retired
 
 ## Language spellings
@@ -85,30 +99,44 @@ const RETIRED = `# Retired
 | a | b | 2 |  |
 `;
 
-function model(over: { steps?: string; pending?: string } = {}): Model {
-  return buildModel({
-    specsDir: "/nowhere",
-    steps: parseSteps(over.steps ?? STEPS),
-    pending: parsePending(over.pending ?? PENDING),
-    taken: parseTaken(TAKEN),
-    retired: parseRetired(RETIRED),
-    tree: placeDocs([parseDoc("milestone/README.md", "---\nmilestone: 1.0.12-beta\n---\n# Specs\n")]),
-    chat: [],
-  });
+const FILES: Record<string, string> = {
+  "specs/decisions-taken/README.md": README,
+  "specs/decisions-taken/lang.md": LANG,
+  "specs/decisions-taken/unfiled.md": UNFILED,
+  "specs/decisions-pending.md": PENDING,
+  "specs/retired.md": RETIRED,
+  "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs\n",
+};
+
+function write(root: string, files: Record<string, string>): void {
+  for (const [p, t] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, p)), { recursive: true });
+    writeFileSync(join(root, p), t);
+  }
+}
+
+// Each model is built over its own temp directory (the pattern store.test.ts uses for the new layout), so a
+// write's Plan — whose Change.path is a real file under decisions-taken/ — can be re-applied and reloaded the
+// same way the api would. filesOf remembers which files built a given Model, so `applied` can start from them.
+const filesOf = new WeakMap<Model, Record<string, string>>();
+
+function rebuild(files: Record<string, string>): Model {
+  const root = mkdtempSync(join(tmpdir(), "specs-bot-wd-"));
+  write(root, files);
+  const m = buildModel(loadStore(root));
+  filesOf.set(m, files);
+  return m;
+}
+
+function model(over: Record<string, string> = {}): Model {
+  return rebuild({ ...FILES, ...over });
 }
 
 /** The model over the data a plan leaves, as the writer would load it. */
 function applied(m: Model, plan: Plan): Model {
-  const text = (path: string, now: string) => plan.changes.find((c) => c.path === path)?.after ?? now;
-  return buildModel({
-    specsDir: "/nowhere",
-    steps: parseSteps(text("specs/decisions-taken-steps.md", m.steps.lines.join("\n"))),
-    pending: parsePending(text("specs/decisions-pending.md", m.pending.lines.join("\n"))),
-    taken: parseTaken(text("specs/decisions-taken.md", m.taken.lines.join("\n"))),
-    retired: parseRetired(text("specs/retired.md", m.retired.lines.join("\n"))),
-    tree: m.tree,
-    chat: [],
-  });
+  const files = { ...filesOf.get(m)! };
+  for (const c of plan.changes) files[c.path] = c.after;
+  return rebuild(files);
 }
 
 function refused(fn: () => unknown): WriteError {
@@ -149,7 +177,7 @@ describe("pendingAdd", () => {
 
 test("a section is found by its name before a heading that only mentions it", () => {
   const pending = PENDING.replace("## Machine 2", "## Blocking now — machine 1 and front 165\n\nNone open.\n\n## Machine 2");
-  const p = pendingAdd(model({ pending }), { id: "q-10", section: "machine 1", title: "T", fields: FIELDS });
+  const p = pendingAdd(model({ "specs/decisions-pending.md": pending }), { id: "q-10", section: "machine 1", title: "T", fields: FIELDS });
   expect(p.summary).toBe("open question q-10 in § Machine 1");
 });
 
@@ -184,6 +212,9 @@ describe("answer", () => {
     expect(after.pending.review.map((r) => r.step)).toEqual([2]);
     expect(errors(after)).toEqual([]);
     expect(p.message).toBe("spec: row 3 answers q-9");
+    // With no --subject, the row lands in "unfiled" (already there in this fixture) — no other group touched.
+    expect(p.changes.map((c) => c.path).sort()).toEqual(["specs/decisions-pending.md", "specs/decisions-taken/README.md", "specs/decisions-taken/unfiled.md"]);
+    expect(after.stepByNum.get(3)!.section).toBe("unfiled");
   });
 
   test("by a machine: the coordinator †, and marked for the maintainer's review", () => {
@@ -193,11 +224,15 @@ describe("answer", () => {
     expect(after.pending.review.at(-1)).toMatchObject({ step: 3, answered: "q-9", summary: "It narrows.", reviewed: false });
   });
 
-  test("joins a subject: its Steps and Binds, and a sentence", () => {
+  test("joins a subject: its Steps and Binds, and a sentence — touching only that group, the README and pending", () => {
     const m = model();
-    const after = applied(m, answer(m, { id: "q-9", rule: "R.", binds: "y", subject: "lang", subjectText: "(2) It narrows (3)." }, "maintainer"));
+    const p = answer(m, { id: "q-9", rule: "R.", binds: "y", subject: "lang", subjectText: "(2) It narrows (3)." }, "maintainer");
+    expect(p.changes.map((c) => c.path).sort()).toEqual(["specs/decisions-pending.md", "specs/decisions-taken/README.md", "specs/decisions-taken/lang.md"]);
+    const after = applied(m, p);
     const s = after.subjectBySlug.get("lang")!;
     expect([s.steps, s.binds, s.paragraphs.at(-1)]).toEqual([[1, 2, 3], "x · y", "(2) It narrows (3)."]);
+    expect(after.stepByNum.get(3)!.section).toBe("lang");
+    expect(errors(after)).toEqual([]);
   });
 
   test("a new ruling no question asked keeps the page as it is but its number", () => {
@@ -210,12 +245,18 @@ describe("answer", () => {
   test("refuses an id already answered", () => {
     expect(refused(() => answer(model(), { id: "q-1", rule: "R.", binds: "x" }, "maintainer")).message).toContain("already answered by step 1");
   });
+
+  test("refuses an unknown --subject (only unfiled is ever auto-created)", () => {
+    expect(refused(() => answer(model(), { id: "q-9", rule: "R.", binds: "x", subject: "ghost" }, "maintainer")).code).toBe("not-found");
+  });
 });
 
-describe("supersede, review, retired", () => {
-  test("a row is overtaken by a later one, its text kept", () => {
+describe("supersede, review, retired, setCell", () => {
+  test("a row is overtaken by a later one, its text kept, only its own group touched", () => {
     const m = applied(model(), answer(model(), { id: "q-9", rule: "R.", binds: "x" }, "maintainer"));
-    const after = applied(m, supersede(m, { num: 1, by: 3, kind: "overtaken" }));
+    const p = supersede(m, { num: 1, by: 3, kind: "overtaken" });
+    expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/lang.md"]);
+    const after = applied(m, p);
     expect(after.stepByNum.get(1)!).toMatchObject({ status: "overtaken", supersededBy: 3 });
     expect(after.stepByNum.get(1)!.rule).toBe("Overtaken by 3 (the later row in force, 730); the text as decided: **A rule.**");
   });
@@ -225,10 +266,11 @@ describe("supersede, review, retired", () => {
     expect(refused(() => supersede(model(), { num: 1, by: 9, kind: "replaced" })).code).toBe("not-found");
   });
 
-  test("set-cell changes the Cell alone (1022)", () => {
+  test("set-cell changes the Cell alone (1022), only its own group touched", () => {
     for (const value of ["tests/runtime_reuse.sh", "conformance/run.sh --self-test", "a_cell"]) {
       const p = setCell(model(), { num: 1, value });
       expect(p.op).toBe("step.cell");
+      expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/lang.md"]);
       const row = applied(model(), p).stepByNum.get(1)!;
       expect(row.cell).toBe(value);
       expect(p.changes[0]!.after).toContain(`| 1 | q-1 · (the maintainer, 2026-10-01) | **A rule.** | \`machine-1/150\` s3 | ${value} |`);
@@ -251,5 +293,90 @@ describe("supersede, review, retired", () => {
     const after = applied(model(), retiredAdd(model(), { area: "process", retired: "x", replacedBy: "y", decisions: "2 (1)" }));
     expect(after.retired.rows.map((r) => `${r.area}:${r.retired}`)).toEqual(["Language spellings:`old`", "Process and files:a", "Process and files:x"]);
     expect(refused(() => retiredAdd(model(), { area: "process", retired: "x", replacedBy: "y", decisions: "77" })).message).toContain("77");
+  });
+});
+
+describe("refile", () => {
+  test("moves the row to another group, leaving the rest of that group and every other group untouched", () => {
+    const m = model();
+    const p = refile(m, { num: 1, to: "unfiled" });
+    expect(p.changes.map((c) => c.path).sort()).toEqual(["specs/decisions-taken/lang.md", "specs/decisions-taken/unfiled.md"]);
+    const after = applied(m, p);
+    expect(after.stepByNum.get(1)!.section).toBe("unfiled");
+    expect(after.stepByNum.get(2)!.section).toBe("lang");
+    // Home moved; the citation in lang's own Steps: is untouched (home and citation are independent).
+    expect(after.subjectBySlug.get("lang")!.steps).toEqual([1, 2]);
+    expect(errors(after)).toEqual([]);
+  });
+
+  test("--cite adds the row to a group with no Steps: line yet", () => {
+    const m = model();
+    const after = applied(m, refile(m, { num: 1, to: "unfiled", cite: true }));
+    const g = after.record!.groups.get("unfiled")!;
+    expect(g.steps).toEqual([1]);
+  });
+
+  const WITH_STD: Record<string, string> = {
+    ...FILES,
+    "specs/decisions-taken/README.md": "# Decisions taken\n\nThe rules in force. **The next free number is 3.**\n\n## Groups\n\n- lang\n- std\n- unfiled\n",
+    "specs/decisions-taken/std.md":
+      "# std — the standard library's surface\n\n**What std holds.**\n\nSteps: 2\nBinds: std\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n",
+  };
+
+  test("--cite extends an existing Steps: list", () => {
+    const m = model(WITH_STD);
+    const after = applied(m, refile(m, { num: 1, to: "std", cite: true }));
+    expect(after.subjectBySlug.get("std")!.steps).toEqual([2, 1]);
+    expect(after.stepByNum.get(1)!.section).toBe("std");
+    // lang still cites 1 in its own Steps: (refile moved the row's home, not the citation elsewhere).
+    expect(after.subjectBySlug.get("lang")!.steps).toEqual([1, 2]);
+  });
+
+  test("--cite is a no-op on Steps: when the destination already cites the row — no duplicate", () => {
+    const m = model(WITH_STD);
+    const after = applied(m, refile(m, { num: 2, to: "std", cite: true }));
+    expect(after.subjectBySlug.get("std")!.steps).toEqual([2]);
+    expect(after.stepByNum.get(2)!.section).toBe("std");
+  });
+
+  test("refuses moving a row to the group it already lives in, an unknown destination, or an unknown row", () => {
+    expect(refused(() => refile(model(), { num: 1, to: "lang" })).message).toContain("already in lang");
+    expect(refused(() => refile(model(), { num: 1, to: "ghost" })).code).toBe("not-found");
+    expect(refused(() => refile(model(), { num: 99, to: "unfiled" })).code).toBe("not-found");
+  });
+});
+
+describe("subjectNew", () => {
+  test("creates the group file and lists it in the README right before unfiled", () => {
+    const m = model();
+    const p = subjectNew(m, { slug: "std", summary: "the standard library's surface", lead: "What std holds.", binds: "std" });
+    expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/std.md", "specs/decisions-taken/README.md"]);
+    expect(p.changes[0]!.before).toBeNull();
+    const after = applied(m, p);
+    expect([...after.record!.groups.keys()]).toEqual(["lang", "std", "unfiled"]);
+    expect(after.record!.readme.order).toEqual(["lang", "std", "unfiled"]);
+    const g = after.record!.groups.get("std")!;
+    expect([g.summary, g.lead, g.steps, g.binds]).toEqual(["the standard library's surface", "What std holds.", [], "std"]);
+  });
+
+  test("with no lead and no binds, Steps: is still written, empty, and parses as no steps", () => {
+    const m = model();
+    const after = applied(m, subjectNew(m, { slug: "runtime", summary: "the runtime" }));
+    const g = after.record!.groups.get("runtime")!;
+    expect([g.lead, g.paragraphs, g.steps, g.binds]).toEqual(["", [], [], ""]);
+  });
+
+  test("goes to the end of the list when unfiled is not listed", () => {
+    const files = { ...FILES, "specs/decisions-taken/README.md": README.replace("- unfiled\n", "") };
+    const m = model(files);
+    const p = subjectNew(m, { slug: "std", summary: "s" });
+    expect(p.changes[1]!.after.trim().endsWith("- std")).toBe(true);
+  });
+
+  test("refuses a duplicate slug, a reserved slug, a bad slug", () => {
+    expect(refused(() => subjectNew(model(), { slug: "lang", summary: "s" })).message).toContain("already exists");
+    expect(refused(() => subjectNew(model(), { slug: "unfiled", summary: "s" })).message).toContain("reserved");
+    expect(refused(() => subjectNew(model(), { slug: "readme", summary: "s" })).message).toContain("reserved");
+    expect(refused(() => subjectNew(model(), { slug: "Not-OK", summary: "s" })).code).toBe("invalid");
   });
 });

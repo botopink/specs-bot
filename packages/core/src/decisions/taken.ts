@@ -38,13 +38,24 @@ export function parseTaken(text: string): TakenDoc {
 function parseSubject(lines: string[], line: number): Subject {
   const m = lines[0]!.match(HEADING);
   if (!m) throw new Error(`line ${line + 1}: a subject heading is "## <slug> — <summary>": ${lines[0]}`);
+  const prose = parseProse(lines.slice(1));
+  return { slug: m[1]!, summary: m[2]!, ...prose, lines, line };
+}
 
+/**
+ * The lead, paragraphs, Steps and Binds of a subject's or a group's body — the lines after its heading,
+ * up to the next heading (a subject's `##`) or a table (a group's `## Record`). Shared with group.ts,
+ * whose H1 groups carry the same prose shape as a subject here, once their own `## Record` table is cut off.
+ */
+export function parseProse(
+  lines: string[],
+): { lead: string; paragraphs: string[]; steps: number[]; binds: string } {
   let lead = "";
   let steps: number[] = [];
   let binds = "";
   // `Steps:` and `Binds:` are read wherever they stand: some follow a paragraph with no blank line between.
   const body: string[] = [];
-  for (const l of lines.slice(1)) {
+  for (const l of lines) {
     if (l.startsWith("Steps:")) steps = parseNumberList(l.slice("Steps:".length));
     else if (l.startsWith("Binds:")) binds = l.slice("Binds:".length).trim();
     else body.push(l);
@@ -54,7 +65,7 @@ function parseSubject(lines: string[], line: number): Subject {
     if (!lead && paragraphs.length === 0 && /^\*\*.*\*\*$/.test(block)) lead = block.slice(2, -2);
     else if (block !== "---") paragraphs.push(block);
   }
-  return { slug: m[1]!, summary: m[2]!, lead, paragraphs, steps, binds, lines, line };
+  return { lead, paragraphs, steps, binds };
 }
 
 function paragraphsOf(lines: string[]): string[] {

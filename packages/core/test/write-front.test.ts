@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   assignFront,
   buildModel,
@@ -17,8 +20,13 @@ import {
   WriteError,
 } from "../src/index.ts";
 
+// check()'s checkRecord reads the decisions-taken/ directory straight off disk (group-missing / group-unlisted),
+// so the model below (and `stray`, which spreads it) needs a real, if empty, one to agree with its empty record.
+const specsDir = mkdtempSync(join(tmpdir(), "specs-bot-wf-"));
+mkdirSync(join(specsDir, "decisions-taken"), { recursive: true });
+
 const model = buildModel({
-  specsDir: "/nowhere",
+  specsDir,
   steps: parseSteps(""),
   pending: parsePending(""),
   taken: parseTaken(""),
@@ -33,6 +41,7 @@ const model = buildModel({
     parseDoc("01-checker/README.md", "---\nmilestone: 1.0.5-beta\n---\n# Old\n"),
   ]),
   chat: [],
+  record: { readme: { lines: [], order: [] }, groups: new Map() },
 });
 
 const after = (p: Plan) => p.changes[0]!.after;

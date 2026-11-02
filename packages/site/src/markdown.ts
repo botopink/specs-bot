@@ -116,6 +116,12 @@ export function resolveLink(href: string, ctx: LinkContext): string | undefined 
   if (ctx.refs.has(`${ref}/README`)) return `/docs/${ref}/README${anchor}`;
   const top = TOP_LEVEL[ref];
   if (top) return top;
+  // decisions-taken/<slug> is never a Doc of the tree (docs/load.ts excludes the whole directory, group.ts's own
+  // the shape store.ts reads it in) — a pasted link to one still resolves, to the subject it names.
+  if (ref.startsWith("decisions-taken/")) {
+    const slug = ref.slice("decisions-taken/".length);
+    return slug === "README" ? "/subjects" : `/subjects/${slug}`;
+  }
   return undefined;
 }
 
