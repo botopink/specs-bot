@@ -174,9 +174,19 @@ function groupToSubject(g: GroupDoc): Subject {
 }
 
 /** A Store holding only steps/taken (and, when given, record) — the rest check()/units() need but this script
- * never changes (pending, retired, the doc tree, chat) stay empty in every Store this script builds. */
+ * never changes (pending, retired, the doc tree, chat) stay empty in every Store this script builds. `record`
+ * is now mandatory on Store (packages/core/src/store.ts, decisions-record-split): flatStore's "no groups to
+ * walk" case still needs a Store, so it gets store.ts's own empty shape rather than omitting the field. */
 function bareStore(parts: Pick<Store, "steps" | "taken"> & Pick<Partial<Store>, "record">): Store {
-  return { specsDir: "/synthetic", pending: parsePending(""), retired: parseRetired(""), tree: placeDocs([]), chat: [], ...parts };
+  return {
+    specsDir: "/synthetic",
+    pending: parsePending(""),
+    retired: parseRetired(""),
+    tree: placeDocs([]),
+    chat: [],
+    record: { readme: { lines: [], order: [] }, groups: new Map() },
+    ...parts,
+  };
 }
 
 function flatStore(steps: StepsDoc, taken: TakenDoc): Store {
