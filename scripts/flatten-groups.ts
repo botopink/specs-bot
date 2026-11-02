@@ -8,23 +8,36 @@
 //
 // 1. every document whose `group` is set (doc.ts's docMeta) is grouped by (front.dir, group.dir) — one
 //    promotion per pair.
-// 2. before moving anything: no promoted group's number may equal an existing front's number, nor another
-//    promoted group's — an --override entry (keyed `<front-dir>/<group-dir>`, e.g. "08-misc/70-misc-extra",
-//    valued the new "NNN-slug" to use instead) resolves the one it names. migrate refuses, listing every
-//    collision still standing, when one has no override; dry-run only lists them, never refuses.
-// 3. fronts/<front>/<group>/… → fronts/<group-or-its-override>/…; the front directory keeps whatever sat
-//    directly in it (its own README.md and the files that were in no group) — gone entirely when nothing did.
+// 2. a group named exactly like the front it sits in (a leftover of the pre-flatten nesting, e.g.
+//    fronts/105-i18n/105-i18n/) merges straight into that front — no new front, no number spent; the
+//    maintainer: a group is never its own front's twin. Every other group keeps its own number unless
+//    it is already another front's or an earlier group's — walked in stable key order, so a real tree's
+//    many collisions (one leading number reused by several unrelated fronts and groups alike) resolve on
+//    their own instead of asking for an --override per pair: a colliding group gets the next number above
+//    every one a front holds today, never a lower gap a retired front's number might still carry meaning
+//    at. An --override entry (keyed `<front-dir>/<group-dir>`, e.g. "08-misc/70-misc-extra",
+//    valued the "NNN-slug" to force) still takes precedence over both rules, when the maintainer wants a
+//    particular number instead of the one auto-assigned.
+// 3. fronts/<front>/<group>/… → fronts/<its-slot>/…; the front directory keeps whatever sat directly in it
+//    (its own README.md and the files that were in no group) — gone entirely when nothing did.
 // 4. every relative link and every bare `specs/fronts/<front>/<group>/` mention is rewritten: fronts-move.ts's
 //    rewriteLines/rebaseLink/finalTarget, reused here, never reimplemented.
 // 5. moved.json gains `<old ref> → <new ref>` per promoted document, chains collapsed (fronts-move.ts's
 //    collapse, reused).
 // 6. a promoted group's own README, when it had none of its own and inherited milestone/owner from its front's
 //    README (load.ts's placeOf), gets them written explicitly — merged into what it already has (never
-//    overwritten), a minimal README created when the group had none.
+//    overwritten), a minimal README created when the group had none; a self-merging group creates or amends
+//    nothing (it has no front of its own — the one it merged into keeps its own README as is).
 //
-// Seven oracles, all run in dry-run; migrate writes only when every one passes:
-//   O1 nothing lost, O2 metadata preserved, O3 no new collision, O4 check() no worse, O5 links still resolve,
-//   O6 moved.json answers, O7 idempotent (a dry-run of the result has nothing to do).
+// A group nested two levels deep (a group inside a group a pass just promoted) needs more than one pass:
+// the CLI loops dry-run or migrate until a pass finds nothing left, migrate committing each pass on its own.
+// Five oracles gate every pass: O1 nothing lost, O2 metadata preserved, O3 no new collision, O5 links still
+// resolve, O6 moved.json answers. Two more are checked only once a pass's own lookahead shows nothing is
+// left to promote after it — a group this very pass promoted still reads as "outside its front" to check()
+// and still has more to flatten to a further dry-run, both real but only because a later pass resolves
+// them: O4 check() no worse, and O7 idempotent, which a mid-loop pass never even reaches (its own loop
+// condition is exactly O7's definition). migrate writes a pass only when every oracle due at that pass
+// passes; runOracles runs all seven unconditionally, for a single planFlatten call outside the CLI's loop.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -98,8 +111,68 @@ function frontDirsOf(docs: Doc[]): Set<string> {
   return new Set(docs.filter((d) => d.front).map((d) => d.front!.dir));
 }
 
-function destOf(groups: GroupInfo[], override: Map<string, string>): Map<string, string> {
-  return new Map(groups.map((g) => [g.key, override.get(g.key) ?? g.groupDir]));
+export interface Renumbering {
+  key: string;
+  from: string;
+  to: string;
+}
+
+export interface DestResult {
+  dest: Map<string, string>;
+  /** Every group an explicit --override named (its own number otherwise colliding or not). */
+  overridden: Set<string>;
+  /** A group promoted straight into the front that already holds its exact name — no new front. */
+  selfMerge: Set<string>;
+  /** A colliding group given a fresh number, in key order — the number it would have kept is `from`. */
+  renumbered: Renumbering[];
+}
+
+/**
+ * One front slot per group, `override` honoured first. A group whose own dir names the front it
+ * already lives in (the maintainer: a leftover of the pre-flatten nesting, never a real promotion)
+ * merges straight into that front — no new front, no number spent. Every other group keeps its own
+ * number when free; a colliding one gets the lowest free number above every number already in use,
+ * groups walked in their stable key order so two runs over the same tree always agree.
+ */
+function destOf(groups: GroupInfo[], frontDirs: Set<string>, override: Map<string, string>): DestResult {
+  const dest = new Map<string, string>();
+  const overridden = new Set<string>();
+  const selfMerge = new Set<string>();
+  const renumbered: Renumbering[] = [];
+  const used = new Set<number>();
+  for (const d of frontDirs) {
+    const m = d.match(NUMBERED);
+    if (m) used.add(Number(m[1]));
+  }
+  // Climbs from above every number a front holds today, never a low gap: a retired front's old number
+  // is free here too but may still carry meaning in a decision or a chat line from before it retired.
+  let nextFree = Math.max(0, ...used) + 1;
+  for (const g of groups) {
+    const forced = override.get(g.key);
+    if (forced !== undefined) {
+      dest.set(g.key, forced);
+      overridden.add(g.key);
+      const m = forced.match(NUMBERED);
+      if (m) used.add(Number(m[1]));
+      continue;
+    }
+    if (g.groupDir === g.frontDir) {
+      dest.set(g.key, g.frontDir);
+      selfMerge.add(g.key);
+      continue;
+    }
+    if (!used.has(g.groupNum)) {
+      dest.set(g.key, g.groupDir);
+      used.add(g.groupNum);
+      continue;
+    }
+    while (used.has(nextFree)) nextFree++;
+    const to = `${nextFree}-${g.groupSlug}`;
+    dest.set(g.key, to);
+    used.add(nextFree);
+    renumbered.push({ key: g.key, from: g.groupDir, to });
+  }
+  return { dest, overridden, selfMerge, renumbered };
 }
 
 function numbersOf(dirs: Iterable<string>): Map<number, Set<string>> {
@@ -120,12 +193,15 @@ export interface Collision {
   dirs: string[];
 }
 
-/** Every front number that more than one directory would hold, `dest` applied. */
-function collisionsOf(frontDirs: Set<string>, dest: Map<string, string>): Collision[] {
-  const byNum = numbersOf([...frontDirs, ...dest.values()]);
+/** A safety net over destOf's own bookkeeping: every front number that would still sit on more than
+ * one distinct directory once `dest` is applied (destOf's auto-numbering is expected to leave this
+ * empty; a non-empty result means an --override itself collided with something). */
+function collisionsOf(frontDirs: Set<string>, dest: DestResult): Collision[] {
+  const dirs = [...frontDirs, ...[...dest.dest].filter(([k]) => !dest.selfMerge.has(k)).map(([, v]) => v)];
+  const byNum = numbersOf(dirs);
   return [...byNum]
-    .filter(([, dirs]) => dirs.size > 1)
-    .map(([num, dirs]) => ({ num, dirs: [...dirs].sort() }))
+    .filter(([, ds]) => ds.size > 1)
+    .map(([num, ds]) => ({ num, dirs: [...ds].sort() }))
     .sort((a, b) => a.num - b.num);
 }
 
@@ -162,10 +238,16 @@ export interface ReadmeFix {
   createTitle?: string;
 }
 
-function readmeFixesOf(groups: GroupInfo[], dest: Map<string, string>): Map<string, ReadmeFix> {
+function readmeFixesOf(groups: GroupInfo[], dest: Map<string, string>, selfMerge: Set<string>): Map<string, ReadmeFix> {
   const out = new Map<string, ReadmeFix>();
   for (const g of groups) {
-    const readme = g.docs.find((d) => d.name === "README");
+    // Merges into the front's own existing README (selfMergeReadmeConflicts flags the one case
+    // where the group also has its own, which would land on the very same path) — nothing to fix.
+    if (selfMerge.has(g.key)) continue;
+    // docMeta keeps only the first two numbered segments (front, group) — a doc three levels deep (a
+    // group nested inside this one, still to flatten in a later pass) is named "README" too, by its own
+    // bare filename alone, so a ref match (not just the name) is the only way to mean the group's own.
+    const readme = g.docs.find((d) => d.ref === `${FRONTS_DIR}/${g.frontDir}/${g.groupDir}/README`);
     const rep = readme ?? [...g.docs].sort((a, b) => a.ref.localeCompare(b.ref))[0]!;
     const inheritedVersion = rep.version;
     const inheritedOwner = rep.owner;
@@ -200,7 +282,15 @@ export interface Plan {
   before: DataSet;
   groups: GroupInfo[];
   dest: Map<string, string>;
-  /** Front numbers more than one directory would hold, `dest` applied — migrate refuses while any stand. */
+  /** A group promoted straight into the front that already holds its exact name — no new front made. */
+  selfMerge: Set<string>;
+  /** A colliding group given a fresh number instead of its own, in key order. */
+  renumbered: Renumbering[];
+  /** A self-merging group that also carries its own README — it would land on the front's own; names
+   * the group(s) still needing an --override. migrate refuses while any stand. */
+  selfMergeConflicts: string[];
+  /** Safety net only: an --override itself landed on a number already spoken for. migrate refuses while
+   * any stand (destOf's own auto-numbering never leaves one). */
   collisions: Collision[];
   readmeFixes: Map<string, ReadmeFix>;
   moves: Map<string, string>;
@@ -217,9 +307,11 @@ export function planFlatten(data: DataSet, override: Map<string, string> = new M
   const docs = docsOf(data.specs);
   const groups = groupsOf(docs);
   const frontDirs = frontDirsOf(docs);
-  const dest = destOf(groups, override);
-  const collisions = collisionsOf(frontDirs, dest);
-  const readmeFixes = readmeFixesOf(groups, dest);
+  const destResult = destOf(groups, frontDirs, override);
+  const { dest, selfMerge, renumbered } = destResult;
+  const collisions = collisionsOf(frontDirs, destResult);
+  const selfMergeConflicts = groups.filter((g) => selfMerge.has(g.key) && g.docs.some((d) => d.ref === `${FRONTS_DIR}/${g.frontDir}/${g.groupDir}/README`)).map((g) => g.key);
+  const readmeFixes = readmeFixesOf(groups, dest, selfMerge);
 
   const map: TargetMap = (p) => destPath(p, dest);
   const text = textRewriter(dest);
@@ -263,7 +355,7 @@ export function planFlatten(data: DataSet, override: Map<string, string> = new M
   for (const [p, np] of moves) if (isMd(p)) moved.set(refOf(p), refOf(np));
 
   const after: DataSet = { specs, moved: collapse(moved) };
-  return { before: data, groups, dest, collisions, readmeFixes, moves, rewritten, created, amended, after };
+  return { before: data, groups, dest, selfMerge, renumbered, selfMergeConflicts, collisions, readmeFixes, moves, rewritten, created, amended, after };
 }
 
 /** Nothing moves, nothing is created or amended. */
@@ -454,18 +546,24 @@ export function oracleIdempotent(plan: Plan): OracleResult {
   return pass("a second dry-run over the result has nothing to do");
 }
 
-const ORACLES: { name: string; run: (plan: Plan) => OracleResult }[] = [
+/** O1, O2, O3, O5, O6: structural, and true of any single pass on its own. O4 and O7 are not gated the
+ * same way mid a multi-pass run (the CLI's run(), below): a group nested inside a group this very pass
+ * promoted is still "outside its front" in check()'s eyes, and a further dry-run still finds it to do —
+ * both are real, but only because a later pass resolves them, not because this pass did anything wrong.
+ * run() checks O4 only once it knows a pass is the last one, and leaves O7 to its own loop condition. */
+const STRUCTURAL_ORACLES: { name: string; run: (plan: Plan) => OracleResult }[] = [
   { name: "O1 nothing lost", run: oracleNothingLost },
   { name: "O2 metadata preserved", run: oracleMetaPreserved },
   { name: "O3 no new collision", run: oracleNoCollision },
-  { name: "O4 check() no worse", run: oracleCheckNoWorse },
   { name: "O5 links still resolve", run: oracleLinksResolve },
   { name: "O6 moved.json answers", run: oracleMovedAnswers },
-  { name: "O7 idempotent", run: oracleIdempotent },
 ];
+const CHECK_ORACLE = { name: "O4 check() no worse", run: oracleCheckNoWorse };
+const CORE_ORACLES = [...STRUCTURAL_ORACLES.slice(0, 3), CHECK_ORACLE, ...STRUCTURAL_ORACLES.slice(3)];
+const ORACLES = [...CORE_ORACLES, { name: "O7 idempotent", run: oracleIdempotent }];
 
-export function runOracles(plan: Plan): { name: string; result: OracleResult }[] {
-  return ORACLES.map(({ name, run }) => {
+function runList(list: typeof ORACLES, plan: Plan): { name: string; result: OracleResult }[] {
+  return list.map(({ name, run }) => {
     try {
       return { name, result: run(plan) };
     } catch (e) {
@@ -474,21 +572,36 @@ export function runOracles(plan: Plan): { name: string; result: OracleResult }[]
   });
 }
 
+/** Every oracle, O7 included — a single-pass check (tests, ad hoc calls). The CLI's run(), below, checks
+ * O1–O3/O5/O6 every pass but defers O4 to a pass's own lookahead and leaves O7 to its loop condition. */
+export function runOracles(plan: Plan): { name: string; result: OracleResult }[] {
+  return runList(ORACLES, plan);
+}
+
 // ── the CLI ──
 
 export function summary(plan: Plan): string[] {
   const fronts = new Set(plan.groups.map((g) => g.frontDir)).size;
-  return [
+  const lines = [
     `${plan.groups.length} group(s) promoted from ${fronts} front(s); ${plan.moves.size} file(s) moved, ${plan.rewritten.size} file(s) with a link or mention rewritten`,
     `${[...plan.readmeFixes.values()].filter((f) => f.existingRef).length} README amended with an inherited field, ${plan.created.length} README created`,
   ];
+  if (plan.selfMerge.size) lines.push(`${plan.selfMerge.size} group merged straight into the front already holding its exact name, no new front made`);
+  if (plan.renumbered.length) {
+    lines.push(`${plan.renumbered.length} group given a fresh number, its own colliding with an existing front or an earlier group:`);
+    for (const r of plan.renumbered) lines.push(`  ${r.key}: ${r.from} → ${r.to}`);
+  }
+  return lines;
 }
 
 export function refusal(plan: Plan, outcomes: { name: string; result: OracleResult }[]): string | undefined {
   const failed = outcomes.filter((o) => !o.result.ok).map((o) => o.name);
   if (failed.length) return `an oracle failed (${failed.join(", ")}); nothing written`;
+  if (plan.selfMergeConflicts.length) {
+    return `a self-merging group also carries its own README, which would land on the front's; name it in --override ("<front-dir>/<group-dir>": "a free NNN-slug") to promote it separately instead: ${plan.selfMergeConflicts.join(", ")}; nothing written`;
+  }
   if (plan.collisions.length) {
-    return `colliding front number(s), name the group(s) in --override ("<front-dir>/<group-dir>": "a free NNN-slug"); nothing written:\n${plan.collisions
+    return `an --override collided with a number already spoken for ("<front-dir>/<group-dir>": "a free NNN-slug"); nothing written:\n${plan.collisions
       .map((c) => `  ${c.num}: ${c.dirs.join(", ")}`)
       .join("\n")}`;
   }
@@ -555,9 +668,9 @@ function parseArgs(argv: string[]): { specsData: string; override?: string } {
 }
 
 function printReport(plan: Plan, outcomes: { name: string; result: OracleResult }[]): boolean {
-  if (nothingToDo(plan)) console.log("nothing to do");
   for (const l of summary(plan)) console.log(l);
   for (const c of plan.collisions) console.log(`  collision: number ${c.num} — ${c.dirs.join(", ")}`);
+  if (plan.selfMergeConflicts.length) console.log(`  self-merge conflict: ${plan.selfMergeConflicts.join(", ")}`);
   let ok = true;
   for (const { name, result } of outcomes) {
     console.log(`${result.ok ? "PASS" : "FAIL"} ${name} — ${result.detail}`);
@@ -566,21 +679,41 @@ function printReport(plan: Plan, outcomes: { name: string; result: OracleResult 
   return ok;
 }
 
-/** dry-run and migrate's shared computation; returns the exit code. */
+/** dry-run and migrate's shared computation; returns the exit code. As many passes as a group nested
+ * inside a group this very run just promoted needs — oracleIdempotent (O7) is exactly this loop's own
+ * stopping condition, so each pass is checked on O1–O6 alone (O7 would legitimately still find work
+ * while a deeper level remains) and, for migrate, committed on its own before the next pass starts. */
 export async function run(cmd: "dry-run" | "migrate", specsData: string, overrideArg?: string): Promise<number> {
-  const plan = planFlatten(readDataSet(specsData), loadOverride(overrideArg));
-  const outcomes = runOracles(plan);
-  const ok = printReport(plan, outcomes);
-  if (cmd === "dry-run") return ok ? 0 : 1;
-  const why = refusal(plan, outcomes);
-  if (why) {
-    console.error(`migrate: ${why}`);
-    return 1;
+  const override = loadOverride(overrideArg);
+  let current = readDataSet(specsData);
+  let passes = 0;
+  for (;;) {
+    const plan = planFlatten(current, override);
+    if (nothingToDo(plan)) {
+      console.log(passes === 0 ? "nothing to do" : `done after ${passes} pass(es)`);
+      return 0;
+    }
+    passes++;
+    console.log(`\n── pass ${passes} ──`);
+    const isLast = nothingToDo(planFlatten(plan.after));
+    const outcomes = runList(STRUCTURAL_ORACLES, plan);
+    if (isLast) outcomes.push(...runList([CHECK_ORACLE], plan));
+    else console.log(`${CHECK_ORACLE.name} — deferred to the last pass (a group just promoted here is still nested in another)`);
+    const ok = printReport(plan, outcomes);
+    if (cmd === "dry-run") {
+      if (!ok) return 1;
+      current = plan.after;
+      continue;
+    }
+    const why = refusal(plan, outcomes);
+    if (why) {
+      console.error(`migrate: ${why}`);
+      return 1;
+    }
+    await apply(specsData, plan);
+    console.log(`migrate: pass ${passes} written${existsSync(join(specsData, ".git")) ? " and committed" : ""}`);
+    current = plan.after;
   }
-  if (nothingToDo(plan)) return 0;
-  await apply(specsData, plan);
-  console.log(`migrate: written${existsSync(join(specsData, ".git")) ? " and committed" : ""}`);
-  return 0;
 }
 
 if (import.meta.main) {
