@@ -193,14 +193,17 @@ export interface Collision {
   dirs: string[];
 }
 
-/** A safety net over destOf's own bookkeeping: every front number that would still sit on more than
- * one distinct directory once `dest` is applied (destOf's auto-numbering is expected to leave this
- * empty; a non-empty result means an --override itself collided with something). */
+/** A safety net over destOf's own bookkeeping: every front number a newly placed group's destination
+ * (self-merge excluded — it lands on a front already there) still shares with an existing front or
+ * another placed group, once `dest` is applied (destOf's auto-numbering is expected to leave this
+ * empty; a non-empty result means an --override itself collided with something). A real tree's own
+ * fronts routinely reuse a leading number across unrelated, already-frozen milestones — that is none
+ * of this script's business and is never reported here, only a number a *placement* lands on. */
 function collisionsOf(frontDirs: Set<string>, dest: DestResult): Collision[] {
-  const dirs = [...frontDirs, ...[...dest.dest].filter(([k]) => !dest.selfMerge.has(k)).map(([, v]) => v)];
-  const byNum = numbersOf(dirs);
+  const placed = new Set([...dest.dest].filter(([k]) => !dest.selfMerge.has(k)).map(([, v]) => v));
+  const byNum = numbersOf([...frontDirs, ...placed]);
   return [...byNum]
-    .filter(([, ds]) => ds.size > 1)
+    .filter(([, ds]) => ds.size > 1 && [...ds].some((d) => placed.has(d)))
     .map(([num, ds]) => ({ num, dirs: [...ds].sort() }))
     .sort((a, b) => a.num - b.num);
 }
@@ -446,17 +449,28 @@ export function oracleMetaPreserved(plan: Plan): OracleResult {
   return problems.length ? fail(few(problems)) : pass(`${beforeDocs.size} document(s): same version, owner, name, title, meta and anchors`);
 }
 
-/** O3: no front number sits on more than one directory directly under fronts/, after. */
-export function oracleNoCollision(plan: Plan): OracleResult {
+function topDirsOf(specs: DataSet["specs"]): Set<string> {
   const dirs = new Set<string>();
-  for (const p of plan.after.specs.keys()) {
+  for (const p of specs.keys()) {
     const parts = p.split("/");
     if (parts[0] === FRONTS_DIR && parts[1]) dirs.add(parts[1]);
   }
-  const byNum = numbersOf(dirs);
-  const dup = [...byNum].filter(([, s]) => s.size > 1);
+  return dirs;
+}
+
+/** O3: no number a directory newly placed directly under fronts/ by this pass shares with an existing
+ * front or another placement. A real tree's own fronts routinely reuse a leading number across
+ * unrelated, already-frozen milestones (e.g. "01-std" and "01-test-green" from different betas) — that
+ * pre-existing reuse is none of this pass's doing and is left alone; only a number a placement lands
+ * on is this oracle's business. */
+export function oracleNoCollision(plan: Plan): OracleResult {
+  const before = topDirsOf(plan.before.specs);
+  const after = topDirsOf(plan.after.specs);
+  const added = new Set([...after].filter((d) => !before.has(d)));
+  const byNum = numbersOf(after);
+  const dup = [...byNum].filter(([, s]) => s.size > 1 && [...s].some((d) => added.has(d)));
   if (dup.length) return fail(few(dup.map(([n, s]) => `${n}: ${[...s].sort().join(", ")}`)));
-  return pass(`${dirs.size} front(s) directly under fronts/, every number unique`);
+  return pass(`${after.size} front(s) directly under fronts/, no placement newly collides`);
 }
 
 function materialize(data: DataSet): string {

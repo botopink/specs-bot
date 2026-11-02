@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type DataSet, readDataSet } from "./fronts-move.ts";
-import { nothingToDo, planFlatten, run, runOracles } from "./flatten-groups.ts";
+import { nothingToDo, oracleNoCollision, planFlatten, run, runOracles } from "./flatten-groups.ts";
 
 // A small specs-data checkout, already in the fronts/ layout, holding every shape flatten-groups handles:
 //
@@ -263,6 +263,43 @@ describe("a group nested inside a group", () => {
     expect(existsSync(join(root, "specs/fronts/62-inner/README.md"))).toBe(true);
     expect(existsSync(join(root, "specs/fronts/60-base/61-mid"))).toBe(false);
     expect(nothingToDo(planFlatten(readDataSet(root)))).toBe(true);
+  });
+});
+
+describe("fronts that already reuse a number across unrelated, frozen milestones", () => {
+  // A real tree keeps "01-std" (1.0.10-beta) and "01-test-green" (1.0.0-beta) side by side: each
+  // closed milestone kept its own front numbering, so a leading number is reused on purpose and this
+  // script must never treat that pre-existing reuse as a collision of its own making — only a number a
+  // *placement* (a promoted or renumbered group) lands on is its business.
+  const REUSE: Record<string, string> = {
+    "specs/decisions-pending.md": "the next free\nnumber, which is **1**.\n",
+    "specs/retired.md": "# Retired\n",
+    "specs/decisions-taken/README.md": "# Decisions taken\n\nThe record. **The next free number is 1.**\n\n## Groups\n\n",
+    "specs/milestone/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Specs — 1.0.12-beta\n",
+    "specs/fronts/01-std/README.md": "---\nmilestone: 1.0.10-beta\nowner: machine-1\n---\n# Front 1 — std\n",
+    "specs/fronts/01-test-green/README.md": "---\nmilestone: 1.0.0-beta\nowner: machine-2\n---\n# Front 1 — test green\n",
+    "specs/fronts/80-carry/README.md": "---\nmilestone: 1.0.12-beta\nowner: machine-3\n---\n# Front 80 — carry\n",
+    "specs/fronts/80-carry/12-carry-extra/README.md": "---\nmilestone: 1.0.12-beta\n---\n# Front 12 — carry extra\n",
+  };
+  function reuseDataSet(): DataSet {
+    const specs = new Map<string, Buffer>();
+    for (const [p, t] of Object.entries(REUSE)) specs.set(p.slice("specs/".length), Buffer.from(t));
+    return { specs };
+  }
+
+  test("the pre-existing 01/01 reuse is not reported, not even as a safety-net collision", () => {
+    const plan = planFlatten(reuseDataSet());
+    expect(plan.collisions).toEqual([]);
+    expect(plan.renumbered).toEqual([]); // 12-carry-extra's own number is free
+    expect(oracleNoCollision(plan).ok).toBe(true);
+  });
+
+  test("every oracle still passes, 01-std and 01-test-green both untouched", () => {
+    const plan = planFlatten(reuseDataSet());
+    const outcomes = runOracles(plan);
+    for (const o of outcomes) expect([o.name, o.result.ok]).toEqual([o.name, true]);
+    expect(plan.after.specs.has("fronts/01-std/README.md")).toBe(true);
+    expect(plan.after.specs.has("fronts/01-test-green/README.md")).toBe(true);
   });
 });
 
