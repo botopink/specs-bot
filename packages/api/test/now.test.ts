@@ -197,7 +197,8 @@ describe("the websocket relays doing and session to whoever asks for them", () =
   let app: ReturnType<typeof createApp>;
 
   beforeAll(() => {
-    app = createApp({ host: "127.0.0.1", port: 0, dataPath: "/nowhere", tokens: new Map() }, { bus });
+    // A short release grace period: fast enough for the test below to wait out, without changing what it exercises.
+    app = createApp({ host: "127.0.0.1", port: 0, dataPath: "/nowhere", tokens: new Map() }, { bus, sessions: new Sessions(undefined, undefined, 50) });
     server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch, websocket });
   });
   afterAll(() => void server.stop(true));

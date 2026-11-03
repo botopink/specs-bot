@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { EventBus } from "../src/events.ts";
-import { identify, mountSessions, partyOf, Sessions, type Vars } from "../src/sessions.ts";
+import { identify, mountSessions, partyOf, SESSION_TTL_MS, Sessions, type Vars } from "../src/sessions.ts";
 import { mountRealtime, websocket } from "../src/ws.ts";
 
 describe("Sessions — one party per session, one session per party", () => {
@@ -77,29 +77,67 @@ describe("the session routes", () => {
 });
 
 describe("a websocket that takes a party (?as=)", () => {
-  test("holds it while open, refuses a second one, and lets it go on close", async () => {
-    const { app: a, sessions } = app();
-    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: a.fetch, websocket });
-    const open = (q: string) =>
-      new Promise<{ ws: WebSocket; first: Promise<{ hello?: { session?: string; party?: string }; closed?: { code: number; reason: string } }> }>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/api/ws${q}`);
-        const first = new Promise<{ hello?: { session?: string; party?: string }; closed?: { code: number; reason: string } }>((done) => {
-          ws.onmessage = (e) => done({ hello: JSON.parse(String(e.data)) });
-          ws.onclose = (e) => done({ closed: { code: e.code, reason: e.reason } });
-        });
-        resolve({ ws, first });
+  // A short grace period, so the tests below run fast without changing what they exercise.
+  function app(releaseGraceMs: number) {
+    const sessions = new Sessions(SESSION_TTL_MS, Date.now, releaseGraceMs);
+    const a = new Hono();
+    mountRealtime(a, sessions, new Map(), new EventBus());
+    const api = new Hono<{ Variables: Vars }>();
+    api.use("*", identify(sessions, new Map()));
+    mountSessions(api, sessions);
+    api.get("/whoami", (c) => c.json({ party: c.get("party") ?? null }));
+    a.route("/api", api);
+    return { app: a, sessions };
+  }
+
+  function open(server: ReturnType<typeof Bun.serve>, q: string) {
+    return new Promise<{ ws: WebSocket; first: Promise<{ hello?: { session?: string; party?: string }; closed?: { code: number; reason: string } }> }>((resolve) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}/api/ws${q}`);
+      const first = new Promise<{ hello?: { session?: string; party?: string }; closed?: { code: number; reason: string } }>((done) => {
+        ws.onmessage = (e) => done({ hello: JSON.parse(String(e.data)) });
+        ws.onclose = (e) => done({ closed: { code: e.code, reason: e.reason } });
       });
-    const one = await open("?as=machine-1&label=mcp%20one");
+      resolve({ ws, first });
+    });
+  }
+
+  test("holds it while open, refuses a second one, and lets it go once its release grace period passes", async () => {
+    const { app: a, sessions } = app(50);
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: a.fetch, websocket });
+    const one = await open(server, "?as=machine-1&label=mcp%20one");
     const hello = (await one.first).hello!;
     expect(hello.party).toBe("machine-1");
     expect(sessions.holder("machine-1")?.label).toBe("mcp one");
     // The session id also works over HTTP while the connection is open.
     expect(await (await a.request("/api/whoami", { headers: { "x-specs-bot-session": hello.session! } })).json()).toEqual({ party: "machine-1" });
 
-    const two = await open("?as=machine-1&label=mcp%20two");
+    const two = await open(server, "?as=machine-1&label=mcp%20two");
     expect((await two.first).closed).toMatchObject({ code: 4409 });
 
-    one.ws.close();
+    // A code other than 1000 (clean, on purpose): a dropped connection, not a deliberate release.
+    one.ws.close(3000, "dropped");
+    // Still held just after the close: the grace period has not run out yet.
+    await Bun.sleep(10);
+    expect(sessions.holder("machine-1")?.label).toBe("mcp one");
+    for (let i = 0; i < 50 && sessions.holder("machine-1"); i++) await Bun.sleep(10);
+    expect(sessions.holder("machine-1")).toBeUndefined();
+    server.stop(true);
+  });
+
+  test("a reconnect within the grace period resumes the same lease, not a fresh one", async () => {
+    const { app: a, sessions } = app(500);
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: a.fetch, websocket });
+    const one = await open(server, "?as=machine-1&label=mcp%20one");
+    const hello1 = (await one.first).hello!;
+    const since1 = sessions.holder("machine-1")!.since;
+    one.ws.close(3000, "dropped");
+
+    const two = await open(server, "?as=machine-1&label=mcp%20two");
+    const hello2 = (await two.first).hello!;
+    expect(hello2.session).toBe(hello1.session);
+    expect(sessions.holder("machine-1")).toMatchObject({ label: "mcp two", since: since1 });
+
+    two.ws.close();
     for (let i = 0; i < 50 && sessions.holder("machine-1"); i++) await Bun.sleep(10);
     expect(sessions.holder("machine-1")).toBeUndefined();
     server.stop(true);

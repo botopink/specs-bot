@@ -201,10 +201,11 @@ export function mountRealtime(app: Hono, sessions: Sessions, tokens: Map<string,
         onPong() {
           if (me) me.alive = true;
         },
-        onClose() {
+        onClose(evt) {
           if (me) hub.close(me);
-          // The party goes back the moment the connection does.
-          if (bound) sessions.release(bound);
+          // Code 1000 is this side closing on purpose (release, logout, shutdown): the party goes back at once.
+          // Anything else — a dropped connection — gets its grace period, so a quick reconnect resumes it.
+          if (bound) sessions.release(bound, evt.code === 1000);
         },
       };
     }),

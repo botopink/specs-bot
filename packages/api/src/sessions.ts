@@ -5,6 +5,10 @@
 // by being idle for the TTL. A token (`Authorization: Bearer`, SPECS_BOT_TOKENS) still names its party, and is
 // refused while another session holds that party. The leases live in memory: after a restart the CLI takes its
 // party again by itself.
+//
+// A websocket-bound lease (`/api/ws?as=<party>`) lasts while the connection is open, and for RELEASE_GRACE_MS
+// after it closes: a reconnect that takes the same party within that window resumes the very same lease (same
+// id, same `since`) instead of losing the party to a dropped connection.
 import { PARTIES } from "@specs-bot/core";
 import type { Hono, MiddlewareHandler } from "hono";
 
@@ -22,6 +26,8 @@ export interface Lease {
 }
 
 export const SESSION_TTL_MS = 30 * 60 * 1000;
+/** How long a websocket-bound lease survives its connection closing, in case a quick reconnect resumes it. */
+export const RELEASE_GRACE_MS = 5_000;
 
 /** A party taken (`held`), or let go: released, silent past the TTL, its websocket closed, or left for another party. */
 export type SessionChange = { lease: Omit<Lease, "lastSeen">; held: boolean };
@@ -30,8 +36,14 @@ export class Sessions {
   #byParty = new Map<string, Lease>();
   #byId = new Map<string, Lease>();
   #listeners = new Set<(change: SessionChange) => void>();
+  /** A bound lease's id, timed to drop once its grace period runs out unless it is resumed first. */
+  #pending = new Map<string, ReturnType<typeof setTimeout>>();
 
-  constructor(readonly ttlMs = SESSION_TTL_MS, readonly now: () => number = Date.now) {}
+  constructor(
+    readonly ttlMs = SESSION_TTL_MS,
+    readonly now: () => number = Date.now,
+    readonly releaseGraceMs = RELEASE_GRACE_MS,
+  ) {}
 
   #alive(l: Lease | undefined): Lease | undefined {
     if (!l) return undefined;
@@ -43,9 +55,28 @@ export class Sessions {
   }
 
   #drop(l: Lease): void {
+    this.#cancelPending(l.id);
     this.#byParty.delete(l.party);
     this.#byId.delete(l.id);
     this.#emit(l, false);
+  }
+
+  #scheduleDrop(l: Lease): void {
+    this.#cancelPending(l.id);
+    this.#pending.set(
+      l.id,
+      setTimeout(() => {
+        this.#pending.delete(l.id);
+        this.#drop(l);
+      }, this.releaseGraceMs).unref(),
+    );
+  }
+
+  #cancelPending(id: string): void {
+    const t = this.#pending.get(id);
+    if (t === undefined) return;
+    clearTimeout(t);
+    this.#pending.delete(id);
   }
 
   #emit(l: Lease, held: boolean): void {
@@ -70,11 +101,23 @@ export class Sessions {
     for (const l of [...this.#byParty.values()]) this.#alive(l);
   }
 
-  /** Takes `party` for a new session, or says who holds it. A session that held another party lets it go. */
+  /**
+   * Takes `party` for a new session, or says who holds it. A session that held another party lets it go.
+   * A holder still in its release grace period (its connection just closed) is resumed, not refused: same
+   * lease id and `since`, label and `bound` taken over by this call.
+   */
   take(party: string, label: string, current?: string, bound = false): { lease: Lease } | { held: Lease } | { unknown: true } {
     if (!(PARTIES as readonly string[]).includes(party)) return { unknown: true };
     const holder = this.#alive(this.#byParty.get(party));
     if (holder && holder.id === current) return { lease: holder };
+    if (holder && this.#pending.has(holder.id)) {
+      this.#cancelPending(holder.id);
+      holder.label = label;
+      holder.lastSeen = this.now();
+      if (bound) holder.bound = true;
+      else delete holder.bound;
+      return { lease: holder };
+    }
     if (holder) return { held: holder };
     const mine = current ? this.#alive(this.#byId.get(current)) : undefined;
     if (mine) this.#drop(mine);
@@ -92,9 +135,14 @@ export class Sessions {
     return l;
   }
 
-  release(id: string): boolean {
+  /** `immediate` skips a bound lease's release grace period (an explicit `DELETE /api/session`, not a dropped connection). */
+  release(id: string, immediate = false): boolean {
     const l = this.#byId.get(id);
     if (!l) return false;
+    if (!immediate && l.bound && this.releaseGraceMs > 0) {
+      this.#scheduleDrop(l);
+      return true;
+    }
     this.#drop(l);
     return true;
   }
@@ -161,7 +209,7 @@ export function mountSessions(api: Hono<{ Variables: Vars }>, sessions: Sessions
   });
   api.delete("/session", (c) => {
     const id = c.get("session");
-    return id && sessions.release(id) ? c.json({ released: true }) : c.json({ released: false });
+    return id && sessions.release(id, true) ? c.json({ released: true }) : c.json({ released: false });
   });
   api.get("/sessions", (c) => c.json({ sessions: sessions.list() }));
 }
