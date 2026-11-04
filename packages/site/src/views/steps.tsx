@@ -49,8 +49,8 @@ export function StepsPage(props: { data: SiteData; filter: StepFilter; ctx: Link
       </p>
       <form class="filters" method="get" action="/steps">
         <input type="search" name="q" value={filter.q} placeholder="Number or text" aria-label="Filter text" />
-        <select name="section" aria-label="Section">
-          <option value="">All sections</option>
+        <select name="section" aria-label="Group">
+          <option value="">All groups</option>
           {sections.map((s) => (
             <option value={s} selected={s === filter.section}>
               {s}
@@ -106,7 +106,8 @@ export function StepPage(props: { data: SiteData; row: StepRow; ctx: LinkContext
   return (
     <Layout title={`Step ${row.num}`} path={props.path} prose>
       <div class="crumbs">
-        <a href="/steps">Steps</a> · <Html inline html={renderInline(row.section, props.ctx)} />
+        <a href="/steps">Steps</a> ·{" "}
+        {data.record.groups.has(row.section) ? <a href={`/decisions/${row.section}#s${row.num}`}>{row.section}</a> : <Html inline html={renderInline(row.section, props.ctx)} />}
       </div>
       <h1>
         Step {row.num} <StatusBadge status={row.status} by={row.supersededBy} />
@@ -154,12 +155,12 @@ export function StepPage(props: { data: SiteData; row: StepRow; ctx: LinkContext
           </ul>
         </>
       ) : null}
-      <h2>Cited by subjects</h2>
+      <h2>Cited by decision groups</h2>
       {subjects.length ? (
         <ul>
           {subjects.map((s) => (
             <li>
-              <a href={`/subjects/${s.slug}`}>{s.slug}</a> <span class="muted">— {s.summary}</span>
+              <a href={`/decisions/${s.slug}`}>{s.slug}</a> <span class="muted">— {s.summary}</span>
             </li>
           ))}
         </ul>

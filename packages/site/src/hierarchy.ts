@@ -25,6 +25,11 @@ export interface FrontNode {
   readme?: Doc;
   /** What the README's title says beyond the front's number and name (see shortTitle); may be empty. */
   title: string;
+  /**
+   * The number the README's title still gives it when that is not the folder's own: a group flatten-groups.ts
+   * promoted to a front of its own under a fresh number ("188-snap", titled "Front 20 — snap").
+   */
+  formerly?: number;
   /** Documents in the front's own folder (the README apart) and in unnumbered folders below it. */
   docs: Doc[];
   folders: FolderNode[];
@@ -66,6 +71,8 @@ export function milestoneOf(data: SiteData, version: string): MilestoneNode {
       if (d.ref === frontReadmeRef(d.front)) {
         f.readme = d;
         f.title = shortTitle(d.title, d.front.num, d.front.slug);
+        const was = titleNumber(d.title, d.front.slug);
+        if (was !== undefined && was !== d.front.num) f.formerly = was;
         f.owner = d.owner ?? "";
       } else {
         f.docs.push(d);
@@ -121,14 +128,51 @@ export function frontsHref(data: SiteData, version: string, anchor?: string): st
  * own name, goes.
  */
 export function shortTitle(title: string, num: number, slug = ""): string {
-  const m = title.match(/^(?:front|track)\s+0*(\d+)\s*[—–-]\s*(.+)$/i);
-  let rest = m && Number(m[1]) === num ? m[2]! : title;
+  const m = title.match(TITLE_PREFIX);
+  // A promoted group's README still says its old number ("Front 20 — snap" in `188-snap`): the prefix goes all
+  // the same when the folder's own name follows it — the card shows the old number apart (FrontNode.formerly).
+  let rest = m && (Number(m[1]) === num || titleNumber(title, slug) !== undefined) ? m[2]! : title;
   if (slug) {
     const name = slug.replace(/-/g, "[ -]");
     const same = rest.match(new RegExp(`^\`?${name}\`?\\s*(?:[:—–]\\s*|$)`, "i"));
     if (same) rest = rest.slice(same[0].length);
   }
   return rest.trim();
+}
+
+const TITLE_PREFIX = /^(?:front|track)\s+0*(\d+)\s*[—–-]\s*(.+)$/i;
+
+/** The number a "Front N — <slug>…" title gives, when the folder's own name follows it; else undefined. */
+export function titleNumber(title: string, slug: string): number | undefined {
+  const m = title.match(TITLE_PREFIX);
+  if (!m || !slug) return undefined;
+  const name = slug.replace(/-/g, "[ -]");
+  return new RegExp(`^\`?${name}\`?\\s*(?:[:—–]|$)`, "i").test(m[2]!) ? Number(m[1]) : undefined;
+}
+
+/**
+ * Where an old folder ref (a group from before flatten-groups.ts, `fronts/150-rakun/04-rakun`) went: the front
+ * that the documents moved.json records under it now sit in.
+ */
+export function movedFolder(data: SiteData, ref: string): string | undefined {
+  for (const [from, to] of data.tree.moved) {
+    if (!from.startsWith(`${ref}/`)) continue;
+    const doc = data.docByRef.get(to);
+    if (doc?.front) return frontsHref(data, doc.version, frontAnchor(doc.front.dir));
+  }
+  return undefined;
+}
+
+/** Old Fronts-page anchors of a promoted group ("150-rakun-04-rakun") → the front it became ("04-rakun"). */
+export function movedAnchors(data: SiteData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [from, to] of data.tree.moved) {
+    const p = from.split("/");
+    if (p[0] !== FRONTS_DIR || p.length < 4 || !/^\d+-/.test(p[1]!) || !/^\d+-/.test(p[2]!)) continue;
+    const doc = data.docByRef.get(to);
+    if (doc?.front) out[folderAnchor(p[1]!, p[2]!)] = frontAnchor(doc.front.dir);
+  }
+  return out;
 }
 
 /** "98-…" before "107-…"; unnumbered names after, by name. */
