@@ -380,3 +380,72 @@ describe("subjectNew", () => {
     expect(refused(() => subjectNew(model(), { slug: "Not-OK", summary: "s" })).code).toBe("invalid");
   });
 });
+
+// The compact layout: a group whose file opens with a metadata block (decisions/meta.ts). Every write that
+// touches its rows keeps the block's derived keys current; a group without a block is left as it always was.
+describe("a group with a metadata block", () => {
+  const block = (over: Record<string, string> = {}) =>
+    [
+      "---",
+      "scope: >-",
+      "  What the language decides.",
+      "terms:",
+      "  - '`old`'",
+      "related: []",
+      "binds:",
+      `  - ${over.binds ?? "'`machine-1/150` s3'"}`,
+      "retired:",
+      ...(over.retired ?? "  - '`old`'\n  - 'a'").split("\n"),
+      `first-step: ${over.first ?? 1}`,
+      `last-step: ${over.last ?? 2}`,
+      `in-force: ${over.force ?? 2}`,
+      `superseded: ${over.gone ?? 0}`,
+      "---",
+    ].join("\n");
+  const compact = () => model({ "specs/decisions-taken/lang.md": `${block()}\n${LANG}` });
+  const metaOf = (m: Model, slug: string) => m.record.groups.get(slug)!.meta!;
+  const groupWarnings = (m: Model) => check(m).filter((f) => f.code.startsWith("group-"));
+
+  test("the fixture's block is current: no group finding", () => {
+    expect(groupWarnings(compact())).toEqual([]);
+  });
+
+  test("answer into it moves last-step and in-force; the hand keys stay as written", () => {
+    const m = compact();
+    const after = applied(m, answer(m, { id: "q-7", rule: "**New.**", binds: "`04-js`", subject: "lang" }, "maintainer"));
+    expect(metaOf(after, "lang")).toMatchObject({ scope: "What the language decides.", terms: ["`old`"], "last-step": 3, "in-force": 3, binds: ["`04-js`", "`machine-1/150` s3"] });
+    expect(groupWarnings(after)).toEqual([]);
+  });
+
+  test("supersede writes only the stub, and moves in-force and superseded", () => {
+    const m = applied(compact(), answer(compact(), { id: "q-9", rule: "R.", binds: "x" }, "maintainer"));
+    const after = applied(m, supersede(m, { num: 1, by: 3, kind: "overtaken" }));
+    expect(after.stepByNum.get(1)!).toMatchObject({ status: "overtaken", supersededBy: 3, rule: "Overtaken by 3" });
+    expect(metaOf(after, "lang")).toMatchObject({ "in-force": 1, superseded: 1, binds: [] });
+    expect(groupWarnings(after)).toEqual([]);
+  });
+
+  test("refile recomputes the block it leaves; a group without a block is not given one", () => {
+    const m = compact();
+    const p = refile(m, { num: 1, to: "unfiled" });
+    const after = applied(m, p);
+    expect(metaOf(after, "lang")).toMatchObject({ "first-step": 2, "last-step": 2, "in-force": 1, retired: ["a"], binds: [] });
+    expect(p.changes.find((c) => c.path.endsWith("unfiled.md"))!.after.startsWith("# unfiled")).toBe(true);
+    expect(groupWarnings(after)).toEqual([]);
+  });
+
+  test("a new retired form lands in the block of every group whose rows it cites", () => {
+    const m = compact();
+    const p = retiredAdd(m, { area: "process", retired: "z", replacedBy: "w", decisions: "2" });
+    expect(p.changes.map((c) => c.path)).toEqual(["specs/retired.md", "specs/decisions-taken/lang.md"]);
+    const after = applied(m, p);
+    expect(metaOf(after, "lang").retired).toEqual(["`old`", "a", "z"]);
+    expect(groupWarnings(after)).toEqual([]);
+  });
+
+  test("a malformed block is left as written (check reports it), never rewritten by a write", () => {
+    const bad = model({ "specs/decisions-taken/lang.md": `${block().replace("scope: >-\n  What the language decides.\n", "scope: ''\n")}\n${LANG}` });
+    const p = answer(bad, { id: "q-7", rule: "**New.**", binds: "x", subject: "lang" }, "maintainer");
+    expect(p.changes[0]!.after).toContain("last-step: 2");
+  });
+});

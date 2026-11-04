@@ -8,6 +8,9 @@
 // as a defensive check against a Model some other code assembled by hand (a script, a test) rather than through
 // loadModel/loadStore, never a live second path these five writes carry.
 import { joinRow } from "../md/table.ts";
+import { parseGroup } from "../decisions/group.ts";
+import { deriveGroupMeta, type GroupMeta, groupMetaProblems, splitGroupMeta, withGroupMeta } from "../decisions/meta.ts";
+import { parseRetired, type RetiredDoc } from "../decisions/retired.ts";
 import { parseNumberList } from "../decisions/taken.ts";
 import type { PendingEntry, PendingSection } from "../decisions/pending.ts";
 import type { Model } from "../model.ts";
@@ -34,6 +37,21 @@ const ID = /^[a-z0-9][a-z0-9-]*$/;
 
 /** What a row's Cell may name (decision 1022): a conformance cell's slug, a test script, or the conformance self-test. */
 const CELL = /^(?:[a-z0-9]+(?:_[a-z0-9]+)*|tests\/[A-Za-z0-9_.-]+\.sh|conformance\/run\.sh --self-test)$/;
+
+/**
+ * A group's lines with its metadata block's derived keys recomputed from those very lines (and `retired`), the
+ * hand-written keys kept as written. A group with no block, or one whose block is unreadable or malformed, is
+ * returned unchanged: the layout before the block, or a defect check.ts reports, never one a write papers over.
+ */
+function keepMeta(lines: string[], slug: string, retired: RetiredDoc): string[] {
+  const { meta, error } = splitGroupMeta(lines);
+  if (!meta || error || groupMetaProblems(meta).length) return lines;
+  const rows = parseGroup(lines.join("\n"), slug).rows;
+  return withGroupMeta(lines, { ...(meta as GroupMeta), ...deriveGroupMeta(rows, retired) });
+}
+
+/** Whether a group carries a metadata block: the compact layout, where a superseded row keeps only its stub. */
+const hasMeta = (lines: string[]) => splitGroupMeta(lines).end > 0;
 
 function oneLine(text: string, what: string): string {
   const t = text.replace(/\s*\n\s*/g, " ").trim();
@@ -360,6 +378,7 @@ export function answer(model: Model, input: AnswerInput, party: string): Plan {
     proseEnd = applied.proseEnd;
   }
   groupLines.splice(recordInsertAt(groupLines, proseEnd), 0, row);
+  groupLines = keepMeta(groupLines, targetSlug, model.retired);
 
   // The README: the next free number always; the new group listed too, when answer itself just created it.
   let readmeLines = [...rec.readme.lines];
@@ -409,9 +428,12 @@ export function supersede(model: Model, input: { num: number; by: number; kind: 
   if (input.by <= input.num) throw new WriteError("invalid", `a row is superseded by a later one: ${input.by} ≤ ${input.num}`);
   const group = rec.groups.get(row.section)!;
   const kind = input.kind[0]!.toUpperCase() + input.kind.slice(1);
-  const rule = `${kind} by ${input.by} (the later row in force, 730); the text as decided: ${row.rule}`;
-  const lines = [...group.lines];
-  lines[row.line] = joinRow([row.raw.num, row.raw.id, ` ${rule} `, row.raw.binds, row.raw.cell]);
+  // A group with a metadata block is the compact layout: the row keeps only its stub, the text as decided is in
+  // git's history. Without one, the row keeps its text after the stub, as it always did.
+  const rule = hasMeta(group.lines) ? `${kind} by ${input.by}` : `${kind} by ${input.by} (the later row in force, 730); the text as decided: ${row.rule}`;
+  const edited = [...group.lines];
+  edited[row.line] = joinRow([row.raw.num, row.raw.id, ` ${rule} `, row.raw.binds, row.raw.cell]);
+  const lines = keepMeta(edited, row.section, model.retired);
   return {
     op: "supersede",
     refs: [`step ${input.num}`],
@@ -452,12 +474,20 @@ export function retiredAdd(model: Model, input: { area: string; retired: string;
   const cells = [input.retired, input.replacedBy, decisions, input.note ?? ""].map((c, i) => (i < 3 ? cellText(oneLine(c, ["retired", "replacedBy"][i] ?? "")) : cellText(c.trim())));
   const lines = [...model.retired.lines];
   lines.splice(last + 1, 0, joinRow(cells.map((c) => ` ${c} `)));
+  // Every group whose rows the new line cites lists the form in its block's `retired` (when it has a block).
+  const retiredAfter = parseRetired(lines.join("\n"));
+  const groupChanges: Plan["changes"] = [];
+  for (const [slug, g] of model.record?.groups ?? []) {
+    if (!g.rows.some((r) => cited.includes(r.num))) continue;
+    const after = keepMeta(g.lines, slug, retiredAfter);
+    if (after.join("\n") !== g.lines.join("\n")) groupChanges.push({ path: groupPath(slug), before: g.lines.join("\n"), after: after.join("\n") });
+  }
   return {
     op: "retired.add",
     refs: [`retired ${input.retired}`],
     message: `spec: retired ${input.retired} → ${input.replacedBy}`,
     summary: `retire ${input.retired} (${area})`,
-    changes: [{ path: RETIRED, before: model.retired.lines.join("\n"), after: lines.join("\n") }],
+    changes: [{ path: RETIRED, before: model.retired.lines.join("\n"), after: lines.join("\n") }, ...groupChanges],
   };
 }
 
@@ -501,8 +531,9 @@ export function refile(model: Model, input: { num: number; to: string; cite?: bo
   if (fromSlug === input.to) throw new WriteError("invalid", `step ${input.num} is already in ${input.to}`);
   const fromGroup = rec.groups.get(fromSlug)!;
 
-  const fromLines = [...fromGroup.lines];
-  fromLines.splice(row.line, 1);
+  const cut = [...fromGroup.lines];
+  cut.splice(row.line, 1);
+  const fromLines = keepMeta(cut, fromSlug, model.retired);
 
   let toLines = [...toGroup.lines];
   let toProseEnd = toGroup.proseEnd;
@@ -513,6 +544,7 @@ export function refile(model: Model, input: { num: number; to: string; cite?: bo
   }
   const rowText = joinRow([row.raw.num, row.raw.id, row.raw.rule, row.raw.binds, row.raw.cell]);
   toLines.splice(recordInsertAt(toLines, toProseEnd), 0, rowText);
+  toLines = keepMeta(toLines, input.to, model.retired);
 
   return {
     op: "refile",
