@@ -15,6 +15,8 @@ export interface Unit {
   key: string;
   title: string;
   text: string;
+  /** A group's own meta.ts terms — searchable identifiers an agent names exactly; weighted over text (buildIndex). */
+  terms?: string;
   version?: string;
   owner?: string;
   front?: number;
@@ -66,7 +68,21 @@ export function units(store: Store): Unit[] {
     out.push({ id: `pending:${e.id}`, kind: "pending", key: e.id, title: `${e.id} · ${e.title}`, text, file: PENDING_FILE });
   }
   for (const s of store.taken.subjects) {
-    out.push({ id: `subject:${s.slug}`, kind: "subject", key: s.slug, title: `${s.slug} — ${s.summary}`, text: [s.lead, ...s.paragraphs].join("\n"), file: groupFile(s.slug) });
+    // meta.ts's scope reads as an extended, curated summary, folded into the searched prose at the same weight;
+    // terms are exact identifiers an agent is more likely to type verbatim, so they get their own, boosted field
+    // (buildIndex's searchOptions.boost) rather than being buried in running text.
+    const meta = store.record.groups.get(s.slug)?.meta;
+    const scope = typeof meta?.scope === "string" ? meta.scope : undefined;
+    const terms = Array.isArray(meta?.terms) ? (meta.terms as string[]).join(" ") : undefined;
+    out.push({
+      id: `subject:${s.slug}`,
+      kind: "subject",
+      key: s.slug,
+      title: `${s.slug} — ${s.summary}`,
+      text: [scope, s.lead, ...s.paragraphs].filter(Boolean).join("\n"),
+      ...(terms ? { terms } : {}),
+      file: groupFile(s.slug),
+    });
   }
   store.retired.rows.forEach((r, i) => {
     out.push({ id: `retired:${i}`, kind: "retired", key: r.retired, title: `${r.retired} → ${r.replacedBy}`, text: `${r.area}\n${r.note}`, file: RETIRED_FILE });
@@ -111,12 +127,14 @@ const cores = new WeakMap<SearchIndex, Core>();
 export function buildIndex(store: Store): SearchIndex {
   const all = units(store);
   const mini = new MiniSearch<Unit>({
-    fields: ["key", "title", "text"],
+    fields: ["key", "title", "text", "terms"],
     // Every run of letters and digits is a term: MiniSearch's default keeps backticks and other symbols on a
     // word, so `` `for-await-one-source` `` would index "`for" and "source`".
     tokenize: (text) => text.split(/[^\p{L}\p{N}]+/u).filter(Boolean),
     storeFields: [],
-    searchOptions: { boost: { key: 4, title: 2 }, prefix: true, fuzzy: 0.15, combineWith: "AND" },
+    // terms (a group's meta.ts list: operators, error codes, API names, exact) outweighs its free-running text,
+    // same order of magnitude as title — an agent naming one verbatim should surface the group that claims it.
+    searchOptions: { boost: { key: 4, title: 2, terms: 2 }, prefix: true, fuzzy: 0.15, combineWith: "AND" },
   });
   mini.addAll(all);
   return indexOver({ mini, byId: new Map(), order: new Map() }, all);

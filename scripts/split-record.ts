@@ -290,8 +290,16 @@ export function oracleProseFidelity(orig: OracleInput, result: SplitResult): Ora
 
 /** 3. check() over a Store built from the new layout finds the same, bar next-free-mismatch's `about`. */
 export function oracleCheckParity(orig: OracleInput, result: SplitResult): OracleResult {
+  // group-meta-missing (the metadata block every decisions-taken/ group carries since the later
+  // decisions-meta-refactor migration, 2026-11-04) is not this script's concern — it predates that migration by
+  // weeks, and the flat "original" layout has no concept of a group file to compare against at all; a block is
+  // added afterwards, by a different process, never by the split itself. Excluded here the same way
+  // next-free-mismatch is normalized below: a known, harmless, one-sided difference, not a parity regression.
   const normalize = (fs: Finding[]) =>
-    fs.map((f) => JSON.stringify(f.code === "next-free-mismatch" ? { ...f, about: "" } : f)).sort();
+    fs
+      .filter((f) => f.code !== "group-meta-missing")
+      .map((f) => JSON.stringify(f.code === "next-free-mismatch" ? { ...f, about: "" } : f))
+      .sort();
   const a = normalize(checkInMemory(flatStore(orig.steps, orig.taken)));
   const b = normalize(checkInMemory(newStoreOf(result)));
   if (JSON.stringify(a) === JSON.stringify(b)) return { ok: true, detail: `${a.length} finding(s), identical` };

@@ -183,7 +183,10 @@ describe("the read api", () => {
   });
 
   test("check reports the findings", async () => {
-    expect((await get("/api/check")).body.summary).toEqual({});
+    // "lang" and "overtaken" (this fixture, shared by the whole file) carry no metadata block — the pre-migration
+    // shape, unrelated to what this test is about (the endpoint reports findings at all); real decisions-taken/
+    // now always has one.
+    expect((await get("/api/check")).body.summary).toEqual({ "error group-meta-missing": 2 });
   });
 });
 

@@ -116,7 +116,14 @@ function recordStore(groupText: string, related: string[] = []) {
   write("specs/retired.md", RETIRED);
   write("specs/decisions-taken/README.md", `# Decisions taken\n\n**The next free number is 311.**\n\n## Groups\n\n- equality\n${related.map((r) => `- ${r}\n`).join("")}`);
   write("specs/decisions-taken/equality.md", groupText);
-  for (const r of related) write(`specs/decisions-taken/${r}.md`, `# ${r} — a neighbour\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n`);
+  // A neighbour carries its own minimal, well-formed block too (every group does, since the migration) — so
+  // naming it in `related` never itself produces a finding; what each test checks stays only what it set up.
+  for (const r of related) {
+    write(
+      `specs/decisions-taken/${r}.md`,
+      `---\nscope: >-\n  A neighbour, for related to name.\nterms: []\nrelated: []\nbinds: []\nretired: []\nfirst-step: 0\nlast-step: 0\nin-force: 0\nsuperseded: 0\n---\n# ${r} — a neighbour\n\n## Record\n\n| # | Id | Rule in force | Binds | Cell |\n|---|---|---|---|---|\n`,
+    );
+  }
   return loadStore(root);
 }
 
@@ -126,28 +133,28 @@ const groupFindings = (text: string, related: string[] = []) =>
     .map((f) => `${f.severity} ${f.code} ${f.about}`);
 
 describe("check — a group's metadata block", () => {
-  test("a group without a block is not reported (the layout before the block)", () => {
-    expect(groupFindings(BODY)).toEqual([]);
+  test("a group without a block is now group-meta-missing: every group carries one since the migration", () => {
+    expect(groupFindings(BODY)).toEqual(["error group-meta-missing group equality"]);
   });
 
   test("a current, well-formed block has no finding", () => {
     expect(groupFindings(WITH_BLOCK, ["numbers-and-arithmetic"])).toEqual([]);
   });
 
-  test("stale derived keys, unknown or self related, and a superseded row with its old text are warnings", () => {
+  test("stale derived keys, unknown or self related, and a superseded row with its old text are errors (group-related-self stays a warning)", () => {
     const text = [
       ...groupMetaLines({ ...META, related: ["equality", "ghost"], "in-force": 9 }),
       ...BODY.replace("Overtaken by 310", "Overtaken by 310 (the later row in force, 730); the text as decided: old").split("\n"),
     ].join("\n");
     expect(groupFindings(text)).toEqual([
-      "warning group-meta-stale group equality",
+      "error group-meta-stale group equality",
       "warning group-related-self group equality",
-      "warning group-related-unknown group equality",
-      "warning group-superseded-not-stub step 300",
+      "error group-related-unknown group equality",
+      "error group-superseded-not-stub step 300",
     ]);
   });
 
-  test("an unreadable block is group-meta-invalid", () => {
-    expect(groupFindings(["---", "scope: [", "---", BODY].join("\n"))).toEqual(["warning group-meta-invalid group equality"]);
+  test("an unreadable block is group-meta-invalid, an error", () => {
+    expect(groupFindings(["---", "scope: [", "---", BODY].join("\n"))).toEqual(["error group-meta-invalid group equality"]);
   });
 });

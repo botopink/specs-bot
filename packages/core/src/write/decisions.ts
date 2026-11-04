@@ -369,7 +369,13 @@ export function answer(model: Model, input: AnswerInput, party: string): Plan {
   const groupBefore = existing ? existing.lines.join("\n") : null;
   let groupLines = existing
     ? [...existing.lines]
-    : ["# unfiled — decisions no subject cites", "", "## Record", "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", ""];
+    : withGroupMeta(
+        ["# unfiled — decisions no subject cites", "", "## Record", "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", ""],
+        // Every group carries a block from the moment it exists — including unfiled, auto-created here the
+        // first time a decision lands with no subject: keepMeta (below) recomputes the derived keys once the
+        // row is in, same as for any other group this write touches.
+        { scope: "Decisions no subject cites — a landing spot, not a topic.", terms: [], related: [], binds: [], retired: [], "first-step": 0, "last-step": 0, "in-force": 0, superseded: 0 },
+      );
   let proseEnd = existing ? existing.proseEnd : groupLines.indexOf("## Record");
 
   if (input.subject) {
@@ -559,22 +565,41 @@ export function refile(model: Model, input: { num: number; to: string; cite?: bo
 }
 
 /** Opens a new, empty group file (no rows yet) and lists it in the README, right before "unfiled" when one is listed. */
-export function subjectNew(model: Model, input: { slug: string; summary: string; lead?: string; binds?: string }): Plan {
+export function subjectNew(
+  model: Model,
+  input: { slug: string; summary: string; scope: string; lead?: string; binds?: string; terms?: string[]; related?: string[]; open?: string[] },
+): Plan {
   const rec = recordOrThrow(model, "refile/subjectNew");
   const slug = input.slug.trim();
   if (!ID.test(slug)) throw new WriteError("invalid", `a subject's slug is lowercase letters, digits and hyphens: ${slug}`);
   if (slug === "unfiled" || slug === "readme") throw new WriteError("invalid", `${slug} is reserved`);
   if (rec.groups.has(slug)) throw new WriteError("invalid", `subject ${slug} already exists`);
   const summary = oneLine(input.summary, "the summary");
+  const scope = oneLine(input.scope, "scope");
+  if (!scope.trim()) throw new WriteError("invalid", "scope is required: what the group decides and where its edge is (meta.ts)");
   const lead = input.lead?.trim();
   const binds = input.binds?.trim();
+  const related = input.related ?? [];
+  for (const r of related) {
+    if (r === slug) throw new WriteError("invalid", "related may not name the group itself");
+    if (!rec.groups.has(r)) throw new WriteError("invalid", `related names ${r}, which is no group (specs-bot subject lists them)`);
+  }
 
-  const lines = [`# ${slug} — ${summary}`, ""];
+  let lines = [`# ${slug} — ${summary}`, ""];
   if (lead) lines.push(`**${lead}**`, "");
   // Steps: is written with no numbers yet — parseNumberList("") reads it as [], the same as a group with none.
   lines.push("Steps:");
   if (binds) lines.push(`Binds: ${binds}`);
   lines.push("", "## Record", "", "| # | Id | Rule in force | Binds | Cell |", "|---|---|---|---|---|", "");
+  const open = input.open ?? [];
+  lines = withGroupMeta(lines, {
+    scope,
+    terms: input.terms ?? [],
+    related,
+    ...(open.length ? { open } : {}),
+    // No rows yet: binds/retired empty, first-step/last-step/in-force/superseded all 0.
+    ...deriveGroupMeta([], model.retired),
+  });
 
   const readmeAfter = addGroupToReadme([...rec.readme.lines], slug, rec.readme.order.includes("unfiled") ? "unfiled" : undefined);
 
@@ -587,5 +612,45 @@ export function subjectNew(model: Model, input: { slug: string; summary: string;
       { path: groupPath(slug), before: null, after: lines.join("\n") },
       { path: RECORD_README, before: rec.readme.lines.join("\n"), after: readmeAfter.join("\n") },
     ],
+  };
+}
+
+/**
+ * Edits a group's hand-written metadata keys (scope/terms/related/open) — the only writer of them; a group with
+ * no readable block is refused outright (it is check.ts's group-meta-missing/-invalid to report, not this
+ * write's to paper over). Derived keys are always recomputed from the group's current rows and retired.md, same
+ * as every other write that touches a group (keepMeta); an omitted hand key keeps its current value.
+ */
+export function groupMeta(model: Model, input: { slug: string; scope?: string; terms?: string[]; related?: string[]; open?: string[] }): Plan {
+  const rec = recordOrThrow(model, "group-meta");
+  const slug = input.slug.trim();
+  const g = rec.groups.get(slug);
+  if (!g) throw new WriteError("not-found", `subject ${slug} not found`, "specs-bot subject lists them");
+  if (!g.meta || g.metaError) {
+    throw new WriteError(
+      "invalid",
+      `${slug} has no readable metadata block${g.metaError ? `: ${g.metaError}` : ""}`,
+      "a block is added by hand, in the shape meta.ts documents, once",
+    );
+  }
+  if (input.related) {
+    for (const r of input.related) {
+      if (r === slug) throw new WriteError("invalid", "related may not name the group itself");
+      if (!rec.groups.has(r)) throw new WriteError("invalid", `related names ${r}, which is no group (specs-bot subject lists them)`);
+    }
+  }
+  const scope = input.scope !== undefined ? oneLine(input.scope, "scope") : String(g.meta.scope ?? "");
+  if (!scope.trim()) throw new WriteError("invalid", "scope may not be empty");
+  const terms = input.terms ?? (Array.isArray(g.meta.terms) ? (g.meta.terms as string[]) : []);
+  const related = input.related ?? (Array.isArray(g.meta.related) ? (g.meta.related as string[]) : []);
+  const open = input.open ?? (Array.isArray(g.meta.open) ? (g.meta.open as string[]) : []);
+  const meta: GroupMeta = { scope, terms, related, ...(open.length ? { open } : {}), ...deriveGroupMeta(g.rows, model.retired) };
+  const after = withGroupMeta(g.lines, meta);
+  return {
+    op: "group.meta",
+    refs: [`subject ${slug}`],
+    message: `spec: ${slug}'s metadata edited`,
+    summary: `group ${slug}: scope/terms/related/open updated`,
+    changes: [{ path: groupPath(slug), before: g.lines.join("\n"), after: after.join("\n") }],
   };
 }
