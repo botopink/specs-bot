@@ -2,6 +2,8 @@
 // An error breaks a rule a write must never break; a warning is a defect in today's data worth fixing by hand.
 import { existsSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
+import type { GroupDoc } from "./decisions/group.ts";
+import { deriveGroupMeta, groupMetaProblems, staleGroupMeta } from "./decisions/meta.ts";
 import { nextFree, statedNextFree } from "./decisions/steps.ts";
 import { frontReadmeRef } from "./docs/doc.ts";
 import { pendingEntries } from "./decisions/pending.ts";
@@ -190,6 +192,38 @@ function checkRecord(store: Store): Finding[] {
   for (const slug of readme.order) {
     if (!groups.has(slug)) {
       out.push(err("group-missing", `group ${slug}`, `the README's Groups lists ${slug}, but decisions-taken/${slug}.md does not exist`));
+    }
+  }
+  for (const [slug, g] of groups) out.push(...checkGroupMeta(store, slug, g, listed));
+  return out;
+}
+
+/** An exact stub of a superseded row in a group that carries a metadata block (the compact form). */
+const SUPERSEDED_STUB = /^(Overtaken|Replaced|Reversed) by \d+$/;
+
+/**
+ * A group's metadata block (decisions/meta.ts), checked only when the file has one: a group without a block is
+ * the layout before the block existed, and is not reported. Every finding is a warning while groups move to the
+ * block one by one; they become errors once every group has one.
+ */
+function checkGroupMeta(store: Store, slug: string, g: GroupDoc, listed: Set<string>): Finding[] {
+  const about = `group ${slug}`;
+  if (g.metaError) return [warn("group-meta-invalid", about, `the metadata block cannot be read: ${g.metaError}`)];
+  if (!g.meta) return [];
+  const out: Finding[] = [];
+  for (const p of groupMetaProblems(g.meta)) out.push(warn("group-meta-invalid", about, p));
+  for (const s of staleGroupMeta(g.meta, deriveGroupMeta(g.rows, store.retired))) {
+    out.push(warn("group-meta-stale", about, `${s.key} is ${JSON.stringify(s.have ?? null)}, the rows and retired.md give ${JSON.stringify(s.want)}`));
+  }
+  if (Array.isArray(g.meta.related)) {
+    for (const r of g.meta.related) {
+      if (r === slug) out.push(warn("group-related-self", about, "related names the group itself"));
+      else if (typeof r === "string" && !listed.has(r)) out.push(warn("group-related-unknown", about, `related names ${r}, which the README's Groups does not list`));
+    }
+  }
+  for (const r of g.rows) {
+    if (r.status !== "in-force" && !SUPERSEDED_STUB.test(r.rule.trim())) {
+      out.push(warn("group-superseded-not-stub", `step ${r.num}`, `a superseded row of ${slug} keeps its old text; the compact form is "${r.status[0]!.toUpperCase()}${r.status.slice(1)} by ${r.supersededBy ?? "N"}"`));
     }
   }
   return out;

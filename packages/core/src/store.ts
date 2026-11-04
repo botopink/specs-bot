@@ -108,7 +108,8 @@ function groupToSubject(g: GroupDoc): Subject {
     paragraphs: g.paragraphs,
     steps: g.steps,
     binds: g.binds,
-    lines: g.lines.slice(0, g.proseEnd),
+    // The prose starts at the H1: the metadata block above it is no part of the subject's text.
+    lines: g.lines.slice(g.metaEnd, g.proseEnd),
     line: 0,
   };
 }

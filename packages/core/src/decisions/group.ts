@@ -1,6 +1,8 @@
 // A group — `# <slug> — <summary>` file combining a `taken.ts` subject's prose with a `steps.ts` record
 // table under its own `## Record` heading, the two formats of one subject side by side in one document
-// instead of split across `decisions-taken.md` and `decisions-taken-steps.md`.
+// instead of split across `decisions-taken.md` and `decisions-taken-steps.md`. The file may open with a metadata
+// block (meta.ts) before its H1; a file without one reads exactly as before.
+import { type GroupMetaRaw, splitGroupMeta } from "./meta.ts";
 import { parseProse } from "./taken.ts";
 import { formatStepRow, parseRow, statedNextFree, type StepRow } from "./steps.ts";
 
@@ -14,10 +16,16 @@ export interface GroupDoc {
   steps: number[];
   binds: string;
   rows: StepRow[];
-  /** The document's lines, heading first. */
+  /** The document's lines, the metadata block (when there is one) first, then the heading. */
   lines: string[];
-  /** Index of the `## Record` line. */
+  /** Index of the `## Record` line, in `lines` (the block included). */
   proseEnd: number;
+  /** The metadata block as written, when the file has a readable one (meta.ts). */
+  meta?: GroupMetaRaw;
+  /** Why the block could not be read, when it could not. */
+  metaError?: string;
+  /** Index of the H1: one past the block, 0 without one. */
+  metaEnd: number;
 }
 
 const HEADING = /^# ([a-z0-9-]+) — (.+)$/;
@@ -28,9 +36,14 @@ const RECORD_SECTION = "Record";
 
 export function parseGroup(text: string, slugExpected?: string): GroupDoc {
   const lines = text.split("\n");
+  const block = splitGroupMeta(lines);
+  const metaEnd = block.end;
 
-  const m = lines[0]!.match(HEADING);
-  if (!m) throw new Error(`line 1: a group heading is "# <slug> — <summary>": ${lines[0]}`);
+  const m = (lines[metaEnd] ?? "").match(HEADING);
+  if (!m) {
+    if (block.error && !metaEnd) throw new Error(`line 1: ${block.error}`);
+    throw new Error(`line ${metaEnd + 1}: a group heading is "# <slug> — <summary>": ${lines[metaEnd]}`);
+  }
   const [, slug, summary] = m as [string, string, string];
   if (slugExpected !== undefined && slugExpected !== slug) {
     throw new Error(`the file's H1 names slug ${slug}, not ${slugExpected}`);
@@ -39,7 +52,7 @@ export function parseGroup(text: string, slugExpected?: string): GroupDoc {
   const proseEnd = lines.indexOf(RECORD_HEADING);
   if (proseEnd === -1) throw new Error(`a group has no "${RECORD_HEADING}" heading: ${slug}`);
 
-  const prose = parseProse(lines.slice(1, proseEnd));
+  const prose = parseProse(lines.slice(metaEnd + 1, proseEnd));
 
   const rows: StepRow[] = [];
   for (let i = proseEnd + 1; i < lines.length; i++) {
@@ -47,7 +60,17 @@ export function parseGroup(text: string, slugExpected?: string): GroupDoc {
     if (ROW.test(line)) rows.push(parseRow(line, i, RECORD_SECTION));
   }
 
-  return { slug, summary, ...prose, rows, lines, proseEnd };
+  return {
+    slug,
+    summary,
+    ...prose,
+    rows,
+    lines,
+    proseEnd,
+    metaEnd,
+    ...(block.meta ? { meta: block.meta } : {}),
+    ...(block.error ? { metaError: block.error } : {}),
+  };
 }
 
 export function serializeGroup(doc: GroupDoc): string {
