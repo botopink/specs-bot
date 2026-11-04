@@ -202,28 +202,30 @@ function checkRecord(store: Store): Finding[] {
 const SUPERSEDED_STUB = /^(Overtaken|Replaced|Reversed) by \d+$/;
 
 /**
- * A group's metadata block (decisions/meta.ts), checked only when the file has one: a group without a block is
- * the layout before the block existed, and is not reported. Every finding is a warning while groups move to the
- * block one by one; they become errors once every group has one.
+ * A group's metadata block (decisions/meta.ts): every group carries one (the decisions-meta-refactor migration,
+ * 2026-11-04), so a missing block is now as much a defect as a malformed one — both errors, like every other
+ * rule here that a write must never leave broken. group-related-self (a cosmetic nit, naming itself) stays a
+ * warning; everything else that can drift — an unreadable or ill-shaped block, a stale derived key, an unknown
+ * related slug, a superseded row that kept its old text instead of the compact stub — is an error.
  */
 function checkGroupMeta(store: Store, slug: string, g: GroupDoc, listed: Set<string>): Finding[] {
   const about = `group ${slug}`;
-  if (g.metaError) return [warn("group-meta-invalid", about, `the metadata block cannot be read: ${g.metaError}`)];
-  if (!g.meta) return [];
+  if (g.metaError) return [err("group-meta-invalid", about, `the metadata block cannot be read: ${g.metaError}`)];
+  if (!g.meta) return [err("group-meta-missing", about, "the group has no metadata block (meta.ts); every group carries one")];
   const out: Finding[] = [];
-  for (const p of groupMetaProblems(g.meta)) out.push(warn("group-meta-invalid", about, p));
+  for (const p of groupMetaProblems(g.meta)) out.push(err("group-meta-invalid", about, p));
   for (const s of staleGroupMeta(g.meta, deriveGroupMeta(g.rows, store.retired))) {
-    out.push(warn("group-meta-stale", about, `${s.key} is ${JSON.stringify(s.have ?? null)}, the rows and retired.md give ${JSON.stringify(s.want)}`));
+    out.push(err("group-meta-stale", about, `${s.key} is ${JSON.stringify(s.have ?? null)}, the rows and retired.md give ${JSON.stringify(s.want)}`));
   }
   if (Array.isArray(g.meta.related)) {
     for (const r of g.meta.related) {
       if (r === slug) out.push(warn("group-related-self", about, "related names the group itself"));
-      else if (typeof r === "string" && !listed.has(r)) out.push(warn("group-related-unknown", about, `related names ${r}, which the README's Groups does not list`));
+      else if (typeof r === "string" && !listed.has(r)) out.push(err("group-related-unknown", about, `related names ${r}, which the README's Groups does not list`));
     }
   }
   for (const r of g.rows) {
     if (r.status !== "in-force" && !SUPERSEDED_STUB.test(r.rule.trim())) {
-      out.push(warn("group-superseded-not-stub", `step ${r.num}`, `a superseded row of ${slug} keeps its old text; the compact form is "${r.status[0]!.toUpperCase()}${r.status.slice(1)} by ${r.supersededBy ?? "N"}"`));
+      out.push(err("group-superseded-not-stub", `step ${r.num}`, `a superseded row of ${slug} keeps its old text; the compact form is "${r.status[0]!.toUpperCase()}${r.status.slice(1)} by ${r.supersededBy ?? "N"}"`));
     }
   }
   return out;

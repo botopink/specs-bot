@@ -89,7 +89,28 @@ export const WRITES: Record<string, { op: string; body: (a: WriteArgs) => Record
     body: (a) => ({ ref: a.ref, label: a.label, ...some({ check: a.check, note: a.note, etag: a.etag }), ...(a.land === true ? { land: true } : {}) }),
   },
   refile: { op: "refile", body: (a) => ({ num: Number(a.n), to: a.to, ...(a.cite === true ? { cite: true } : {}) }) },
-  "subject-new": { op: "subject.new", body: (a) => ({ slug: a.slug, summary: a.summary, ...some({ lead: a.lead, binds: a.binds }) }) },
+  "subject-new": {
+    op: "subject.new",
+    body: (a) => ({
+      slug: a.slug,
+      summary: a.summary,
+      scope: a.scope,
+      ...some({ lead: a.lead, binds: a.binds }),
+      ...(Array.isArray(a.terms) ? { terms: a.terms } : {}),
+      ...(Array.isArray(a.related) ? { related: a.related } : {}),
+      ...(Array.isArray(a.open) ? { open: a.open } : {}),
+    }),
+  },
+  "group-meta": {
+    op: "group.meta",
+    body: (a) => ({
+      slug: a.slug,
+      ...some({ scope: a.scope }),
+      ...(Array.isArray(a.terms) ? { terms: a.terms } : {}),
+      ...(Array.isArray(a.related) ? { related: a.related } : {}),
+      ...(Array.isArray(a.open) ? { open: a.open } : {}),
+    }),
+  },
   supersede: { op: "supersede", body: (a) => ({ num: Number(a.n), by: Number(a.by), kind: a.kind }) },
   reviewed: { op: "review", body: (a) => ({ num: Number(a.n) }) },
   retire: {
@@ -329,10 +350,25 @@ export function registerWrites(program: Command, config: () => ClientConfig) {
       .command("subject-new")
       .argument("<slug>", "the new subject's slug (lowercase letters, digits, hyphens)")
       .requiredOption("--summary <text>", "one line, the H1's own")
+      .requiredOption("--scope <text>", "what the group decides and where its edge is (meta.ts) — an agent reads this to pick it")
       .option("--lead <text>", "the bold first sentence")
       .option("--binds <text>", "what it binds")
+      .option("--terms <term...>", "searchable identifiers (operators, error codes, API names)")
+      .option("--related <slug...>", "other groups a reader of this one also needs")
+      .option("--open <text...>", "open questions the group's own rows name")
       .description("open a new subject: an empty group, listed in decisions-taken/README.md, no rows yet"),
   ).action((slug: string, o) => write("subject-new", { ...o, slug }));
+
+  common(
+    program
+      .command("group-meta")
+      .argument("<slug>", "the group (decisions-taken/<slug>.md)")
+      .option("--scope <text>", "what it decides and where its edge is; kept as written when omitted")
+      .option("--terms <term...>", "searchable identifiers; replaces the list — the whole list, every time")
+      .option("--related <slug...>", "other groups a reader of this one also needs; replaces the list")
+      .option("--open <text...>", "open questions the group's own rows name; replaces the list")
+      .description("edit a group's hand-written metadata (scope/terms/related/open); derived keys are always recomputed"),
+  ).action((slug: string, o) => write("group-meta", { ...o, slug }));
 
   common(
     program

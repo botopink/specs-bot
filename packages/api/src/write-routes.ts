@@ -10,6 +10,7 @@ import {
   appendToSection,
   chatRead,
   chatSend,
+  groupMeta,
   markReviewed,
   pendingAdd,
   pendingEdit,
@@ -59,6 +60,8 @@ const fieldsOf = (b: Body): Record<string, string> => {
 };
 
 const opt = (b: Body, k: string) => (typeof b[k] === "string" ? { [k]: b[k] as string } : {});
+/** An array-of-strings field, present only when the caller actually sent one. */
+const arr = (b: Body, k: string) => (Array.isArray(b[k]) ? { [k]: (b[k] as unknown[]).map(String) } : {});
 
 /** op → the plan it makes from the request body and the party writing. */
 const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
@@ -120,7 +123,9 @@ const OPS: Record<string, (m: Model, b: Body, party: string) => Plan> = {
       party,
     ),
   refile: (m, b) => refile(m, { num: num(b, "num"), to: str(b, "to"), ...(b.cite === true ? { cite: true } : {}) }),
-  "subject.new": (m, b) => subjectNew(m, { slug: str(b, "slug"), summary: str(b, "summary"), ...opt(b, "lead"), ...opt(b, "binds") }),
+  "subject.new": (m, b) =>
+    subjectNew(m, { slug: str(b, "slug"), summary: str(b, "summary"), scope: str(b, "scope"), ...opt(b, "lead"), ...opt(b, "binds"), ...arr(b, "terms"), ...arr(b, "related"), ...arr(b, "open") }),
+  "group.meta": (m, b) => groupMeta(m, { slug: str(b, "slug"), ...opt(b, "scope"), ...arr(b, "terms"), ...arr(b, "related"), ...arr(b, "open") }),
   review: (m, b, party) => markReviewed(m, { num: num(b, "num") }, party),
   "retired.add": (m, b) =>
     retiredAdd(m, { area: str(b, "area"), retired: str(b, "retired"), replacedBy: str(b, "replacedBy"), decisions: str(b, "decisions"), ...opt(b, "note") }),

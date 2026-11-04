@@ -6,6 +6,7 @@ import {
   answer,
   buildModel,
   check,
+  groupMeta,
   loadStore,
   markReviewed,
   type Model,
@@ -150,7 +151,11 @@ function refused(fn: () => unknown): WriteError {
 }
 
 const FIELDS = { Measured: "Built as (a).", Options: "(a) keep; (b) refuse.", Recommendation: "(b).", Blocks: "Nothing." };
-const errors = (m: Model) => check(m).filter((f) => f.severity === "error");
+const // "lang" and "unfiled", this file's base fixture, carry no metadata block on purpose (the shape before the
+// migration; the describe below this one is where a group WITH a block is under test) — group-meta-missing is
+// that fixture's own standing condition, not something a write under test here could introduce, so it is the
+// one error code excluded; any other error a write newly caused still fails every assertion below.
+errors = (m: Model) => check(m).filter((f) => f.severity === "error" && f.code !== "group-meta-missing");
 
 describe("pendingAdd", () => {
   test("a block at the end of the section, its four fields in order", () => {
@@ -347,9 +352,17 @@ describe("refile", () => {
 });
 
 describe("subjectNew", () => {
-  test("creates the group file and lists it in the README right before unfiled", () => {
+  test("creates the group file and lists it in the README right before unfiled, with a metadata block", () => {
     const m = model();
-    const p = subjectNew(m, { slug: "std", summary: "the standard library's surface", lead: "What std holds.", binds: "std" });
+    const p = subjectNew(m, {
+      slug: "std",
+      summary: "the standard library's surface",
+      scope: "What std holds and what a repository keeps for itself.",
+      lead: "What std holds.",
+      binds: "std",
+      terms: ["`io.fs`"],
+      related: ["lang"],
+    });
     expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/std.md", "specs/decisions-taken/README.md"]);
     expect(p.changes[0]!.before).toBeNull();
     const after = applied(m, p);
@@ -357,27 +370,42 @@ describe("subjectNew", () => {
     expect(after.record!.readme.order).toEqual(["lang", "std", "unfiled"]);
     const g = after.record!.groups.get("std")!;
     expect([g.summary, g.lead, g.steps, g.binds]).toEqual(["the standard library's surface", "What std holds.", [], "std"]);
+    expect(g.meta).toMatchObject({
+      scope: "What std holds and what a repository keeps for itself.",
+      terms: ["`io.fs`"],
+      related: ["lang"],
+      "first-step": 0,
+      "last-step": 0,
+      "in-force": 0,
+      superseded: 0,
+      binds: [],
+      retired: [],
+    });
+    expect(check(after).filter((f) => f.code.startsWith("group-") && f.about === "group std")).toEqual([]);
   });
 
   test("with no lead and no binds, Steps: is still written, empty, and parses as no steps", () => {
     const m = model();
-    const after = applied(m, subjectNew(m, { slug: "runtime", summary: "the runtime" }));
+    const after = applied(m, subjectNew(m, { slug: "runtime", summary: "the runtime", scope: "The runtime's own surface." }));
     const g = after.record!.groups.get("runtime")!;
     expect([g.lead, g.paragraphs, g.steps, g.binds]).toEqual(["", [], [], ""]);
+    expect(g.meta).toMatchObject({ terms: [], related: [] });
   });
 
   test("goes to the end of the list when unfiled is not listed", () => {
     const files = { ...FILES, "specs/decisions-taken/README.md": README.replace("- unfiled\n", "") };
     const m = model(files);
-    const p = subjectNew(m, { slug: "std", summary: "s" });
+    const p = subjectNew(m, { slug: "std", summary: "s", scope: "s" });
     expect(p.changes[1]!.after.trim().endsWith("- std")).toBe(true);
   });
 
-  test("refuses a duplicate slug, a reserved slug, a bad slug", () => {
-    expect(refused(() => subjectNew(model(), { slug: "lang", summary: "s" })).message).toContain("already exists");
-    expect(refused(() => subjectNew(model(), { slug: "unfiled", summary: "s" })).message).toContain("reserved");
-    expect(refused(() => subjectNew(model(), { slug: "readme", summary: "s" })).message).toContain("reserved");
-    expect(refused(() => subjectNew(model(), { slug: "Not-OK", summary: "s" })).code).toBe("invalid");
+  test("refuses a duplicate slug, a reserved slug, a bad slug, a missing or empty scope, an unknown related", () => {
+    expect(refused(() => subjectNew(model(), { slug: "lang", summary: "s", scope: "s" })).message).toContain("already exists");
+    expect(refused(() => subjectNew(model(), { slug: "unfiled", summary: "s", scope: "s" })).message).toContain("reserved");
+    expect(refused(() => subjectNew(model(), { slug: "readme", summary: "s", scope: "s" })).message).toContain("reserved");
+    expect(refused(() => subjectNew(model(), { slug: "Not-OK", summary: "s", scope: "s" })).code).toBe("invalid");
+    expect(refused(() => subjectNew(model(), { slug: "std", summary: "s", scope: "" })).message).toContain("scope");
+    expect(refused(() => subjectNew(model(), { slug: "std", summary: "s", scope: "s", related: ["ghost"] })).message).toContain("ghost");
   });
 });
 
@@ -404,7 +432,9 @@ describe("a group with a metadata block", () => {
     ].join("\n");
   const compact = () => model({ "specs/decisions-taken/lang.md": `${block()}\n${LANG}` });
   const metaOf = (m: Model, slug: string) => m.record.groups.get(slug)!.meta!;
-  const groupWarnings = (m: Model) => check(m).filter((f) => f.code.startsWith("group-"));
+  // "unfiled" (the base fixture's other group) carries no block on purpose — it is not this describe's concern,
+  // and would now report its own group-meta-missing; every test here asks only about "lang"'s own findings.
+  const groupWarnings = (m: Model) => check(m).filter((f) => f.code.startsWith("group-") && f.about === "group lang");
 
   test("the fixture's block is current: no group finding", () => {
     expect(groupWarnings(compact())).toEqual([]);
@@ -447,5 +477,37 @@ describe("a group with a metadata block", () => {
     const bad = model({ "specs/decisions-taken/lang.md": `${block().replace("scope: >-\n  What the language decides.\n", "scope: ''\n")}\n${LANG}` });
     const p = answer(bad, { id: "q-7", rule: "**New.**", binds: "x", subject: "lang" }, "maintainer");
     expect(p.changes[0]!.after).toContain("last-step: 2");
+  });
+
+  describe("groupMeta", () => {
+    test("edits only the hand keys given; the rest (hand and derived) stay as written, recomputed", () => {
+      const m = compact();
+      const p = groupMeta(m, { slug: "lang", scope: "A new scope.", terms: ["`new`"] });
+      expect(p.changes.map((c) => c.path)).toEqual(["specs/decisions-taken/lang.md"]);
+      const after = applied(m, p);
+      expect(metaOf(after, "lang")).toMatchObject({
+        scope: "A new scope.",
+        terms: ["`new`"],
+        related: [], // not given: kept as written
+        binds: ["`machine-1/150` s3"], // derived: recomputed from the rows, not touched by this write
+        "in-force": 2,
+      });
+      expect(groupWarnings(after)).toEqual([]);
+    });
+
+    test("omitting every hand key keeps them all, only recomputing the derived ones", () => {
+      const m = compact();
+      const after = applied(m, groupMeta(m, { slug: "lang" }));
+      expect(metaOf(after, "lang")).toMatchObject({ scope: "What the language decides.", terms: ["`old`"], related: [] });
+    });
+
+    test("refuses an unknown group, a group with no block, an empty scope, related naming itself or an unknown group", () => {
+      const m = compact();
+      expect(refused(() => groupMeta(m, { slug: "ghost" })).code).toBe("not-found");
+      expect(refused(() => groupMeta(m, { slug: "unfiled" })).message).toContain("no readable metadata block");
+      expect(refused(() => groupMeta(m, { slug: "lang", scope: "" })).message).toContain("scope");
+      expect(refused(() => groupMeta(m, { slug: "lang", related: ["lang"] })).message).toContain("itself");
+      expect(refused(() => groupMeta(m, { slug: "lang", related: ["ghost"] })).message).toContain("ghost");
+    });
   });
 });
