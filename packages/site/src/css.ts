@@ -105,7 +105,7 @@ section.machine > h2 { margin-top: 36px; padding-bottom: 6px; border-bottom: 2px
 h1 a.anchor, h2 a.anchor, h3 a.anchor, h4 a.anchor { color: inherit; }
 .front-card {
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
-  padding: 16px 18px; margin: 14px 0; scroll-margin-top: 64px;
+  padding: 16px 18px; margin: 14px 0; scroll-margin-top: 120px;
 }
 .front-card:target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
 .front-card header { display: flex; gap: 14px; align-items: flex-start; }
@@ -127,6 +127,14 @@ h1 a.anchor, h2 a.anchor, h3 a.anchor, h4 a.anchor { color: inherit; }
 .folder h4:target, .folder:has(h4:target) { background: var(--accent-soft); border-radius: 6px; }
 .folder .fdir { font-family: var(--mono); font-size: 13px; color: var(--accent); }
 .folder .ftitle { font-weight: 400; color: var(--fg); }
+.front-tools { position: sticky; top: 52px; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+.front-tools input[type=search] { flex: 1 1 260px; min-width: 0; font: inherit; font-size: 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); }
+.front-tools .states { display: flex; flex-wrap: wrap; gap: 6px; }
+.front-tools .states button { font: inherit; font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.front-tools .states button:hover { color: var(--fg); border-color: var(--muted); }
+.front-tools .states button[aria-pressed=true] { color: var(--fg); font-weight: 600; border-color: var(--fg); }
+.front-card[hidden], .doc-layout aside li[hidden] { display: none; }
+.front-card .was { font-family: var(--mono, monospace); font-size: 12px; padding: 1px 8px; border: 1px dashed var(--line); border-radius: 999px; }
 ul.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 6px 0 0; }
 a.chip {
   display: inline-block; font-size: 13px; padding: 1px 10px; border-radius: 999px; color: var(--fg);
@@ -137,6 +145,7 @@ ul.doclist { margin: 4px 0 12px; padding-left: 18px; } ul.doclist li { margin: 2
 .doc-layout aside .inum { font-family: var(--mono); font-size: 12px; color: var(--accent); display: inline-block; min-width: 2.6em; }
 .crumbs .sep { color: var(--line); } .crumbs .here { color: var(--fg); font-weight: 600; }
 @media (max-width: 560px) {
+  .front-tools { position: static; } .front-card { scroll-margin-top: 64px; }
   .front-card { padding: 14px; } .front-card header { gap: 10px; } .fnum { min-width: 38px; height: 28px; font-size: 13px; }
   .folders { grid-template-columns: 1fr; } a.card .n { font-size: 28px; }
 }

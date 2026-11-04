@@ -72,7 +72,7 @@ function Overview({ data }: { data: SiteData }) {
         />
         <Card kind="pending" n={data.entries.length} label="Pending" detail="questions the maintainer owes" href="/pending" />
         <Card kind="review" n={openReview} label="To review" detail={`of ${data.pending.review.length} delegated decisions`} href="/review" />
-        <Card kind="subjects" n={data.taken.subjects.length} label="Subjects" detail="the rules in force, by subject" href="/subjects" />
+        <Card kind="subjects" n={data.record.groups.size} label="Decision groups" detail={`decisions-taken/ · ${data.taken.subjects.length} with prose`} href="/decisions" />
         <Card kind="retired" n={data.retired.rows.length} label="Retired" detail="forms and what replaced them" href="/retired" />
         <Card
           kind="docs"

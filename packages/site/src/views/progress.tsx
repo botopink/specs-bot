@@ -25,8 +25,8 @@ export function ProgressBar({ p }: { p: FrontProgress }) {
 /** Where the counts come from, said plainly: the progress is gathered, not stated anywhere. */
 export function basisNote(p: FrontProgress): string {
   if (p.basis === "readme") return `from the README's ${plural(p.steps.length, "step")} and their boxes`;
-  if (p.basis === "status") return `from ${plural(p.status.length, "item")} of status.md (the README has no steps)`;
-  return "nothing found in the README or status.md";
+  if (p.basis === "status") return `from ${plural(p.status.length, "item")} of the status pages (the README has no steps)`;
+  return "nothing found in the README or the status pages";
 }
 
 export function ProgressLine({ p, href }: { p: FrontProgress; href?: string }) {

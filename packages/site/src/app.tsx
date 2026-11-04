@@ -8,8 +8,8 @@ import type { LinkContext } from "./markdown.ts";
 import type { StatusFn } from "./status.ts";
 import { docHref, movedTo } from "./short-links.ts";
 import { protectHtml } from "./translate.ts";
-import { PendingEntryPage, PendingPage, RetiredPage, ReviewPage, SubjectPage, SubjectsPage } from "./views/decisions.tsx";
-import { frontsHref, sectionOfFolder } from "./hierarchy.ts";
+import { DecisionGroupPage, DecisionsPage, PendingEntryPage, PendingPage, RetiredPage, ReviewPage } from "./views/decisions.tsx";
+import { frontsHref, movedFolder, sectionOfFolder } from "./hierarchy.ts";
 import { DocPage, renderDoc } from "./views/docs.tsx";
 import { FrontsPage } from "./views/fronts.tsx";
 import { buildProgress, type FrontProgress, type ProgressItem } from "./progress.ts";
@@ -122,15 +122,20 @@ export function createSite(opts: SiteOptions) {
 
   site.get("/review", (c) => c.html(<ReviewPage data={data} ctx={plain} path={c.req.path} />));
 
-  site.get("/subjects", (c) => c.html(<SubjectsPage data={data} ctx={plain} path={c.req.path} />));
+  // specs/decisions-taken/: the README and every group file, each with its own record.
+  site.get("/decisions", (c) => c.html(<DecisionsPage data={data} ctx={plain} path={c.req.path} />));
 
-  site.get("/subjects/:slug", (c) => {
-    const subject = data.subjectBySlug.get(c.req.param("slug"));
-    if (!subject) {
-      return c.html(<NotFound path={c.req.path} what={`No subject ${c.req.param("slug")}.`} back="/subjects" backLabel="All subjects" />, 404);
+  site.get("/decisions/:slug", (c) => {
+    const group = data.record.groups.get(c.req.param("slug"));
+    if (!group) {
+      return c.html(<NotFound path={c.req.path} what={`No group ${c.req.param("slug")} in decisions-taken.`} back="/decisions" backLabel="All groups" />, 404);
     }
-    return c.html(<SubjectPage data={data} subject={subject} ctx={plain} path={c.req.path} />);
+    return c.html(<DecisionGroupPage data={data} group={group} ctx={plain} path={c.req.path} />);
   });
+
+  // The Subjects pages became the Decisions section: one page per decisions-taken/ group file.
+  site.get("/subjects", (c) => c.redirect("/decisions", 301));
+  site.get("/subjects/:slug", (c) => c.redirect(`/decisions/${encodeURIComponent(c.req.param("slug"))}`, 301));
 
   site.get("/retired", (c) => c.html(<RetiredPage data={data} q={(c.req.query("q") ?? "").trim()} ctx={plain} path={c.req.path} />));
 
@@ -180,8 +185,9 @@ export function createSite(opts: SiteOptions) {
       // A path from before the tree was flattened (short-links.ts).
       const moved = movedTo(data.tree, ref);
       if (moved) return c.redirect(moved.startsWith("https://") ? moved : docHref(moved), 301);
-      // A folder with no README of its own (a former front, a track) is a section of the Fronts page.
-      const section = sectionOfFolder(data, ref);
+      // A folder with no README of its own (a former front, a track) is a section of the Fronts page; a group
+      // flatten-groups.ts promoted is the front it became.
+      const section = movedFolder(data, ref) ?? sectionOfFolder(data, ref);
       if (section) return c.redirect(section);
       return c.html(<NotFound path={c.req.path} what={`No document ${ref}.`} back="/fronts" backLabel="All fronts" />, 404);
     }

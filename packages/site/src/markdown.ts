@@ -15,7 +15,7 @@ export interface LinkContext extends StepTableContext {
 /** The files above every milestone, by name, and the page that shows each. */
 const TOP_LEVEL: Record<string, string> = {
   "decisions-taken-steps": "/steps",
-  "decisions-taken": "/subjects",
+  "decisions-taken": "/decisions",
   "decisions-pending": "/pending",
   "decisoes-pendentes": "/pending",
   retired: "/retired",
@@ -117,10 +117,10 @@ export function resolveLink(href: string, ctx: LinkContext): string | undefined 
   const top = TOP_LEVEL[ref];
   if (top) return top;
   // decisions-taken/<slug> is never a Doc of the tree (docs/load.ts excludes the whole directory, group.ts's own
-  // the shape store.ts reads it in) — a pasted link to one still resolves, to the subject it names.
+  // the shape store.ts reads it in) — a link to one resolves to its page of the Decisions section.
   if (ref.startsWith("decisions-taken/")) {
     const slug = ref.slice("decisions-taken/".length);
-    return slug === "README" ? "/subjects" : `/subjects/${slug}`;
+    return slug === "README" ? `/decisions${anchor}` : `/decisions/${slug}${anchor}`;
   }
   return undefined;
 }

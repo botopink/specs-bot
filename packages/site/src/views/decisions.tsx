@@ -1,4 +1,4 @@
-import type { PendingEntry, Subject } from "@specs-bot/core";
+import type { GroupDoc, PendingEntry, StepRow } from "@specs-bot/core";
 import type { SiteData } from "../data.ts";
 import { type LinkContext, renderInline, renderMarkdown } from "../markdown.ts";
 import { Html, Layout, StatusBadge, StepLinks } from "./layout.tsx";
@@ -110,80 +110,165 @@ export function ReviewPage(props: { data: SiteData; ctx: LinkContext; path: stri
   );
 }
 
-export function SubjectsPage(props: { data: SiteData; ctx: LinkContext; path: string }) {
+/** Lowercased text a group is found by in the page's filter box. */
+function groupHaystack(g: GroupDoc): string {
+  return [g.slug, g.summary, g.lead, ...g.rows.map((r) => String(r.num))].join(" ").toLowerCase();
+}
+
+/** In force / superseded counts of a group's record rows. */
+function rowCounts(rows: StepRow[]) {
+  const force = rows.filter((r) => r.status === "in-force").length;
+  return { force, gone: rows.length - force };
+}
+
+/** Hides every `[data-q]` item the filter box's words are not all in; `/` focuses the box. */
+const FILTER_SCRIPT = `(function(){var i=document.getElementById("gfilter");if(!i)return;
+var items=[].slice.call(document.querySelectorAll("[data-q]")),out=document.getElementById("gcount");
+function run(){var w=i.value.toLowerCase().split(/\\s+/).filter(Boolean),n=0;
+items.forEach(function(el){var q=el.getAttribute("data-q"),ok=w.every(function(x){return q.indexOf(x)>=0});el.hidden=!ok;if(ok)n++;});
+if(out)out.textContent=w.length?n+" of "+items.length:"";}
+i.addEventListener("input",run);run();
+document.addEventListener("keydown",function(e){if(e.key==="/"&&document.activeElement!==i){e.preventDefault();i.focus();}});})();`;
+
+/** specs/decisions-taken/: the README's intro, then every group in the README's order. */
+export function DecisionsPage(props: { data: SiteData; ctx: LinkContext; path: string }) {
+  const { data } = props;
+  const { readme, groups } = data.record;
+  const at = readme.lines.indexOf("## Groups");
+  const intro = (at < 0 ? readme.lines : readme.lines.slice(0, at)).filter((l) => !/^# /.test(l)).join("\n").trim();
+  const list = readme.order.map((slug) => groups.get(slug)).filter((g): g is GroupDoc => g !== undefined);
+  const missing = readme.order.filter((slug) => !groups.has(slug));
+  const all = rowCounts(data.steps.rows);
   return (
-    <Layout title="Subjects" path={props.path} prose>
-      <h1>Subjects</h1>
-      <p class="muted">The rules in force, one text per subject; every sentence traces to a step of the record.</p>
-      <ul class="list">
-        {props.data.taken.subjects.map((s) => (
-          <li>
-            <div class="head">
-              <a href={`/subjects/${s.slug}`}>
-                <strong>{s.slug}</strong>
-              </a>
-              <span class="muted small">{s.steps.length} steps</span>
-            </div>
-            <div class="text">
-              <Html inline html={renderInline(s.summary, props.ctx)} />
-            </div>
-          </li>
-        ))}
+    <Layout title="Decisions taken" path={props.path} prose>
+      <h1>Decisions taken</h1>
+      <p class="muted">
+        <code>specs/decisions-taken/</code> · {list.length} groups · {data.steps.rows.length} steps ({all.force} in force, {all.gone} superseded) · next
+        free <strong>{data.nextFree}</strong>
+      </p>
+      {intro ? <Html class="markdown" html={renderMarkdown(intro, props.ctx)} /> : null}
+      <div class="front-tools" role="search">
+        <input id="gfilter" type="search" placeholder="Filter groups — slug, summary or a step number  ( / )" aria-label="Filter groups" />
+        <span id="gcount" class="muted small" />
+      </div>
+      <ul class="list groups">
+        {list.map((g) => {
+          const c = rowCounts(g.rows);
+          const nums = g.rows.map((r) => r.num);
+          return (
+            <li data-q={groupHaystack(g)}>
+              <div class="head">
+                <a href={`/decisions/${g.slug}`}>
+                  <strong>{g.slug}</strong>
+                </a>
+                <span class="muted small">
+                  {g.rows.length} step{g.rows.length === 1 ? "" : "s"}
+                  {nums.length ? ` · ${Math.min(...nums)}–${Math.max(...nums)}` : ""}
+                </span>
+                {c.gone ? <span class="badge s-overtaken">{c.gone} superseded</span> : null}
+              </div>
+              <div class="text">
+                <Html inline html={renderInline(g.summary, props.ctx)} />
+              </div>
+            </li>
+          );
+        })}
       </ul>
+      {missing.length ? <p class="warn small">Listed in the README with no file: {missing.join(", ")}.</p> : null}
+      <script dangerouslySetInnerHTML={{ __html: FILTER_SCRIPT }} />
     </Layout>
   );
 }
 
-export function SubjectPage(props: { data: SiteData; subject: Subject; ctx: LinkContext; path: string }) {
-  const { data, subject } = props;
-  const cited = subject.steps.map((n) => ({ n, row: data.stepByNum.get(n) }));
+/** One file of specs/decisions-taken/: its prose (the subject), then its own record table. */
+export function DecisionGroupPage(props: { data: SiteData; group: GroupDoc; ctx: LinkContext; path: string }) {
+  const { data, group } = props;
+  const order = data.record.readme.order.filter((s) => data.record.groups.has(s));
+  const i = order.indexOf(group.slug);
+  const prev = i > 0 ? order[i - 1] : undefined;
+  const next = i >= 0 && i < order.length - 1 ? order[i + 1] : undefined;
+  const cited = group.steps.map((n) => ({ n, row: data.stepByNum.get(n) }));
   const gone = cited.filter((c) => c.row && c.row.status !== "in-force");
+  const rows = data.steps.rows.filter((r) => r.section === group.slug);
+  const c = rowCounts(rows);
   return (
-    <Layout title={subject.slug} path={props.path} prose>
+    <Layout title={group.slug} path={props.path} prose>
       <div class="crumbs">
-        <a href="/subjects">Subjects</a>
+        <a href="/decisions">Decisions taken</a> · <code>decisions-taken/{group.slug}.md</code>
       </div>
-      <h1>{subject.slug}</h1>
+      <h1>{group.slug}</h1>
       <p class="muted">
-        <Html inline html={renderInline(subject.summary, props.ctx)} />
+        <Html inline html={renderInline(group.summary, props.ctx)} />
       </p>
-      {subject.lead ? (
+      {group.lead ? (
         <p>
           <strong>
-            <Html inline html={renderInline(subject.lead, props.ctx)} />
+            <Html inline html={renderInline(group.lead, props.ctx)} />
           </strong>
         </p>
       ) : null}
-      <Html class="markdown" html={renderMarkdown(subject.paragraphs.join("\n\n"), props.ctx)} />
-      <h2>Steps</h2>
-      <p>
-        {cited.map((c, i) => (
-          <>
-            {i > 0 ? ", " : ""}
-            {c.row ? (
-              <a href={`/steps/${c.n}`} class={c.row.status === "in-force" ? "" : "s-overtaken"}>
-                {c.n}
-              </a>
-            ) : (
-              <span class="bad">{c.n}</span>
-            )}
-          </>
-        ))}
-      </p>
-      {gone.length ? (
-        <p class="warn small">
-          Cites {gone.length} superseded step{gone.length === 1 ? "" : "s"}:{" "}
-          {gone.map((c, i) => (
-            <>
-              {i > 0 ? ", " : ""}
-              <a href={`/steps/${c.n}`}>{c.n}</a> <StatusBadge status={c.row!.status} by={c.row!.supersededBy} />
-            </>
-          ))}
-        </p>
+      {group.paragraphs.length ? <Html class="markdown" html={renderMarkdown(group.paragraphs.join("\n\n"), props.ctx)} /> : null}
+      {cited.length ? (
+        <>
+          <h2>Steps</h2>
+          <p>
+            {cited.map((x, k) => (
+              <>
+                {k > 0 ? ", " : ""}
+                {x.row ? (
+                  <a href={`/steps/${x.n}`} class={x.row.status === "in-force" ? "" : "s-overtaken"}>
+                    {x.n}
+                  </a>
+                ) : (
+                  <span class="bad">{x.n}</span>
+                )}
+              </>
+            ))}
+          </p>
+          {gone.length ? (
+            <p class="warn small">
+              Cites {gone.length} superseded step{gone.length === 1 ? "" : "s"}:{" "}
+              {gone.map((x, k) => (
+                <>
+                  {k > 0 ? ", " : ""}
+                  <a href={`/steps/${x.n}`}>{x.n}</a> <StatusBadge status={x.row!.status} by={x.row!.supersededBy} />
+                </>
+              ))}
+            </p>
+          ) : null}
+        </>
       ) : null}
-      <h2>Binds</h2>
-      <p>
-        <Html inline html={renderInline(subject.binds, props.ctx)} />
+      {group.binds ? (
+        <>
+          <h2>Binds</h2>
+          <p>
+            <Html inline html={renderInline(group.binds, props.ctx)} />
+          </p>
+        </>
+      ) : null}
+      <h2 id="record">
+        Record <span class="muted small">· {rows.length} rows · {c.force} in force{c.gone ? ` · ${c.gone} superseded` : ""}</span>
+      </h2>
+      {rows.length ? (
+        <ul class="list">
+          {rows.map((r) => (
+            <li class={r.status === "in-force" ? "" : "gone"} id={`s${r.num}`}>
+              <div class="head">
+                <a class="num" href={`/steps/${r.num}`}>
+                  {r.num}
+                </a>
+                <StatusBadge status={r.status} by={r.supersededBy} />
+                <span class="muted small">{r.id}</span>
+              </div>
+              <Html class="text" html={renderInline(r.rule, props.ctx)} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="muted">No rows in this group's record.</p>
+      )}
+      <p class="pager">
+        {prev ? <a href={`/decisions/${prev}`}>← {prev}</a> : null} {next ? <a href={`/decisions/${next}`}>{next} →</a> : null}
       </p>
     </Layout>
   );

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { shortTitle } from "../src/hierarchy.ts";
+import { shortTitle, titleNumber } from "../src/hierarchy.ts";
 import { createSite, loadSiteData } from "../src/index.ts";
 import { resolveLink } from "../src/markdown.ts";
 
@@ -14,8 +14,12 @@ describe("shortTitle", () => {
     expect(shortTitle("Front 105 — i18n: a shared `i18n`", 105, "i18n")).toBe("a shared `i18n`");
   });
 
-  test("keeps a prefix naming another number, and a title that does not open with the name", () => {
-    expect(shortTitle("Front 135 — snap: the second layer", 20, "snap")).toBe("Front 135 — snap: the second layer");
+  test("drops a stale number when the folder's own name follows it; keeps a title that does not open with the name", () => {
+    // A group flatten-groups.ts promoted under a fresh number: its README still says the old one.
+    expect(shortTitle("Front 20 — snap: the second layer", 188, "snap")).toBe("the second layer");
+    expect(titleNumber("Front 20 — snap: the second layer", "snap")).toBe(20);
+    expect(shortTitle("Front 135 — other: the second layer", 20, "snap")).toBe("Front 135 — other: the second layer");
+    expect(titleNumber("Front 135 — other", "snap")).toBeUndefined();
     expect(shortTitle("Front 144 — machine 1: the checker", 144, "checker")).toBe("machine 1: the checker");
   });
 });
@@ -161,7 +165,7 @@ describe("the site over a fixture", () => {
       ["gone", "/steps?status=superseded", 1, "Superseded"],
       ["pending", "/pending", 1, "Pending"],
       ["review", "/review", 1, "To review"],
-      ["subjects", "/subjects", 1, "Subjects"],
+      ["subjects", "/decisions", 1, "Decision groups"],
       ["retired", "/retired", 2, "Retired"],
       ["docs", "/fronts", 8, "Documents"],
     ]);
@@ -202,7 +206,7 @@ describe("the site over a fixture", () => {
     expect(one).toContain('href="/steps/3"');
     expect(one).toContain("overtaken by 3");
     const three = (await get("/steps/3")).body;
-    expect(three).toContain('href="/subjects/module-system"');
+    expect(three).toContain('href="/decisions/module-system"');
     expect(three).toContain("Retired forms citing it");
     expect(three).toContain("bare “|”");
     expect(three).toContain("Supersedes");
@@ -231,13 +235,22 @@ describe("the site over a fixture", () => {
     expect(body).toContain("1 open of 2");
   });
 
-  test("subjects and one subject with its steps linked", async () => {
-    expect((await get("/subjects")).body).toContain('href="/subjects/module-system"');
-    const s = (await get("/subjects/module-system")).body;
+  test("the Decisions section: decisions-taken/'s README, its groups, and one group with its prose and record", async () => {
+    const list = (await get("/decisions")).body;
+    expect(list).toContain('href="/decisions/module-system"');
+    expect(list).toContain("The rules in force.");
+    expect(list).toContain('data-q="module-system files and modules');
+    const s = (await get("/decisions/module-system")).body;
     expect(s).toContain('href="/steps/3"');
     expect(s).toContain("every repository");
     expect(s).toContain("Cites 1 superseded step");
-    expect((await get("/subjects/nope")).status).toBe(404);
+    expect(s).toContain('<h2 id="record">Record');
+    expect(s).toContain('id="s3"');
+    expect((await get("/decisions/nope")).status).toBe(404);
+    // The old Subjects pages land here.
+    const old = await get("/subjects/module-system");
+    expect([old.status, old.res.headers.get("location")]).toEqual([301, "/decisions/module-system"]);
+    expect((await get("/subjects")).res.headers.get("location")).toBe("/decisions");
   });
 
   test("retired forms filter, and link the decisions outside parentheses only", async () => {
@@ -266,8 +279,8 @@ describe("the site over a fixture", () => {
 
   test("a front is a card: number, name linking its README, title, its owner, counts", async () => {
     const { body } = await get("/fronts");
-    const card = body.slice(body.indexOf('<section class="front-card" id="150-rakun">'));
-    expect(card).toStartWith('<section class="front-card" id="150-rakun"><header><span class="fnum">150</span>');
+    const card = body.slice(body.indexOf('<section class="front-card" id="150-rakun" '));
+    expect(card).toMatch(/^<section class="front-card" id="150-rakun" data-q="150 150-rakun rakun [^"]*machine-1[^"]*" data-state="[a-z]+"><header><span class="fnum">150<\/span>/);
     expect(card).toContain('<h3><a href="/docs/fronts/150-rakun/README">rakun</a>');
     expect(card).toContain('<p class="fmeta"><a class="owner" href="/fronts?owner=machine-1" title="the machine that works this front" translate="no">owner: machine-1</a> · 4 docs · 2 folders</p>');
     expect(body.indexOf('id="150-rakun"')).toBeLessThan(body.indexOf('id="163-meta-ci"'));
@@ -290,7 +303,7 @@ describe("the site over a fixture", () => {
     expect(body).toMatch(/<h1>1\.0\.11-beta <span class="pill frozen-pill">frozen<\/span><\/h1>/);
     // Only the current milestone keeps documents of its own (milestone/): an old one is its fronts alone.
     expect([...body.matchAll(/<h2 id="([^"]+)">/g)].map((m) => m[1])).toEqual(["fronts"]);
-    expect(body).toContain('<section class="front-card" id="04-rakun">');
+    expect(body).toContain('<section class="front-card" id="04-rakun" ');
     expect(body).toContain('<a href="/fronts">1.0.12-beta</a>');
     expect(body).toContain('<span class="on">1.0.11-beta</span>');
     // An unknown version shows the current one.
